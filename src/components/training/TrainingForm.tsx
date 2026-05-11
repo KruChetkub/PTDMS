@@ -1,7 +1,11 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Save, X } from 'lucide-react';
 import { useForm } from 'react-hook-form';
-import { trainingFormSchema, type TrainingFormValues } from '../../features/self-service/training-form.schema';
+import {
+  trainingFormSchema,
+  trainingTypeOptions,
+  type TrainingFormValues,
+} from '../../features/self-service/training-form.schema';
 import { formatThaiLongDate, getCurrentThaiFiscalYear, getThaiFiscalYearFromISODate } from '../../utils/thaiDate';
 
 export type TrainingFormProps = {
@@ -13,9 +17,8 @@ export type TrainingFormProps = {
 };
 
 const defaultValues: TrainingFormValues = {
-  course: '',
-  category: '',
-  subcategory: '',
+  trainingType: trainingTypeOptions[0],
+  courseName: '',
   organizer: '',
   date: '',
   year: getCurrentThaiFiscalYear(),
@@ -52,35 +55,30 @@ export function TrainingForm({
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
       <div className="grid gap-4 lg:grid-cols-2">
         <label className="block lg:col-span-2">
+          <span className="text-sm font-medium text-slate-700">ประเภทหลักสูตร</span>
+          <select
+            className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+            {...register('trainingType')}
+            disabled={isPending}
+          >
+            {trainingTypeOptions.map((option) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
+          </select>
+          {errors.trainingType ? <span className="mt-1 block text-xs text-red-600">{errors.trainingType.message}</span> : null}
+        </label>
+
+        <label className="block lg:col-span-2">
           <span className="text-sm font-medium text-slate-700">ชื่อหลักสูตร</span>
           <input
             type="text"
             className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
-            {...register('course')}
+            {...register('courseName')}
             disabled={isPending}
           />
-          {errors.course ? <span className="mt-1 block text-xs text-red-600">{errors.course.message}</span> : null}
-        </label>
-
-        <label className="block">
-          <span className="text-sm font-medium text-slate-700">ประเภทการอบรม</span>
-          <input
-            type="text"
-            className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
-            {...register('category')}
-            disabled={isPending}
-          />
-          {errors.category ? <span className="mt-1 block text-xs text-red-600">{errors.category.message}</span> : null}
-        </label>
-
-        <label className="block">
-          <span className="text-sm font-medium text-slate-700">หมวดย่อย</span>
-          <input
-            type="text"
-            className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
-            {...register('subcategory')}
-            disabled={isPending}
-          />
+          {errors.courseName ? <span className="mt-1 block text-xs text-red-600">{errors.courseName.message}</span> : null}
         </label>
 
         <label className="block">

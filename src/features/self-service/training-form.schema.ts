@@ -3,10 +3,21 @@ import { getMonthFromISODate } from '../../utils/thaiDate';
 
 const optionalText = z.string().trim().optional().or(z.literal(''));
 
+export const trainingTypeOptions = [
+  'หลักสูตรพื้นฐานสำหรับบุคลากร',
+  'หลักสูตรด้านภาวะผู้นำ กรมควบคุมโรค',
+  'หลักสูตรด้านนโยบายและยุทธศาสตร์',
+  'หลักสูตรด้านดิจิทัล',
+  'หลักสูตรตามสมรรถนะที่เหมาะสมสำหรับการปฏิบัติงาน (อื่นๆ)',
+] as const;
+
+export type TrainingTypeValue = (typeof trainingTypeOptions)[number];
+
 export const trainingFormSchema = z.object({
-  course: z.string().trim().min(2, 'กรุณากรอกชื่อหลักสูตร'),
-  category: z.string().trim().min(1, 'กรุณากรอกประเภทการอบรม'),
-  subcategory: optionalText,
+  trainingType: z.enum(trainingTypeOptions, {
+    required_error: 'กรุณาเลือกประเภทหลักสูตร',
+  }),
+  courseName: z.string().trim().min(2, 'กรุณากรอกชื่อหลักสูตร'),
   organizer: z.string().trim().min(2, 'กรุณากรอกหน่วยงานผู้จัด'),
   date: z.string().min(1, 'กรุณาเลือกวันที่อบรม'),
   year: z.coerce
@@ -42,4 +53,12 @@ export type TrainingFormValues = z.infer<typeof trainingFormSchema>;
 
 export function getMonthFromDate(value: string) {
   return getMonthFromISODate(value);
+}
+
+export function normalizeTrainingType(value: string | null | undefined): TrainingTypeValue {
+  if (trainingTypeOptions.includes(value as TrainingTypeValue)) {
+    return value as TrainingTypeValue;
+  }
+
+  return trainingTypeOptions[0];
 }

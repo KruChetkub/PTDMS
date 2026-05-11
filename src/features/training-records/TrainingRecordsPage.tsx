@@ -9,7 +9,7 @@ import {
   type TrainingRecordRow 
 } from '../../services/training.service';
 import { TrainingForm } from '../../components/training/TrainingForm';
-import type { TrainingFormValues } from '../self-service/training-form.schema';
+import { normalizeTrainingType, type TrainingFormValues } from '../self-service/training-form.schema';
 import { formatThaiDate } from '../../utils/thaiDate';
 
 export function TrainingRecordsPage() {
@@ -70,9 +70,8 @@ export function TrainingRecordsPage() {
       const { record, certificate, analysis } = await getTrainingRecordDetails(id);
       
       setEditValues({
-        course: record.course,
-        category: record.category,
-        subcategory: record.subcategory || '',
+        trainingType: normalizeTrainingType(record.category),
+        courseName: record.course,
         organizer: record.organizer,
         date: record.date,
         year: record.year,
@@ -183,9 +182,9 @@ export function TrainingRecordsPage() {
             <thead className="bg-slate-50">
               <tr>
                 <th className="whitespace-nowrap px-4 py-3 text-left font-semibold text-slate-600">บุคลากร</th>
+                <th className="whitespace-nowrap px-4 py-3 text-left font-semibold text-slate-600">ประเภทหลักสูตร</th>
                 <th className="whitespace-nowrap px-4 py-3 text-left font-semibold text-slate-600">หลักสูตร</th>
                 <th className="whitespace-nowrap px-4 py-3 text-left font-semibold text-slate-600">วันที่</th>
-                <th className="whitespace-nowrap px-4 py-3 text-left font-semibold text-slate-600">ประเภท</th>
                 <th className="whitespace-nowrap px-4 py-3 text-left font-semibold text-slate-600">หน่วยงาน</th>
                 <th className="whitespace-nowrap px-4 py-3 text-left font-semibold text-slate-600">ผู้จัด</th>
                 <th className="whitespace-nowrap px-4 py-3 text-center font-semibold text-slate-600">Actions</th>
@@ -208,9 +207,9 @@ export function TrainingRecordsPage() {
                 records.map((record) => (
                   <tr key={record.id} className="hover:bg-slate-50">
                     <td className="whitespace-nowrap px-4 py-3 font-medium text-slate-900">{record.personnel_name}</td>
+                    <td className="whitespace-nowrap px-4 py-3 text-slate-600">{record.category}</td>
                     <td className="min-w-64 px-4 py-3 text-slate-700">{record.course}</td>
                     <td className="whitespace-nowrap px-4 py-3 text-slate-600">{formatThaiDate(record.date)}</td>
-                    <td className="whitespace-nowrap px-4 py-3 text-slate-600">{record.category}</td>
                     <td className="whitespace-nowrap px-4 py-3 text-slate-600">{record.department}</td>
                     <td className="whitespace-nowrap px-4 py-3 text-slate-600">{record.organizer}</td>
                     <td className="whitespace-nowrap px-4 py-3 text-center">

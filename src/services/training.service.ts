@@ -115,7 +115,6 @@ export async function createTrainingRecord(input: CreateTrainingRecordInput): Pr
   }
 
   const now = new Date().toISOString();
-  const subcategory = emptyToNull(input.subcategory);
   const certificateName = emptyToNull(input.certificateName);
   const certificateLink = emptyToNull(input.certificateLink);
   const developmentArea = emptyToNull(input.developmentArea);
@@ -127,9 +126,9 @@ export async function createTrainingRecord(input: CreateTrainingRecordInput): Pr
     const { data } = await runSupabaseQuery(
       supabase.rpc('create_training_record_with_details', {
         p_user_id: input.userId,
-        p_course: input.course.trim(),
-        p_category: input.category.trim(),
-        p_subcategory: subcategory,
+        p_course: input.courseName.trim(),
+        p_category: input.trainingType.trim(),
+        p_subcategory: null,
         p_organizer: input.organizer.trim(),
         p_date: input.date,
         p_year: input.year,
@@ -162,9 +161,9 @@ export async function createTrainingRecord(input: CreateTrainingRecordInput): Pr
   return {
     id: trainingId,
     user_id: input.userId,
-    course: input.course.trim(),
-    category: input.category.trim(),
-    subcategory,
+    course: input.courseName.trim(),
+    category: input.trainingType.trim(),
+    subcategory: null,
     organizer: input.organizer.trim(),
     date: input.date,
     month,
@@ -227,9 +226,9 @@ export async function updateTrainingRecord(id: string, input: UpdateTrainingReco
     supabase
       .from('training_records')
       .update({
-        course: input.course.trim(),
-        category: input.category.trim(),
-        subcategory: emptyToNull(input.subcategory),
+        course: input.courseName.trim(),
+        category: input.trainingType.trim(),
+        subcategory: null,
         organizer: input.organizer.trim(),
         date: input.date,
         month,

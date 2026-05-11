@@ -18,7 +18,7 @@ import {
   deleteTrainingRecord, 
   getTrainingRecordDetails 
 } from '../../../services/training.service';
-import type { TrainingFormValues } from '../../self-service/training-form.schema';
+import { normalizeTrainingType, type TrainingFormValues } from '../../self-service/training-form.schema';
 import { Trash2 } from 'lucide-react';
 
 type IndividualProfileViewProps = {
@@ -124,9 +124,8 @@ export function IndividualProfileView({ userId, isMyProfile }: IndividualProfile
       const { record, certificate, analysis } = await getTrainingRecordDetails(id);
       
       setEditTrainingValues({
-        course: record.course,
-        category: record.category,
-        subcategory: record.subcategory || '',
+        trainingType: normalizeTrainingType(record.category),
+        courseName: record.course,
         organizer: record.organizer,
         date: record.date,
         year: record.year,
@@ -531,7 +530,7 @@ function TrainingModal({
               </div>
             ) : null}
             <TrainingForm 
-              key={initialValues ? `edit-${initialValues.course}` : 'add'}
+              key={initialValues ? `edit-${initialValues.courseName}` : 'add'}
               initialValues={initialValues}
               onSubmit={onSubmit} 
               onCancel={onClose}
