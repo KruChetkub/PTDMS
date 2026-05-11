@@ -10,6 +10,7 @@ import { PendingApprovalPage } from '../features/auth/pages/PendingApprovalPage'
 import { DashboardPage } from '../features/dashboard/DashboardPage';
 import { AnalyticsPage } from '../features/analytics/AnalyticsPage';
 import { RecommendationsPage } from '../features/recommendations/RecommendationsPage';
+import { CourseListPage } from '../features/courses/CourseListPage';
 import { TrainingRecordsPage } from '../features/training-records/TrainingRecordsPage';
 import { ProfilePage } from '../features/personnel/ProfilePage';
 import { PersonnelListPage } from '../features/personnel/PersonnelListPage';
@@ -91,6 +92,10 @@ export const router = createBrowserRouter([
           {
             path: '/recommendations',
             element: <RecommendationsPage />,
+          },
+          {
+            path: '/courses',
+            element: <CourseListPage />,
           },
           {
             path: '/records',

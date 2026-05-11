@@ -1,6 +1,7 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import {
   Activity,
+  BookOpen,
   BarChart3,
   ClipboardList,
   FileText,
@@ -43,6 +44,12 @@ const navItems: NavItem[] = [
     to: '/recommendations',
     label: 'Recommendations',
     icon: Sparkles,
+    roles: ['super_admin', 'admin', 'executive', 'hr'],
+  },
+  {
+    to: '/courses',
+    label: 'Course Directory',
+    icon: BookOpen,
     roles: ['super_admin', 'admin', 'executive', 'hr'],
   },
   {

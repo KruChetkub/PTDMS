@@ -80,12 +80,12 @@ Checklist ใช้รูปแบบ:
 |---|---|
 | Last Updated | 2026-05-11 |
 | Current Phase | Phase 9: Future AI Recommendation (Partial Done) |
-| Current Focus | Core feature development with Audit Logs deferred |
-| Last Completed Work | Paused Audit Logs: removed Audit Logs route/menu/page and stopped frontend service writes to `audit_logs`. |
-| Current In-Progress Work | Continue functional development; Audit Logs/User Activity Logging will return in the final phase. |
-| Next Best Action | Test training/admin flows to confirm they still work without audit writes, then continue Phase 9 enhancements. |
+| Current Focus | Core feature development with Audit Logs deferred and Course Directory added |
+| Last Completed Work | Added `Course Directory` for privileged roles and kept Audit Logs deferred. |
+| Current In-Progress Work | Verify `/courses` behavior and continue functional development. |
+| Next Best Action | Test `Course Directory` visibility and attendee grouping for Super Admin/Admin/Executive/HR, then continue Phase 9 enhancements. |
 | Active Blocker | None |
-| Important Note | Audit schema/migrations remain in place, but current frontend no longer stores or displays activity audit logs. |
+| Important Note | Audit schema/migrations remain in place, but current frontend no longer stores or displays activity audit logs. `Course Directory` is visible only to Super Admin/Admin/Executive/HR. |
 
 ---
 
@@ -140,6 +140,7 @@ Checklist ใช้รูปแบบ:
 - [x] Deploy ระบบไปยัง Production (Vercel)
 - [x] เริ่ม Phase 9 ด้วยหน้า AI Recommendations สำหรับ Skill Gap, Course Suggestions, Work Group Plan และ Executive Insights
 - [x] ปรับหน้า Personnel List ให้ Super Admin เห็นบุคลากรทุกคนพร้อมสถิติการอบรมพื้นฐาน
+- [x] สร้างหน้า `Course Directory` สำหรับ Super Admin/Admin/Executive/HR พร้อม drawer รายชื่อผู้เรียน
 
 ### 6.2 สิ่งที่ยังไม่ได้ทำ
 
@@ -561,6 +562,10 @@ Definition of Done:
 | 2026-05-11 | `src/services/audit.service.ts` | เหลือเฉพาะ service สำหรับ Login History และถอด `listAuditLogs` |
 | 2026-05-11 | `src/features/admin/AuditLogsPage.tsx` | ลบหน้า Audit Logs ออกชั่วคราว |
 | 2026-05-11 | `src/features/admin/SecurityPage.tsx` | ถอดข้อความว่า Audit logging เปิดใช้งานอยู่ |
+| 2026-05-11 | `src/services/course.service.ts` | [NEW] เพิ่ม service สำหรับดึงกลุ่มหลักสูตรและรายชื่อผู้เรียนตามหลักสูตร |
+| 2026-05-11 | `src/features/courses/CourseListPage.tsx` | [NEW] สร้างหน้า Course Directory พร้อม drawer รายชื่อผู้เรียน |
+| 2026-05-11 | `src/app/router.tsx` | เพิ่ม route `/courses` สำหรับ role privileged |
+| 2026-05-11 | `src/components/layout/AppLayout.tsx` | เพิ่มเมนู Course Directory ใน Sidebar/Mobile Nav สำหรับ privileged roles |
 | 2026-05-11 | `PTDMS_AI_DEVELOPMENT_TRACKER.md` | อัปเดต handoff, Phase 9 checklist, work log และ next actions |
 | 2026-05-11 | `PTDMS_PROGRESS_20260508.md` | เพิ่มสรุปความคืบหน้า Phase 9 รอบล่าสุด |
 
@@ -596,6 +601,7 @@ Definition of Done:
 | 2026-05-11 | `Start-Process npm.cmd ... vite --host 127.0.0.1 --port 5174` | เปิด dev server สำหรับทดสอบหน้าใหม่ | สำเร็จหลัง rerun escalated เพราะ esbuild ติด EPERM ใน sandbox |
 | 2026-05-11 | `npm run build` | ตรวจ Production build หลังปรับ Personnel List | สำเร็จหลัง rerun escalated เพราะ esbuild ติด EPERM ใน sandbox |
 | 2026-05-11 | `npm run build` | ตรวจ Production build หลังถอด Audit Logs ออกจาก flow ปัจจุบัน | สำเร็จหลัง rerun escalated เพราะ esbuild ติด EPERM ใน sandbox |
+| 2026-05-11 | `npm run build` | ตรวจ Production build หลังเพิ่ม Course Directory | สำเร็จหลัง rerun escalated เพราะ esbuild ติด EPERM ใน sandbox |
 
 ---
 
@@ -615,6 +621,7 @@ Summary:
 - เริ่ม Phase 9 โดยสร้าง recommendation engine จากข้อมูล `profiles`, `training_records` และ `development_analysis`
 - เพิ่มหน้า `AI Recommendations` พร้อม Executive Insight Summary, Skill Gap Recommendations, Recommended Course Portfolio และ Work Group Development Plan
 - เพิ่ม route `/recommendations` และเมนู Recommendations สำหรับ Super Admin, Admin, Executive และ HR
+- เพิ่มหน้า `Course Directory` พร้อม grouping ตามหมวดหมู่และ drawer รายชื่อผู้เรียนสำหรับ Super Admin/Admin/Executive/HR
 - แก้ตำแหน่ง React Router future flag โดยคง `v7_startTransition` ไว้ที่ `RouterProvider` และนำออกจาก `createBrowserRouter`
 - ตรวจสอบด้วย `npm run build` ผ่าน และเปิด dev server ที่ `http://127.0.0.1:5174/`
 - ปรับหน้า Personnel List ให้ Super Admin เห็นรายชื่อบุคลากรทุกคนในระบบ ไม่กรอง status และคำนวณสถิติจาก training records แบบแยก query
@@ -624,6 +631,7 @@ Summary:
 - ถอดเมนู/route/page Audit Logs ออกจากระบบปัจจุบัน
 - หยุดเขียน `audit_logs` จาก training create/update/delete และ admin role/status/delete actions
 - คงตารางและ migration เดิมไว้ใน Supabase เพื่อเปิดกลับมาใช้งานภายหลังได้
+- เพิ่ม `Course Directory` สำหรับ privileged roles พร้อม grouping ตามหมวดหมู่และ drawer รายชื่อผู้เรียน
 
 ### 2026-05-08
 
@@ -735,11 +743,12 @@ Next:
 
 1. ทดสอบหน้า `AI Recommendations` ด้วยบัญชี HR/Admin/Executive และข้อมูลจริง
 2. ทดสอบหน้า `Personnel List` ด้วยบัญชี Super Admin เพื่อยืนยันว่าเห็นทุก status และสถิติถูกต้อง
-3. ทดสอบ flow เพิ่ม/แก้ไข/ลบข้อมูลอบรม และแก้ role/status ผู้ใช้ หลังถอด audit writes
-4. ปรับน้ำหนักกฎ recommendation จาก feedback ของผู้บริหารและ HR
-5. เพิ่ม Export/PDF สำหรับ Executive Insight Summary
-6. วาง Approval Workflow สำหรับแผนพัฒนารายบุคคลหรือรายกลุ่มงาน
-7. กลับมาเปิด Audit Logs/User Activity Logging ในขั้นตอนสุดท้าย
+3. ทดสอบหน้า `Course Directory` ให้แน่ใจว่าแสดงเฉพาะ Super Admin/Admin/Executive/HR และ attendee drawer เรียงล่าสุดถูกต้อง
+4. ทดสอบ flow เพิ่ม/แก้ไข/ลบข้อมูลอบรม และแก้ role/status ผู้ใช้ หลังถอด audit writes
+5. ปรับน้ำหนักกฎ recommendation จาก feedback ของผู้บริหารและ HR
+6. เพิ่ม Export/PDF สำหรับ Executive Insight Summary
+7. วาง Approval Workflow สำหรับแผนพัฒนารายบุคคลหรือรายกลุ่มงาน
+8. กลับมาเปิด Audit Logs/User Activity Logging ในขั้นตอนสุดท้าย
 
 ---
 
