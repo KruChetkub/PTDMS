@@ -80,12 +80,12 @@ Checklist ใช้รูปแบบ:
 |---|---|
 | Last Updated | 2026-05-11 |
 | Current Phase | Phase 9: Future AI Recommendation (Partial Done) |
-| Current Focus | Core feature development with Audit Logs deferred and Course Directory added |
-| Last Completed Work | Added `Course Directory` for privileged roles and kept Audit Logs deferred. |
-| Current In-Progress Work | Verify `/courses` behavior and continue functional development. |
-| Next Best Action | Test `Course Directory` visibility and attendee grouping for Super Admin/Admin/Executive/HR, then continue Phase 9 enhancements. |
+| Current Focus | Core feature development with Audit Logs deferred, Course Directory added, and Self-Service field labels aligned |
+| Last Completed Work | Added `Course Directory` for privileged roles and renamed Self-Service fields to `trainingType` / `courseName`. |
+| Current In-Progress Work | Verify `/courses` behavior, the updated Self-Service form mapping, the Training Records table layout, and the Dashboard category section. |
+| Next Best Action | Test `Course Directory` visibility, Training Records column order, Dashboard category section, and Self-Service create/edit flow for Super Admin/Admin/Executive/HR. |
 | Active Blocker | None |
-| Important Note | Audit schema/migrations remain in place, but current frontend no longer stores or displays activity audit logs. `Course Directory` is visible only to Super Admin/Admin/Executive/HR. |
+| Important Note | Audit schema/migrations remain in place, but current frontend no longer stores or displays activity audit logs. `Course Directory` is visible only to Super Admin/Admin/Executive/HR, and Self-Service now uses `trainingType` + `courseName` in the UI/schema. |
 
 ---
 
@@ -141,6 +141,11 @@ Checklist ใช้รูปแบบ:
 - [x] เริ่ม Phase 9 ด้วยหน้า AI Recommendations สำหรับ Skill Gap, Course Suggestions, Work Group Plan และ Executive Insights
 - [x] ปรับหน้า Personnel List ให้ Super Admin เห็นบุคลากรทุกคนพร้อมสถิติการอบรมพื้นฐาน
 - [x] สร้างหน้า `Course Directory` สำหรับ Super Admin/Admin/Executive/HR พร้อม drawer รายชื่อผู้เรียน
+- [x] ปรับ Self-Service form/schema/service ให้ใช้ `trainingType` และ `courseName` สอดคล้องทั้งระบบ
+- [x] เพิ่มคอลัมน์ `ประเภทหลักสูตร` ใน Training Records table ถัดจาก `บุคลากร`
+- [x] เพิ่มสรุป 5 หมวดหลักสูตรใน Executive Dashboard พร้อมกราฟและการ์ดสรุป
+- [x] ปรับ Dashboard category chart ให้สัดส่วนพอดีและแก้ runtime issue จาก `Cell`
+- [x] ปรับ Dashboard category chart ให้ยืดสูงขึ้นและลดพื้นที่ว่างด้านล่างของกราฟ
 
 ### 6.2 สิ่งที่ยังไม่ได้ทำ
 
@@ -566,6 +571,17 @@ Definition of Done:
 | 2026-05-11 | `src/features/courses/CourseListPage.tsx` | [NEW] สร้างหน้า Course Directory พร้อม drawer รายชื่อผู้เรียน |
 | 2026-05-11 | `src/app/router.tsx` | เพิ่ม route `/courses` สำหรับ role privileged |
 | 2026-05-11 | `src/components/layout/AppLayout.tsx` | เพิ่มเมนู Course Directory ใน Sidebar/Mobile Nav สำหรับ privileged roles |
+| 2026-05-11 | `src/features/self-service/training-form.schema.ts` | ปรับ field schema เป็น `trainingType` / `courseName` และเพิ่มตัวเลือกประเภทหลักสูตร |
+| 2026-05-11 | `src/components/training/TrainingForm.tsx` | ปรับฟอร์มเป็น select ประเภทหลักสูตร + ชื่อหลักสูตร |
+| 2026-05-11 | `src/services/training.service.ts` | ปรับ create/update ให้ map `trainingType` / `courseName` ไปยังตารางเดิม |
+| 2026-05-11 | `src/features/training-records/TrainingRecordsPage.tsx` | ปรับค่า edit form ให้ใช้ `trainingType` / `courseName` |
+| 2026-05-11 | `src/features/training-records/TrainingRecordsPage.tsx` | เพิ่มคอลัมน์ `ประเภทหลักสูตร` ถัดจาก `บุคลากร` ในตาราง |
+| 2026-05-11 | `src/features/training-records/TrainingRecordsPage.tsx` | ลบคอลัมน์ `ประเภท` ที่ซ้ำออกจากตาราง Training Records |
+| 2026-05-11 | `src/features/personnel/components/IndividualProfileView.tsx` | ปรับค่า edit form ให้ใช้ `trainingType` / `courseName` |
+| 2026-05-11 | `src/services/dashboard.service.ts` | เพิ่ม category breakdown สำหรับ 5 หมวดหลักสูตรใน Executive Dashboard |
+| 2026-05-11 | `src/features/dashboard/DashboardPage.tsx` | ออกแบบ Dashboard section ใหม่สำหรับ 5 หมวดหลักสูตร |
+| 2026-05-11 | `src/features/dashboard/DashboardPage.tsx` | ปรับ chart shape/proportion และลบการพึ่งพา `Cell` |
+| 2026-05-11 | `src/features/dashboard/DashboardPage.tsx` | ปรับความสูง/spacing ของ category chart ให้ต่ำลงและสมดุลขึ้น |
 | 2026-05-11 | `PTDMS_AI_DEVELOPMENT_TRACKER.md` | อัปเดต handoff, Phase 9 checklist, work log และ next actions |
 | 2026-05-11 | `PTDMS_PROGRESS_20260508.md` | เพิ่มสรุปความคืบหน้า Phase 9 รอบล่าสุด |
 
@@ -602,6 +618,8 @@ Definition of Done:
 | 2026-05-11 | `npm run build` | ตรวจ Production build หลังปรับ Personnel List | สำเร็จหลัง rerun escalated เพราะ esbuild ติด EPERM ใน sandbox |
 | 2026-05-11 | `npm run build` | ตรวจ Production build หลังถอด Audit Logs ออกจาก flow ปัจจุบัน | สำเร็จหลัง rerun escalated เพราะ esbuild ติด EPERM ใน sandbox |
 | 2026-05-11 | `npm run build` | ตรวจ Production build หลังเพิ่ม Course Directory | สำเร็จหลัง rerun escalated เพราะ esbuild ติด EPERM ใน sandbox |
+| 2026-05-11 | `npm run build` | ตรวจ Production build หลังปรับ Self-Service field/schema/service | สำเร็จหลัง rerun escalated เพราะ esbuild ติด EPERM ใน sandbox |
+| 2026-05-11 | `npm run build` | ตรวจ Production build หลังปรับ Dashboard category chart shape/proportion | สำเร็จหลัง rerun escalated เพราะ esbuild ติด EPERM ใน sandbox |
 
 ---
 
@@ -622,6 +640,7 @@ Summary:
 - เพิ่มหน้า `AI Recommendations` พร้อม Executive Insight Summary, Skill Gap Recommendations, Recommended Course Portfolio และ Work Group Development Plan
 - เพิ่ม route `/recommendations` และเมนู Recommendations สำหรับ Super Admin, Admin, Executive และ HR
 - เพิ่มหน้า `Course Directory` พร้อม grouping ตามหมวดหมู่และ drawer รายชื่อผู้เรียนสำหรับ Super Admin/Admin/Executive/HR
+- ปรับ Self-Service ให้ใช้ `trainingType` และ `courseName` พร้อม select ประเภทหลักสูตร 5 รายการ
 - แก้ตำแหน่ง React Router future flag โดยคง `v7_startTransition` ไว้ที่ `RouterProvider` และนำออกจาก `createBrowserRouter`
 - ตรวจสอบด้วย `npm run build` ผ่าน และเปิด dev server ที่ `http://127.0.0.1:5174/`
 - ปรับหน้า Personnel List ให้ Super Admin เห็นรายชื่อบุคลากรทุกคนในระบบ ไม่กรอง status และคำนวณสถิติจาก training records แบบแยก query
@@ -744,11 +763,12 @@ Next:
 1. ทดสอบหน้า `AI Recommendations` ด้วยบัญชี HR/Admin/Executive และข้อมูลจริง
 2. ทดสอบหน้า `Personnel List` ด้วยบัญชี Super Admin เพื่อยืนยันว่าเห็นทุก status และสถิติถูกต้อง
 3. ทดสอบหน้า `Course Directory` ให้แน่ใจว่าแสดงเฉพาะ Super Admin/Admin/Executive/HR และ attendee drawer เรียงล่าสุดถูกต้อง
-4. ทดสอบ flow เพิ่ม/แก้ไข/ลบข้อมูลอบรม และแก้ role/status ผู้ใช้ หลังถอด audit writes
-5. ปรับน้ำหนักกฎ recommendation จาก feedback ของผู้บริหารและ HR
-6. เพิ่ม Export/PDF สำหรับ Executive Insight Summary
-7. วาง Approval Workflow สำหรับแผนพัฒนารายบุคคลหรือรายกลุ่มงาน
-8. กลับมาเปิด Audit Logs/User Activity Logging ในขั้นตอนสุดท้าย
+4. ทดสอบ Self-Service create/edit flow ใหม่กับ field `trainingType` / `courseName`
+5. ทดสอบ flow เพิ่ม/แก้ไข/ลบข้อมูลอบรม และแก้ role/status ผู้ใช้ หลังถอด audit writes
+6. ปรับน้ำหนักกฎ recommendation จาก feedback ของผู้บริหารและ HR
+7. เพิ่ม Export/PDF สำหรับ Executive Insight Summary
+8. วาง Approval Workflow สำหรับแผนพัฒนารายบุคคลหรือรายกลุ่มงาน
+9. กลับมาเปิด Audit Logs/User Activity Logging ในขั้นตอนสุดท้าย
 
 ---
 
