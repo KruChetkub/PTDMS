@@ -165,7 +165,7 @@ export function PersonnelListPage() {
                   )}
                   <div>
                     <h3 className="font-semibold text-slate-900 group-hover:text-brand-600">{person.full_name}</h3>
-                    <p className="text-xs text-slate-500">{person.employee_code || 'ไม่มีรหัส'}</p>
+                    <p className="text-xs text-slate-500">{person.employee_code || ''}</p>
                   </div>
                 </div>
                 <Link 
