@@ -94,3 +94,59 @@ git add src/features/analytics/AnalyticsPage.tsx src/services/analytics.service.
 git commit -m "update: improve analytics development areas and exclude super admin from statistics"
 git push origin main
 ```
+
+---
+
+## Progress Update - 2026-05-12
+
+### What We Completed Today
+
+1. Analytics - Development Areas
+- เพิ่ม filter สำหรับ `Work Group` และ `Year`
+- เพิ่ม drill-down: คลิกแท่งกราฟแล้วแสดงรายชื่อบุคลากรด้านล่าง
+- เพิ่มการไฮไลต์แท่งที่เลือกให้ชัดเจน (แท่งที่เลือกสีเข้ม/มีเส้นขอบ)
+- ตัด `Department` ออกจาก filter ตามบริบทใช้งานจริงของหน่วยงาน
+
+2. Analytics - Data Quality / Readability
+- ปรับการคำนวณให้ตัดค่า label ที่ไม่สมบูรณ์ (เช่น `-`, `null`, `undefined`)
+- เพิ่มมุมมองสรุปจำนวนรายการวิเคราะห์และจำนวนบุคลากรที่ได้รับผลกระทบ
+- ปรับ `Pie Chart` ของสัดส่วนตามประเภทการอบรมให้ใช้ callout label พร้อมกรอบข้อความ
+- ปรับ responsive สำหรับจอเล็ก:
+  - ลดการซ้อนทับข้อความใน `Pie Chart`
+  - ปรับ legend/tooltip ให้อ่านง่ายขึ้น
+  - ปรับ layout ของ `Work Group Bar Chart` ให้ไม่ล้นและไม่ชนกัน
+
+3. Super Admin Exclusion (Analytics + Dashboard + Recommendations)
+- กำหนดให้ `super_admin` ยังเข้าใช้งานระบบได้ตามสิทธิ์เดิม
+- แต่ **ไม่ถูกนับในข้อมูลวิเคราะห์/สถิติ** ในส่วน:
+  - Dashboard Summary
+  - Analytics Summary/Charts/Development Areas
+  - Recommendations (Skill Gap, Course Recommendation, Work Group Plans, Executive Insights)
+
+4. Course Directory UX Improvement
+- ปรับหน้า `Course Directory` ให้ลดความลายตา:
+  - ค่าเริ่มต้นแสดงเฉพาะ `Top 5` หมวดหลัก (ตามจำนวนผู้เรียน)
+  - เพิ่มปุ่ม `ดูทั้งหมด` / `แสดงเฉพาะ 5 หมวดหลัก`
+  - เพิ่ม accordion รายหมวด (พับ/ขยายได้)
+  - คง drawer รายชื่อผู้เรียนเดิมไว้ (ไม่เปลี่ยน flow ข้อมูล)
+
+5. Verification
+- รัน `npm run build` ผ่านหลังการเปลี่ยนแปลงสำคัญแต่ละชุด
+
+### Next Development Plan
+
+1. Recommendations Governance
+- ออกแบบหน้าตั้งค่า `Required Learning Rules` ให้ `Super Admin/Admin` เพิ่มหลักสูตรบังคับได้เอง
+- รองรับการกำหนดตามหน่วยงาน/กลุ่มงาน + ระยะเวลาที่ต้องผ่าน + สถานะกฎ
+
+2. Required Courses Compliance
+- เพิ่มมุมมอง compliance ว่าใครผ่าน/ไม่ผ่านหลักสูตรบังคับ
+- แสดงสรุปเป็นรายกลุ่มงานเพื่อใช้ในเชิงบริหาร
+
+3. Analytics UX Polishing
+- ปรับการจัดวาง label/callout บน pie chart เพิ่มเติมสำหรับข้อมูลที่กระจุกตัวมาก
+- พิจารณาเพิ่มปุ่ม reset filters และ export รายชื่อ drill-down
+
+4. Data Standardization
+- กำหนดมาตรฐานชื่อ `development_area` และ `work_group` ให้สม่ำเสมอ
+- ลดปัญหาข้อมูลแตกต่างจากการพิมพ์หลายรูปแบบ

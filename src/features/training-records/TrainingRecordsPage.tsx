@@ -111,7 +111,7 @@ export function TrainingRecordsPage() {
     <div>
       <PageHeader
         title="Training Records"
-        description="ตารางข้อมูลอบรมหลัก เชื่อม Supabase และถูกจำกัดข้อมูลด้วย RLS ตามสิทธิ์ผู้ใช้งาน"
+        description="ตารางข้อมูลอบรม"
       />
 
       <section className="mb-4 rounded-md border border-slate-200 bg-white p-4 shadow-sm">

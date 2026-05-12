@@ -49,6 +49,7 @@ export function DashboardPage() {
   const [summary, setSummary] = useState<DashboardSummary>(emptySummary);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [animatePortfolio, setAnimatePortfolio] = useState(false);
 
   const loadSummary = async () => {
     setLoading(true);
@@ -85,10 +86,21 @@ export function DashboardPage() {
     [summary.categoryBreakdown],
   );
 
+  useEffect(() => {
+    if (loading || sortedCategoryBreakdown.length === 0) {
+      setAnimatePortfolio(false);
+      return;
+    }
+
+    setAnimatePortfolio(false);
+    const timer = window.setTimeout(() => setAnimatePortfolio(true), 280);
+    return () => window.clearTimeout(timer);
+  }, [loading, sortedCategoryBreakdown]);
+
   return (
     <div>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <PageHeader title="Executive Dashboard" description="ภาพรวมข้อมูลการฝึกอบรมจาก Supabase ตามสิทธิ์ผู้ใช้งาน" />
+        <PageHeader title="Executive Dashboard" description="ภาพรวมข้อมูลการฝึกอบรม" />
         <button
           type="button"
           onClick={() => void loadSummary()}
@@ -191,6 +203,9 @@ export function DashboardPage() {
                   dataKey="count"
                   radius={[0, 8, 8, 0]}
                   barSize={20}
+                  isAnimationActive
+                  animationDuration={2000}
+                  animationEasing="ease-in-out"
                   shape={(props: unknown) => {
                     const { x, y, width, height, payload } = props as {
                       x?: number;
@@ -239,9 +254,9 @@ export function DashboardPage() {
                 </div>
                 <div className="mt-3 h-2 rounded-full bg-slate-200">
                   <div
-                    className="h-2 rounded-full"
+                    className="h-2 rounded-full transition-[width] duration-2200 ease-out"
                     style={{
-                      width: `${Math.min(item.percentage, 100)}%`,
+                      width: `${animatePortfolio ? Math.min(item.percentage, 100) : 0}%`,
                       backgroundColor: categoryColors[item.label] || '#1d75bd',
                     }}
                   />

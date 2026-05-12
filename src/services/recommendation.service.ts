@@ -308,9 +308,10 @@ export async function getRecommendationData(): Promise<RecommendationData> {
   if (trainingResult.error) throw trainingResult.error;
   if (analysisResult.error) throw analysisResult.error;
 
-  const profiles = (profileResult.data || []) as Profile[];
-  const records = (trainingResult.data || []) as TrainingRecord[];
-  const analysis = (analysisResult.data || []) as DevelopmentAnalysis[];
+  const profiles = ((profileResult.data || []) as Profile[]).filter((profile) => profile.role !== 'super_admin');
+  const includedUserIds = new Set(profiles.map((profile) => profile.user_id));
+  const records = ((trainingResult.data || []) as TrainingRecord[]).filter((record) => includedUserIds.has(record.user_id));
+  const analysis = ((analysisResult.data || []) as DevelopmentAnalysis[]).filter((item) => includedUserIds.has(item.user_id));
   const analysisByTraining = new Map(analysis.map((item) => [item.training_id, item]));
   const recordsByUser = groupBy(records, (record) => record.user_id);
   const targetSkillGroups =
