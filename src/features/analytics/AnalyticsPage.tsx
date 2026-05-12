@@ -275,7 +275,7 @@ export function AnalyticsPage() {
             </ResponsiveContainer>
           </div>
           {isMobile ? (
-            <p className="mt-2 text-xs text-slate-500">จอเล็ก: รายละเอียดแสดงใน legend และ tooltip เพื่อป้องกันข้อความทับกัน</p>
+            <p className="mt-2 text-xs text-slate-500"></p>
           ) : null}
         </div>
 
