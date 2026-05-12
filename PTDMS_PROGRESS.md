@@ -86,7 +86,11 @@
 2. `PTDMS_AI_DEVELOPMENT_TRACKER.md`
 3. `PTDMS_DEVELOPMENT_PLAN.md`
 
+## Git Commands (Ready to Use)
+
+```bash
 git status
-git add .
-git commit -m "update: <updat>"
+git add src/features/analytics/AnalyticsPage.tsx src/services/analytics.service.ts src/services/dashboard.service.ts PTDMS_PROGRESS.md
+git commit -m "update: improve analytics development areas and exclude super admin from statistics"
 git push origin main
+```
