@@ -16,6 +16,70 @@ import { getAnalyticsData, type AnalyticsData } from '../../services/analytics.s
 import { getDashboardSummary, type DashboardSummary } from '../../services/dashboard.service';
 
 const COLORS = ['#2563eb', '#7c3aed', '#db2777', '#ea580c', '#ca8a04', '#16a34a', '#0891b2'];
+const RADIAN = Math.PI / 180;
+
+function renderPieCalloutLabel(props: {
+  cx?: number;
+  cy?: number;
+  midAngle?: number;
+  outerRadius?: number;
+  percent?: number;
+  name?: string;
+  fill?: string;
+}) {
+  const {
+    cx = 0,
+    cy = 0,
+    midAngle = 0,
+    outerRadius = 0,
+    percent = 0,
+    name = '',
+    fill = '#334155',
+  } = props;
+
+  // Hide tiny slice labels to avoid clutter on small segments.
+  if (percent < 0.04) return null;
+
+  const sin = Math.sin(-RADIAN * midAngle);
+  const cos = Math.cos(-RADIAN * midAngle);
+  const sx = cx + (outerRadius + 2) * cos;
+  const sy = cy + (outerRadius + 2) * sin;
+  const mx = cx + (outerRadius + 18) * cos;
+  const my = cy + (outerRadius + 18) * sin;
+  const ex = mx + (cos >= 0 ? 40 : -40);
+  const ey = my;
+  const isRight = cos >= 0;
+  const label = `${name} (${(percent * 100).toFixed(0)}%)`;
+  const approxWidth = Math.min(250, Math.max(120, label.length * 6.2));
+  const boxX = isRight ? ex + 4 : ex - approxWidth - 4;
+  const boxY = ey - 12;
+
+  return (
+    <g>
+      <path d={`M${sx},${sy} L${mx},${my} L${ex},${ey}`} stroke={fill} fill="none" strokeWidth={1.5} />
+      <circle cx={sx} cy={sy} r={2.5} fill={fill} />
+      <rect x={boxX} y={boxY} width={approxWidth} height={24} rx={4} fill="#ffffff" stroke={fill} strokeWidth={1} />
+      <text x={isRight ? boxX + 8 : boxX + approxWidth - 8} y={ey + 4} textAnchor={isRight ? 'start' : 'end'} fontSize={11} fill="#0f172a">
+        {label}
+      </text>
+    </g>
+  );
+}
+
+function useMediaQuery(query: string) {
+  const [matches, setMatches] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const mediaQuery = window.matchMedia(query);
+    const update = () => setMatches(mediaQuery.matches);
+    update();
+    mediaQuery.addEventListener('change', update);
+    return () => mediaQuery.removeEventListener('change', update);
+  }, [query]);
+
+  return matches;
+}
 
 export function AnalyticsPage() {
   const [data, setData] = useState<AnalyticsData | null>(null);
@@ -25,6 +89,7 @@ export function AnalyticsPage() {
   const [selectedWorkGroup, setSelectedWorkGroup] = useState('all');
   const [selectedYear, setSelectedYear] = useState('all');
   const [selectedArea, setSelectedArea] = useState<string | null>(null);
+  const isMobile = useMediaQuery('(max-width: 640px)');
   const developmentAreaDetails = data?.developmentAreaDetails || [];
   const developmentAreaFilterOptions = data?.developmentAreaFilterOptions || { departments: [], workGroups: [], years: [] };
 
@@ -101,6 +166,12 @@ export function AnalyticsPage() {
 
   if (loading) return <div className="py-20 text-center text-slate-500">กำลังประมวลผลข้อมูลสถิติ...</div>;
   if (error || !data || !summary) return <div className="py-20 text-center text-red-600">{error || 'ไม่พบข้อมูล'}</div>;
+  const pieLegendPayload = data.categories.map((item, index) => ({
+    id: item.category,
+    value: `${item.category} (${item.count})`,
+    type: 'square' as const,
+    color: COLORS[index % COLORS.length],
+  }));
 
   return (
     <div className="space-y-6">
@@ -172,7 +243,7 @@ export function AnalyticsPage() {
             <PieChartIcon className="h-5 w-5 text-brand-600" />
             สัดส่วนตามประเภทการอบรม
           </h3>
-          <div className="h-[300px] w-full">
+          <div className={`${isMobile ? 'h-[250px]' : 'h-[300px]'} w-full`}>
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
@@ -180,19 +251,32 @@ export function AnalyticsPage() {
                   dataKey="count"
                   nameKey="category"
                   cx="50%"
-                  cy="50%"
-                  outerRadius={100}
-                  label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`}
+                  cy={isMobile ? '52%' : '50%'}
+                  outerRadius={isMobile ? 78 : 100}
+                  label={!isMobile ? renderPieCalloutLabel : false}
+                  labelLine={false}
                 >
                   {data.categories.map((_, index) => (
                     <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                   ))}
                 </Pie>
                 <Tooltip />
-                <Legend verticalAlign="bottom" height={36}/>
+                <Legend
+                  verticalAlign="bottom"
+                  align="center"
+                  iconType="square"
+                  payload={pieLegendPayload}
+                  wrapperStyle={{
+                    fontSize: isMobile ? 11 : 12,
+                    lineHeight: isMobile ? '16px' : '18px',
+                  }}
+                />
               </PieChart>
             </ResponsiveContainer>
           </div>
+          {isMobile ? (
+            <p className="mt-2 text-xs text-slate-500">จอเล็ก: รายละเอียดแสดงใน legend และ tooltip เพื่อป้องกันข้อความทับกัน</p>
+          ) : null}
         </div>
 
         {/* Work Group Analysis - Bar Chart */}
@@ -201,7 +285,7 @@ export function AnalyticsPage() {
             <Users className="h-5 w-5 text-brand-600" />
             จำนวนการอบรมแยกตามกลุ่มงาน
           </h3>
-          <div className="h-[300px] w-full flex items-center justify-center">
+          <div className={`${isMobile ? 'h-[340px]' : 'h-[300px]'} w-full flex items-center justify-center`}>
             {(data?.workGroups?.length ?? 0) > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={data.workGroups} layout="vertical">
@@ -210,12 +294,12 @@ export function AnalyticsPage() {
                   <YAxis 
                     dataKey="workGroup" 
                     type="category" 
-                    width={150} 
+                    width={isMobile ? 92 : 150} 
                     axisLine={false} 
                     tickLine={false} 
-                    tick={{ fontSize: 11, fill: '#64748b' }} 
+                    tick={{ fontSize: isMobile ? 10 : 11, fill: '#64748b' }} 
                   />
-                  <Tooltip cursor={{ fill: '#f8fafc' }} />
+                  <Tooltip cursor={{ fill: '#f8fafc' }} wrapperStyle={{ maxWidth: isMobile ? 180 : 260 }} />
                   <Bar dataKey="count" fill="#3b82f6" radius={[0, 4, 4, 0]} barSize={20} />
                 </BarChart>
               </ResponsiveContainer>
