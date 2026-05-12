@@ -351,7 +351,12 @@ export function IndividualProfileView({ userId, isMyProfile }: IndividualProfile
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                   <XAxis dataKey="year" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} dy={10} />
                   <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} />
-                  <Tooltip cursor={{ fill: '#f8fafc' }} contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+                  <Tooltip
+                    cursor={{ fill: '#f8fafc' }}
+                    contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                    formatter={(value) => [`${value} รายการ`, 'จำนวน']}
+                    labelFormatter={(label) => `ปี: ${label}`}
+                  />
                   <Bar dataKey="count" radius={[4, 4, 0, 0]} barSize={40}>
                     {chartData.map((_entry, index) => (
                       <Cell key={`cell-${index}`} fill="#2563eb" />

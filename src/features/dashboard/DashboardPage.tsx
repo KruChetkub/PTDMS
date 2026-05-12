@@ -10,7 +10,6 @@ import {
   Tooltip,
   XAxis,
   YAxis,
-  ReferenceLine,
 } from 'recharts';
 import { PageHeader } from '../../components/ui/PageHeader';
 import { getDashboardSummary, type DashboardSummary } from '../../services/dashboard.service';
@@ -35,14 +34,6 @@ const categoryColors: Record<string, string> = {
 
 function formatPercent(value: number) {
   return `${value.toLocaleString()}%`;
-}
-
-function truncateLabel(value: string) {
-  if (value.length <= 18) {
-    return value;
-  }
-
-  return `${value.slice(0, 17)}…`;
 }
 
 export function DashboardPage() {
@@ -93,14 +84,14 @@ export function DashboardPage() {
     }
 
     setAnimatePortfolio(false);
-    const timer = window.setTimeout(() => setAnimatePortfolio(true), 280);
+    const timer = window.setTimeout(() => setAnimatePortfolio(true), 10);
     return () => window.clearTimeout(timer);
   }, [loading, sortedCategoryBreakdown]);
 
   return (
     <div>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <PageHeader title="Executive Dashboard" description="ภาพรวมข้อมูลการฝึกอบรม" />
+        <PageHeader title="แดชบอร์ดสำหรับผู้บริหาร" description="ภาพรวมข้อมูลการฝึกอบรม" />
         <button
           type="button"
           onClick={() => void loadSummary()}
@@ -150,7 +141,7 @@ export function DashboardPage() {
         <div className="flex flex-col gap-3 border-b border-slate-100 pb-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <h2 className="text-base font-semibold text-slate-900">Training Portfolio by Category</h2>
-            <p className="mt-1 text-sm text-slate-500">ภาพรวม 5 หมวดหลักสูตรที่ผู้บริหารอ่านได้ในทันที</p>
+            <p className="mt-1 text-sm text-slate-500">ภาพรวม 5 หมวดหลักสูตร</p>
           </div>
           <div className="flex flex-wrap gap-2">
             <span className="inline-flex items-center gap-2 rounded-md bg-brand-50 px-3 py-1.5 text-xs font-medium text-brand-700">
@@ -164,83 +155,8 @@ export function DashboardPage() {
           </div>
         </div>
 
-        <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1.5fr)_minmax(320px,0.5fr)] xl:items-stretch">
-          <div className="flex min-h-[520px] flex-col pt-4">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart
-                data={sortedCategoryBreakdown}
-                layout="vertical"
-                margin={{ top: 20, right: 28, bottom: 28, left: 12 }}
-              >
-                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" horizontal={false} />
-                <XAxis type="number" allowDecimals={false} tick={{ fontSize: 12 }} height={34} />
-                <YAxis
-                  type="category"
-                  dataKey="label"
-                  width={190}
-                  interval={0}
-                  tick={({ x, y, payload }) => {
-                    const label = truncateLabel(String(payload.value));
-                    return (
-                      <g transform={`translate(${x},${y})`}>
-                        <text x={0} y={0} dy={4} textAnchor="end" fill="#64748b" fontSize={12}>
-                          {label}
-                        </text>
-                      </g>
-                    );
-                  }}
-                />
-                <Tooltip
-                  cursor={{ fill: '#f8fafc' }}
-                  contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0', boxShadow: '0 4px 14px rgb(15 23 42 / 0.08)' }}
-                  formatter={(value: number, name, item) => [
-                    `${value.toLocaleString()} รายการ`,
-                    item.payload?.label || String(name),
-                  ]}
-                />
-                <ReferenceLine x={0} stroke="#cbd5e1" />
-                <Bar
-                  dataKey="count"
-                  radius={[0, 8, 8, 0]}
-                  barSize={20}
-                  isAnimationActive
-                  animationDuration={2000}
-                  animationEasing="ease-in-out"
-                  shape={(props: unknown) => {
-                    const { x, y, width, height, payload } = props as {
-                      x?: number;
-                      y?: number;
-                      width?: number;
-                      height?: number;
-                      payload?: { label?: string };
-                    };
-
-                    if (typeof x !== 'number' || typeof y !== 'number' || typeof width !== 'number' || typeof height !== 'number') {
-                      return <g />;
-                    }
-
-                    const label = payload?.label || '';
-
-                    return (
-                      <rect
-                        x={x}
-                        y={y}
-                        width={Math.max(width, 0)}
-                        height={height}
-                        rx={8}
-                        ry={8}
-                        fill={categoryColors[label] || '#1d75bd'}
-                      />
-                    );
-                  }}
-                >
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-
-          <div className="space-y-3">
-            {summary.categoryBreakdown.map((item) => (
+        <div className="mt-5 space-y-3">
+          {sortedCategoryBreakdown.map((item) => (
               <div key={item.label} className="rounded-md border border-slate-200 bg-slate-50/70 p-4">
                 <div className="flex items-start justify-between gap-4">
                   <div className="min-w-0">
@@ -254,7 +170,7 @@ export function DashboardPage() {
                 </div>
                 <div className="mt-3 h-2 rounded-full bg-slate-200">
                   <div
-                    className="h-2 rounded-full transition-[width] duration-2200 ease-out"
+                    className="h-2 rounded-full transition-[width] duration-1200 ease-in-out"
                     style={{
                       width: `${animatePortfolio ? Math.min(item.percentage, 100) : 0}%`,
                       backgroundColor: categoryColors[item.label] || '#1d75bd',
@@ -262,21 +178,23 @@ export function DashboardPage() {
                   />
                 </div>
               </div>
-            ))}
-          </div>
+          ))}
         </div>
       </section>
 
       <div className="mt-6 grid gap-4 xl:grid-cols-2">
         <section className="rounded-md border border-slate-200 bg-white p-5 shadow-sm">
-          <h2 className="text-base font-semibold text-slate-900">Monthly Trend</h2>
+          <h2 className="text-base font-semibold text-slate-900">แนวโน้มการอบรมรายเดือน</h2>
           <div className="mt-4 h-72">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={summary.monthlyTrend}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                 <XAxis dataKey="label" tick={{ fontSize: 12 }} />
                 <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
-                <Tooltip />
+                <Tooltip
+                  formatter={(value) => [`${value} รายการ`, 'จำนวน']}
+                  labelFormatter={(label) => `เดือน: ${label}`}
+                />
                 <Bar dataKey="count" fill="#1d75bd" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
@@ -284,14 +202,17 @@ export function DashboardPage() {
         </section>
 
         <section className="rounded-md border border-slate-200 bg-white p-5 shadow-sm">
-          <h2 className="text-base font-semibold text-slate-900">Yearly Trend</h2>
+          <h2 className="text-base font-semibold text-slate-900">แนวโน้มการอบรมรายปี</h2>
           <div className="mt-4 h-72">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={summary.yearlyTrend}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                 <XAxis dataKey="label" tick={{ fontSize: 12 }} />
                 <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
-                <Tooltip />
+                <Tooltip
+                  formatter={(value) => [`${value} รายการ`, 'จำนวน']}
+                  labelFormatter={(label) => `ปี: ${label}`}
+                />
                 <Line type="monotone" dataKey="count" stroke="#23805f" strokeWidth={2.5} dot={{ r: 4 }} />
               </LineChart>
             </ResponsiveContainer>

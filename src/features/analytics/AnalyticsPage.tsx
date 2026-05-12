@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
-  PieChart, Pie, Cell, Legend, AreaChart, Area
+  PieChart, Pie, Cell, AreaChart, Area
 } from 'recharts';
 import { 
   BarChart3, 
@@ -26,6 +26,7 @@ function renderPieCalloutLabel(props: {
   percent?: number;
   name?: string;
   fill?: string;
+  index?: number;
 }) {
   const {
     cx = 0,
@@ -35,20 +36,27 @@ function renderPieCalloutLabel(props: {
     percent = 0,
     name = '',
     fill = '#334155',
+    index = 999,
   } = props;
 
-  // Hide tiny slice labels to avoid clutter on small segments.
-  if (percent < 0.04) return null;
+  // Show callout for up to 5 categories.
+  if (index > 4 || percent < 0.01) return null;
 
   const sin = Math.sin(-RADIAN * midAngle);
   const cos = Math.cos(-RADIAN * midAngle);
   const sx = cx + (outerRadius + 2) * cos;
   const sy = cy + (outerRadius + 2) * sin;
-  const mx = cx + (outerRadius + 18) * cos;
-  const my = cy + (outerRadius + 18) * sin;
-  const ex = mx + (cos >= 0 ? 40 : -40);
-  const ey = my;
+  const mx = cx + (outerRadius + 9) * cos;
+  const my = cy + (outerRadius + 9) * sin;
+  const ex = mx + (cos >= 0 ? 18 : -18);
   const isRight = cos >= 0;
+  // Keep label order aligned with slice angle to prevent color-line mismatch/crossing.
+  // Apply vertical spreading (without reordering) so labels separate but still follow their slices.
+  const spread = isRight ? 1.9 : 1.35;
+  const rawEy = cy + (my - cy) * spread;
+  const minEy = cy - 82;
+  const maxEy = cy + 82;
+  const ey = Math.max(minEy, Math.min(maxEy, rawEy));
   const label = `${name} (${(percent * 100).toFixed(0)}%)`;
   const approxWidth = Math.min(250, Math.max(120, label.length * 6.2));
   const boxX = isRight ? ex + 4 : ex - approxWidth - 4;
@@ -166,13 +174,6 @@ export function AnalyticsPage() {
 
   if (loading) return <div className="py-20 text-center text-slate-500">กำลังประมวลผลข้อมูลสถิติ...</div>;
   if (error || !data || !summary) return <div className="py-20 text-center text-red-600">{error || 'ไม่พบข้อมูล'}</div>;
-  const pieLegendPayload = data.categories.map((item, index) => ({
-    id: item.category,
-    value: `${item.category} (${item.count})`,
-    type: 'square' as const,
-    color: COLORS[index % COLORS.length],
-  }));
-
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -243,40 +244,54 @@ export function AnalyticsPage() {
             <PieChartIcon className="h-5 w-5 text-brand-600" />
             สัดส่วนตามประเภทการอบรม
           </h3>
-          <div className={`${isMobile ? 'h-[250px]' : 'h-[300px]'} w-full`}>
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={data.categories}
-                  dataKey="count"
-                  nameKey="category"
-                  cx="50%"
-                  cy={isMobile ? '52%' : '50%'}
-                  outerRadius={isMobile ? 78 : 100}
-                  label={!isMobile ? renderPieCalloutLabel : false}
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(260px,0.9fr)] lg:items-center">
+            <div className={`${isMobile ? 'h-[250px]' : 'h-[300px]'} w-full`}>
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={data.categories}
+                    dataKey="count"
+                    nameKey="category"
+                    cx="50%"
+                    cy={isMobile ? '52%' : '50%'}
+                    outerRadius={isMobile ? 78 : 100}
+                  label={false}
                   labelLine={false}
-                >
-                  {data.categories.map((_, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip />
-                <Legend
-                  verticalAlign="bottom"
-                  align="center"
-                  iconType="square"
-                  payload={pieLegendPayload}
-                  wrapperStyle={{
-                    fontSize: isMobile ? 11 : 12,
-                    lineHeight: isMobile ? '16px' : '18px',
-                  }}
-                />
-              </PieChart>
-            </ResponsiveContainer>
+                  >
+                    {data.categories.map((_, index) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip
+                    formatter={(value) => [`${value} รายการ`, 'จำนวน']}
+                    labelFormatter={(label) => `ประเภทการอบรม: ${label}`}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="hidden lg:block">
+              <div className="space-y-2 rounded-lg border border-slate-100 bg-slate-50 p-3">
+                {data.categories.slice(0, 5).map((item, index) => {
+                  const total = data.categories.reduce((sum, entry) => sum + entry.count, 0);
+                  const pct = total > 0 ? Math.round((item.count / total) * 100) : 0;
+                  return (
+                    <div key={item.category} className="flex items-start justify-between gap-3 rounded-md bg-white px-3 py-2 ring-1 ring-slate-100">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: COLORS[index % COLORS.length] }} />
+                          <p className="text-sm font-medium text-slate-800">{item.category}</p>
+                        </div>
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <p className="text-sm font-semibold text-slate-900">{item.count.toLocaleString()}</p>
+                        <p className="text-xs text-slate-500">{pct}%</p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           </div>
-          {isMobile ? (
-            <p className="mt-2 text-xs text-slate-500"></p>
-          ) : null}
         </div>
 
         {/* Work Group Analysis - Bar Chart */}
@@ -299,7 +314,12 @@ export function AnalyticsPage() {
                     tickLine={false} 
                     tick={{ fontSize: isMobile ? 10 : 11, fill: '#64748b' }} 
                   />
-                  <Tooltip cursor={{ fill: '#f8fafc' }} wrapperStyle={{ maxWidth: isMobile ? 180 : 260 }} />
+                  <Tooltip
+                    cursor={{ fill: '#f8fafc' }}
+                    wrapperStyle={{ maxWidth: isMobile ? 180 : 260 }}
+                    formatter={(value) => [`${value} รายการ`, 'จำนวน']}
+                    labelFormatter={(label) => `กลุ่มงาน: ${label}`}
+                  />
                   <Bar dataKey="count" fill="#3b82f6" radius={[0, 4, 4, 0]} barSize={20} />
                 </BarChart>
               </ResponsiveContainer>
@@ -337,7 +357,10 @@ export function AnalyticsPage() {
                   tickLine={false} 
                   tick={{ fontSize: 12, fill: '#64748b' }} 
                 />
-                <Tooltip />
+                <Tooltip
+                  formatter={(value) => [`${value} รายการ`, 'จำนวน']}
+                  labelFormatter={(label) => `เดือน: ${label}`}
+                />
                 <Area 
                   type="monotone" 
                   dataKey="count" 
