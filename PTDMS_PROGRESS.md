@@ -150,3 +150,8 @@ git push origin main
 4. Data Standardization
 - กำหนดมาตรฐานชื่อ `development_area` และ `work_group` ให้สม่ำเสมอ
 - ลดปัญหาข้อมูลแตกต่างจากการพิมพ์หลายรูปแบบ
+
+git add .
+git commit -m "update: latest ui adjustments"
+git push origin main
+
