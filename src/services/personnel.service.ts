@@ -121,7 +121,18 @@ export async function getPersonnelDetails(userId: string) {
   };
 }
 
-export async function updatePersonnelProfile(userId: string, data: { position?: string | null, department?: string | null, work_group?: string | null }) {
+export async function updatePersonnelProfile(
+  userId: string,
+  data: {
+    position?: string | null;
+    department?: string | null;
+    work_group?: string | null;
+    gender?: 'male' | 'female' | null;
+    education?: 'ต่ำกว่าปริญญาตรี' | 'ปริญญาตรี' | 'ปริญญาโท' | 'ปริญญาเอก' | null;
+    birth_date?: string | null;
+    employment_type?: 'ข้าราชการ' | 'พนักงานราชการ' | 'พนักงานกระทรวงสาธารณสุข' | 'ลูกจ้างชั่วคราว' | 'จ้างเหมาบริการฯ (พขร.)' | null;
+  },
+) {
   await runSupabaseQuery(
     supabase
       .from('profiles')
@@ -129,6 +140,10 @@ export async function updatePersonnelProfile(userId: string, data: { position?: 
         position: data.position,
         department: data.department,
         work_group: data.work_group,
+        gender: data.gender,
+        education: data.education,
+        birth_date: data.birth_date,
+        employment_type: data.employment_type,
         updated_at: new Date().toISOString(),
       })
       .eq('user_id', userId),

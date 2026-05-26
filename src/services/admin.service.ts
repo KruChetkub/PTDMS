@@ -42,3 +42,32 @@ export async function deleteUser(userId: string) {
 
   if (error) throw error;
 }
+
+export type UpdateUserDetailsPayload = {
+  employee_code?: string | null;
+  full_name?: string | null;
+  position?: string | null;
+  department?: string | null;
+  work_group?: string | null;
+  gender?: 'male' | 'female' | null;
+  education?: 'ต่ำกว่าปริญญาตรี' | 'ปริญญาตรี' | 'ปริญญาโท' | 'ปริญญาเอก' | null;
+  birth_date?: string | null;
+  employment_type?: 'ข้าราชการ' | 'พนักงานราชการ' | 'พนักงานกระทรวงสาธารณสุข' | 'ลูกจ้างชั่วคราว' | 'จ้างเหมาบริการฯ (พขร.)' | null;
+};
+
+export async function updateUserDetails(userId: string, payload: UpdateUserDetailsPayload) {
+  const { error } = await (supabase as any).rpc('update_user_profile_details', {
+    p_user_id: userId,
+    p_employee_code: payload.employee_code ?? null,
+    p_full_name: payload.full_name ?? null,
+    p_position: payload.position ?? null,
+    p_department: payload.department ?? null,
+    p_work_group: payload.work_group ?? null,
+    p_gender: payload.gender ?? null,
+    p_education: payload.education ?? null,
+    p_birth_date: payload.birth_date ?? null,
+    p_employment_type: payload.employment_type ?? null,
+  });
+
+  if (error) throw error;
+}

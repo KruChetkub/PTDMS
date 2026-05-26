@@ -1,4 +1,5 @@
 import { AlertTriangle, X } from 'lucide-react';
+import type { ReactNode } from 'react';
 import { cn } from '../../utils/cn';
 
 type ConfirmModalProps = {
@@ -6,7 +7,7 @@ type ConfirmModalProps = {
   onClose: () => void;
   onConfirm: () => void;
   title: string;
-  message: string;
+  message: ReactNode;
   confirmLabel?: string;
   cancelLabel?: string;
   isLoading?: boolean;
@@ -69,9 +70,11 @@ export function ConfirmModal({
           </div>
 
           <h3 className="mb-2 text-xl font-bold text-slate-900">{title}</h3>
-          <p className="mb-8 text-sm text-slate-500 leading-relaxed">
-            {message}
-          </p>
+          {typeof message === 'string' ? (
+            <p className="mb-8 text-sm text-slate-500 leading-relaxed">{message}</p>
+          ) : (
+            <div className="mb-8 w-full text-sm text-slate-500 leading-relaxed">{message}</div>
+          )}
 
           <div className="flex w-full gap-3">
             <button

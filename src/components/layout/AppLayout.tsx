@@ -86,7 +86,7 @@ const navItems: NavItem[] = [
     to: '/admin/users',
     label: 'Users',
     icon: Users,
-    roles: ['super_admin', 'admin'],
+    roles: ['super_admin', 'admin', 'hr'],
   },
   {
     to: '/admin/security',

@@ -7,6 +7,11 @@ export type Profile = {
   position: string | null;
   department: string | null;
   work_group: string | null;
+  gender: 'male' | 'female' | null;
+  education: 'ต่ำกว่าปริญญาตรี' | 'ปริญญาตรี' | 'ปริญญาโท' | 'ปริญญาเอก' | null;
+  birth_date: string | null;
+  generation: 'Gen B' | 'Gen X' | 'Gen Y' | 'Gen Z' | null;
+  employment_type: 'ข้าราชการ' | 'พนักงานราชการ' | 'พนักงานกระทรวงสาธารณสุข' | 'ลูกจ้างชั่วคราว' | 'จ้างเหมาบริการฯ (พขร.)' | null;
   role: UserRole;
   status: ProfileStatus;
   avatar_url: string | null;
@@ -96,6 +101,11 @@ export type Database = {
           position?: string | null;
           department?: string | null;
           work_group?: string | null;
+          gender?: 'male' | 'female' | null;
+          education?: 'ต่ำกว่าปริญญาตรี' | 'ปริญญาตรี' | 'ปริญญาโท' | 'ปริญญาเอก' | null;
+          birth_date?: string | null;
+          generation?: 'Gen B' | 'Gen X' | 'Gen Y' | 'Gen Z' | null;
+          employment_type?: 'ข้าราชการ' | 'พนักงานราชการ' | 'พนักงานกระทรวงสาธารณสุข' | 'ลูกจ้างชั่วคราว' | 'จ้างเหมาบริการฯ (พขร.)' | null;
           role?: UserRole;
           status?: ProfileStatus;
           avatar_url?: string | null;
