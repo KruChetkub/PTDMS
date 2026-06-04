@@ -9,7 +9,7 @@ import { loginSchema, type LoginFormValues } from '../auth.schemas';
 export function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const from = (location.state as { from?: Location } | null)?.from?.pathname || '/dashboard';
+  const from = (location.state as { from?: Location } | null)?.from?.pathname || '/portal';
   const { signIn, loading, error, clearError } = useAuthStore();
   const {
     register,
@@ -31,10 +31,8 @@ export function LoginPage() {
       
       if (profile?.status === 'pending') {
         navigate('/pending-approval', { replace: true });
-      } else if (profile?.role === 'personnel') {
-        navigate('/profile', { replace: true });
-      } else if (from === '/dashboard' || from === '/' || from === '/self-service' || from === '/profile') {
-        navigate('/dashboard', { replace: true });
+      } else if (from === '/' || from === '/login' || from === '/dashboard' || from === '/self-service' || from === '/profile') {
+        navigate('/portal', { replace: true });
       } else {
         navigate(from, { replace: true });
       }

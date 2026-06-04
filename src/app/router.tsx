@@ -1,12 +1,14 @@
 import { createBrowserRouter, Navigate } from 'react-router-dom';
 import { ProtectedRoute } from '../components/auth/ProtectedRoute';
 import { AppLayout } from '../components/layout/AppLayout';
+import { CalendarLayout } from '../components/layout/CalendarLayout';
 import { LoginPage } from '../features/auth/pages/LoginPage';
 import { RegisterPage } from '../features/auth/pages/RegisterPage';
 import { ForgotPasswordPage } from '../features/auth/pages/ForgotPasswordPage';
 import { ResetPasswordPage } from '../features/auth/pages/ResetPasswordPage';
 import { AuthCallbackPage } from '../features/auth/pages/AuthCallbackPage';
 import { PendingApprovalPage } from '../features/auth/pages/PendingApprovalPage';
+import { PortalPage } from '../features/portal/PortalPage';
 import { DashboardPage } from '../features/dashboard/DashboardPage';
 import { AnalyticsPage } from '../features/analytics/AnalyticsPage';
 import { RecommendationsPage } from '../features/recommendations/RecommendationsPage';
@@ -20,13 +22,14 @@ import { GuestRoute } from '../components/auth/GuestRoute';
 import { ReportsPage } from '../features/reports/ReportsPage';
 import { UserManagementPage } from '../features/admin/UserManagementPage';
 import { SecurityPage } from '../features/admin/SecurityPage';
+import { StrategyCalendarPage } from '../features/strategy-calendar/StrategyCalendarPage';
 import { ForbiddenPage } from '../features/system/ForbiddenPage';
 import { NotFoundPage } from '../features/system/NotFoundPage';
 
 export const router = createBrowserRouter([
   {
     path: '/',
-    element: <Navigate to="/dashboard" replace />,
+    element: <Navigate to="/portal" replace />,
   },
   {
     element: <GuestRoute />,
@@ -57,6 +60,23 @@ export const router = createBrowserRouter([
     element: <ProtectedRoute allowedRoles={['super_admin', 'admin', 'executive', 'hr', 'personnel']} />,
     children: [
       {
+        path: '/portal',
+        element: <PortalPage />,
+      },
+      {
+        path: '/pending-approval',
+        element: <PendingApprovalPage />,
+      },
+      {
+        element: <CalendarLayout />,
+        children: [
+          {
+            path: '/strategy-calendar',
+            element: <StrategyCalendarPage />,
+          },
+        ],
+      },
+      {
         element: <AppLayout />,
         children: [
           {
@@ -66,10 +86,6 @@ export const router = createBrowserRouter([
           {
             path: '/self-service',
             element: <SelfServicePage />,
-          },
-          {
-            path: '/pending-approval',
-            element: <PendingApprovalPage />,
           },
         ],
       },

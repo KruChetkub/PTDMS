@@ -89,6 +89,27 @@ export type AuditLog = {
   created_at: string;
 };
 
+export type StrategyEventStatus = 'draft' | 'published' | 'cancelled';
+
+export type StrategyEvent = {
+  id: string;
+  title: string;
+  description: string | null;
+  event_date: string;
+  start_time: string | null;
+  end_time: string | null;
+  end_date: string | null;
+  color: string | null;
+  location: string | null;
+  owner_work_group: string | null;
+  status: StrategyEventStatus;
+  created_by: string | null;
+  cancelled_at: string | null;
+  cancelled_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type Database = {
   public: {
     Tables: {
@@ -211,6 +232,29 @@ export type Database = {
           created_at?: string;
         };
         Update: Partial<Omit<AuditLog, 'id'>>;
+        Relationships: [];
+      };
+      strategy_events: {
+        Row: StrategyEvent;
+        Insert: {
+          id?: string;
+          title: string;
+          description?: string | null;
+          event_date: string;
+          start_time?: string | null;
+          end_time?: string | null;
+          end_date?: string | null;
+          color?: string | null;
+          location?: string | null;
+          owner_work_group?: string | null;
+          status?: StrategyEventStatus;
+          created_by?: string | null;
+          cancelled_at?: string | null;
+          cancelled_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Omit<StrategyEvent, 'id' | 'created_at'>>;
         Relationships: [];
       };
     };

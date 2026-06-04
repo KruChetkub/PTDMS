@@ -3,7 +3,7 @@ import { useAuthStore } from '../../stores/auth.store';
 
 export function ForbiddenPage() {
   const profile = useAuthStore((state) => state.profile);
-  const homePath = profile?.role === 'personnel' ? '/profile' : '/dashboard';
+  const homePath = '/portal';
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4 py-10">

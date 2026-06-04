@@ -24,9 +24,7 @@ export function GuestRoute() {
   }
 
   if (user && profile) {
-    // If already logged in, redirect to an appropriate home page
-    const defaultPath = profile.role === 'personnel' ? '/profile' : '/dashboard';
-    return <Navigate to={defaultPath} replace />;
+    return <Navigate to={profile.status === 'pending' ? '/pending-approval' : '/portal'} replace />;
   }
 
   return <Outlet />;
