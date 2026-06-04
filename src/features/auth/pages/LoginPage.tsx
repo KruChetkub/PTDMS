@@ -52,9 +52,9 @@ export function LoginPage() {
 
       <div className="relative w-full max-w-md space-y-5">
         <div className="text-center text-white">
-          <div className="text-xl font-bold tracking-wide sm:text-2xl">Personnel Training & Development Management System</div>
+          <div className="text-xl font-bold tracking-wide sm:text-2xl">Internal system of the Strategy and Planning Division</div>
           <h1 className="mt-5 text-3xl font-semibold">เข้าสู่ระบบ</h1>
-          <p className="mt-2 text-sm text-pink-50">ระบบบริหารจัดการข้อมูลการฝึกอบรมและการพัฒนาบุคลากร</p>
+          <p className="mt-2 text-sm text-pink-50">กองยุทธศาสตร์และแผนงาน กรมควบคุมโรค</p>
         </div>
 
         <ConfiguredNotice />
@@ -104,10 +104,10 @@ export function LoginPage() {
 
           <div className="flex items-center justify-between text-sm">
             <Link className="font-medium text-pink-700 hover:text-pink-600" to="/forgot-password">
-              ลืมรหัสผ่าน
+              
             </Link>
             <Link className="font-medium text-pink-700 hover:text-pink-600" to="/register">
-              สมัครใช้งาน
+              
             </Link>
           </div>
         </form>
