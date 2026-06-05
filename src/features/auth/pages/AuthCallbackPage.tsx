@@ -1,19 +1,29 @@
 import { useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../../stores/auth.store';
 
 export function AuthCallbackPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const initialize = useAuthStore((state) => state.initialize);
 
   useEffect(() => {
     const finish = async () => {
+      const searchParams = new URLSearchParams(location.search);
+      const hashParams = new URLSearchParams(location.hash.replace(/^#/, ''));
+      const isPasswordRecovery = searchParams.get('next') === 'reset-password' || hashParams.get('type') === 'recovery';
+
+      if (isPasswordRecovery) {
+        navigate(`/reset-password${location.search}${location.hash}`, { replace: true });
+        return;
+      }
+
       await initialize();
       navigate('/login', { replace: true });
     };
 
     void finish();
-  }, [initialize, navigate]);
+  }, [initialize, location.hash, location.search, navigate]);
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
@@ -23,4 +33,3 @@ export function AuthCallbackPage() {
     </div>
   );
 }
-
