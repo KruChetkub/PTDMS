@@ -18,8 +18,8 @@ type PortalCard = {
 
 const systems: PortalCard[] = [
   {
-    title: 'PTDMS Training & Development',
-    description: 'ระบบจัดการข้อมูลการอบรม วิเคราะห์ทักษะ และติดตามการพัฒนาบุคลากร',
+    title: 'Personnel Training & Development Management System',
+    description: 'บริหารจัดการข้อมูลการฝึกอบรมและการพัฒนาบุคลากรภายใน',
     to: '/dashboard',
     icon: GraduationCap,
     roles: ['super_admin', 'admin', 'executive', 'hr', 'personnel'],
@@ -98,7 +98,7 @@ export function PortalPage() {
                 เลือกระบบที่ต้องการใช้งาน
               </h1>
               <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600 sm:text-base">
-                เข้าสู่ระบบเดียว แล้วเลือกเครื่องมือภายในตามสิทธิ์ของคุณ ระบบจะแสดงเฉพาะบริการที่บัญชีนี้สามารถใช้งานได้
+                สำหรับบริหารจัดการข้อมูลการฝึกอบรม การพัฒนาบุคลากรภายในกองยุทธศาสตร์และแผนงาน
               </p>
             </div>
 
@@ -148,7 +148,7 @@ export function PortalPage() {
                   </div>
 
                   <div className="flex items-center justify-between border-t border-slate-100 pt-4 text-sm font-semibold text-brand-700">
-                    <span>เข้าสู่ระบบ</span>
+                    <span>เข้าใช้งาน</span>
                     <ArrowRight className="h-4 w-4 transition group-hover:translate-x-1" aria-hidden="true" />
                   </div>
                 </div>
