@@ -44,7 +44,7 @@ export function PortalPage() {
   const { profile, signOut } = useAuthStore();
   const visibleSystems = systems.filter((system) => canAccess(profile?.role, system.roles));
   const getSystemPath = (system: PortalCard) => {
-    if (system.title === 'PTDMS Training & Development' && profile?.role === 'personnel') {
+    if (system.to === '/dashboard' && profile?.role === 'personnel') {
       return '/profile';
     }
 
