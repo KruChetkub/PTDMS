@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
-  PieChart, Pie, Cell, AreaChart, Area
+  PieChart, Pie, Cell, AreaChart, Area, LabelList
 } from 'recharts';
 import { 
   BarChart3, 
@@ -17,6 +17,128 @@ import { getDashboardSummary, type DashboardSummary } from '../../services/dashb
 
 const COLORS = ['#2563eb', '#7c3aed', '#db2777', '#ea580c', '#ca8a04', '#16a34a', '#0891b2'];
 const RADIAN = Math.PI / 180;
+type ImageFormat = 'png' | 'jpg' | 'svg';
+type ExportKey = 'training-categories' | 'work-groups' | 'monthly-development';
+type ExportDetail = {
+  label: string;
+  count: number;
+  color?: string;
+  percent?: number;
+};
+
+function escapeSvgText(value: string) {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function truncateSvgText(value: string, maxLength: number) {
+  return value.length > maxLength ? `${value.slice(0, maxLength - 1)}...` : value;
+}
+
+function copyComputedStyles(source: Element, target: Element) {
+  const computedStyle = window.getComputedStyle(source);
+  Array.from(computedStyle).forEach((property) => {
+    (target as HTMLElement).style.setProperty(property, computedStyle.getPropertyValue(property), computedStyle.getPropertyPriority(property));
+  });
+
+  Array.from(source.children).forEach((child, index) => {
+    const targetChild = target.children.item(index);
+    if (targetChild) {
+      copyComputedStyles(child, targetChild);
+    }
+  });
+}
+
+function downloadBlob(blob: Blob, fileName: string) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+function buildChartSvg(element: HTMLElement, details: ExportDetail[] = [], summaryText?: string) {
+  const rect = element.getBoundingClientRect();
+  const width = Math.ceil(rect.width);
+  const title = element.querySelector('h3')?.textContent?.trim() || 'Analytics Chart';
+  const chartSvg = element.querySelector('.recharts-wrapper svg') || element.querySelector('svg.recharts-surface');
+
+  if (!chartSvg) {
+    throw new Error('ไม่พบกราฟสำหรับดาวน์โหลด');
+  }
+
+  const chartRect = chartSvg.getBoundingClientRect();
+  const chartX = Math.max(20, Math.round(chartRect.left - rect.left));
+  const detailRows = details.slice(0, 8);
+  const chartY = summaryText ? 88 : 62;
+  const chartWidth = Math.max(240, Math.ceil(chartRect.width));
+  const chartHeight = Math.max(180, Math.ceil(chartRect.height));
+  const hasSideDetails = detailRows.length > 0 && width - (chartX + chartWidth) >= 320;
+  const detailColumns = hasSideDetails || width < 720 ? 1 : 2;
+  const detailColumnWidth = hasSideDetails ? Math.max(260, width - (chartX + chartWidth) - 52) : Math.floor((width - 48) / detailColumns);
+  const detailRowsPerColumn = Math.ceil(detailRows.length / detailColumns);
+  const bottomDetailsHeight = detailRows.length > 0 && !hasSideDetails ? detailRowsPerColumn * 24 + 44 : 0;
+  const height = chartY + chartHeight + 24 + bottomDetailsHeight;
+  const chartClone = chartSvg.cloneNode(true) as SVGElement;
+
+  copyComputedStyles(chartSvg, chartClone);
+  chartClone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+  chartClone.setAttribute('x', String(chartX));
+  chartClone.setAttribute('y', String(chartY));
+  chartClone.setAttribute('width', String(chartWidth));
+  chartClone.setAttribute('height', String(chartHeight));
+
+  const detailBaseX = hasSideDetails ? chartX + chartWidth + 24 : 24;
+  const detailBaseY = hasSideDetails ? chartY + 12 : chartY + chartHeight + 30;
+  const titleFontSize = 13;
+  const summaryFontSize = 12;
+  const detailLabelFontSize = 11;
+  const detailValueFontSize = 11;
+  const detailsSvg = detailRows.map((item, index) => {
+    const columnIndex = hasSideDetails ? 0 : Math.floor(index / detailRowsPerColumn);
+    const rowIndex = hasSideDetails ? index : index % detailRowsPerColumn;
+    const detailX = detailBaseX + columnIndex * detailColumnWidth;
+    const y = detailBaseY + rowIndex * 24;
+    const countText = `${item.count.toLocaleString()} รายการ`;
+    const percentText = typeof item.percent === 'number' ? ` (${item.percent}%)` : '';
+    const label = escapeSvgText(truncateSvgText(item.label, hasSideDetails ? 22 : 28));
+    const color = item.color || COLORS[index % COLORS.length];
+    const valueX = Math.min(width - 28, detailX + detailColumnWidth - 8);
+    const valueText = `${countText}${percentText}`;
+
+    return [
+      `<circle cx="${detailX + 4}" cy="${y - 4}" r="4" fill="${color}"/>`,
+      `<text x="${detailX + 16}" y="${y}" font-family="Tahoma, Arial, sans-serif" font-size="${detailLabelFontSize}" font-weight="500" fill="#475569">${label}</text>`,
+      `<text x="${valueX}" y="${y}" font-family="Tahoma, Arial, sans-serif" font-size="${detailValueFontSize}" font-weight="600" fill="#0f172a" text-anchor="end">${valueText}</text>`,
+    ].join('');
+  }).join('');
+  const summarySvg = summaryText
+    ? `<text x="22" y="62" font-family="Tahoma, Arial, sans-serif" font-size="${summaryFontSize}" font-weight="600" fill="#2563eb">${escapeSvgText(summaryText)}</text>`
+    : '';
+  const serializedChart = new XMLSerializer().serializeToString(chartClone);
+  const svg = [
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">`,
+    '<defs>',
+    '<filter id="cardShadow" x="-20%" y="-20%" width="140%" height="140%">',
+    '<feDropShadow dx="0" dy="10" stdDeviation="10" flood-color="#0f172a" flood-opacity="0.12"/>',
+    '</filter>',
+    '</defs>',
+    `<rect x="4" y="4" width="${width - 8}" height="${height - 8}" rx="12" fill="#ffffff" stroke="#e2e8f0" filter="url(#cardShadow)"/>`,
+    `<text x="22" y="38" font-family="Tahoma, Arial, sans-serif" font-size="${titleFontSize}" font-weight="600" fill="#0f172a">${escapeSvgText(title)}</text>`,
+    summarySvg,
+    serializedChart,
+    detailsSvg,
+    '</svg>',
+  ].join('');
+
+  return { svg, width, height };
+}
 
 function renderPieCalloutLabel(props: {
   cx?: number;
@@ -97,6 +219,10 @@ export function AnalyticsPage() {
   const [selectedWorkGroup, setSelectedWorkGroup] = useState('all');
   const [selectedYear, setSelectedYear] = useState('all');
   const [selectedArea, setSelectedArea] = useState<string | null>(null);
+  const [exportingKey, setExportingKey] = useState<string | null>(null);
+  const categoryChartRef = useRef<HTMLDivElement | null>(null);
+  const workGroupChartRef = useRef<HTMLDivElement | null>(null);
+  const monthlyDevelopmentRef = useRef<HTMLDivElement | null>(null);
   const isMobile = useMediaQuery('(max-width: 640px)');
   const developmentAreaDetails = data?.developmentAreaDetails || [];
   const developmentAreaFilterOptions = data?.developmentAreaFilterOptions || { departments: [], workGroups: [], years: [] };
@@ -172,6 +298,144 @@ export function AnalyticsPage() {
       .sort((a, b) => b.mentionCount - a.mentionCount || a.fullName.localeCompare(b.fullName));
   }, [filteredDevelopmentDetails, selectedAreaResolved]);
 
+  const categoryExportDetails = useMemo(() => {
+    const categories = data?.categories || [];
+    const total = categories.reduce((sum, item) => sum + item.count, 0);
+
+    return categories.map((item, index) => ({
+      label: item.category,
+      count: item.count,
+      color: COLORS[index % COLORS.length],
+      percent: total > 0 ? Math.round((item.count / total) * 100) : 0,
+    }));
+  }, [data?.categories]);
+
+  const workGroupExportDetails = useMemo(
+    () => {
+      const workGroups = data?.workGroups || [];
+      const total = workGroups.reduce((sum, item) => sum + item.count, 0);
+
+      return workGroups.map((item) => ({
+        label: item.workGroup,
+        count: item.count,
+        color: '#3b82f6',
+        percent: total > 0 ? Math.round((item.count / total) * 100) : 0,
+      }));
+    },
+    [data?.workGroups],
+  );
+  const workGroupChartData = useMemo(() => {
+    const workGroups = data?.workGroups || [];
+    const total = workGroups.reduce((sum, item) => sum + item.count, 0);
+
+    return workGroups.map((item) => ({
+      ...item,
+      percent: total > 0 ? Math.round((item.count / total) * 100) : 0,
+    }));
+  }, [data?.workGroups]);
+
+  const getExportDetails = (key: ExportKey) => {
+    if (key === 'training-categories') {
+      return {
+        details: categoryExportDetails,
+        summaryText: `จำนวนรายการรวม: ${categoryExportDetails.reduce((sum, item) => sum + item.count, 0).toLocaleString()} รายการ`,
+      };
+    }
+
+    if (key === 'work-groups') {
+      return {
+        details: workGroupExportDetails,
+        summaryText: `จำนวนรายการรวม: ${workGroupExportDetails.reduce((sum, item) => sum + item.count, 0).toLocaleString()} รายการ`,
+      };
+    }
+
+    return { details: [], summaryText: undefined };
+  };
+
+  const exportChartImage = async (element: HTMLElement | null, key: ExportKey, format: ImageFormat) => {
+    if (!element || exportingKey) {
+      return;
+    }
+
+    const nextExportingKey = `${key}-${format}`;
+    setExportingKey(nextExportingKey);
+
+    try {
+      const exportMeta = getExportDetails(key);
+      const { svg, width, height } = buildChartSvg(element, exportMeta.details, exportMeta.summaryText);
+      const fileBaseName = `analytics-${key}-${new Date().toISOString().slice(0, 10)}`;
+
+      if (format === 'svg') {
+        downloadBlob(new Blob([svg], { type: 'image/svg+xml;charset=utf-8' }), `${fileBaseName}.svg`);
+        return;
+      }
+
+      const svgBlob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' });
+      const svgUrl = URL.createObjectURL(svgBlob);
+      const image = new Image();
+      const scale = 2;
+
+      await new Promise<void>((resolve, reject) => {
+        image.onload = () => resolve();
+        image.onerror = () => reject(new Error('ไม่สามารถสร้างไฟล์ภาพได้'));
+        image.src = svgUrl;
+      });
+
+      const canvas = document.createElement('canvas');
+      canvas.width = width * scale;
+      canvas.height = height * scale;
+      const context = canvas.getContext('2d');
+
+      if (!context) {
+        throw new Error('เบราว์เซอร์ไม่รองรับการสร้างภาพ');
+      }
+
+      context.scale(scale, scale);
+      if (format === 'jpg') {
+        context.fillStyle = '#ffffff';
+        context.fillRect(0, 0, width, height);
+      }
+      context.drawImage(image, 0, 0, width, height);
+      URL.revokeObjectURL(svgUrl);
+
+      const mimeType = format === 'jpg' ? 'image/jpeg' : 'image/png';
+      const blob = await new Promise<Blob>((resolve, reject) => {
+        canvas.toBlob(
+          (nextBlob) => (nextBlob ? resolve(nextBlob) : reject(new Error('ไม่สามารถสร้างไฟล์ภาพได้'))),
+          mimeType,
+          0.95,
+        );
+      });
+
+      downloadBlob(blob, `${fileBaseName}.${format}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'ไม่สามารถดาวน์โหลดภาพได้');
+    } finally {
+      setExportingKey(null);
+    }
+  };
+
+  const renderChartExportButtons = (element: HTMLElement | null, key: ExportKey) => (
+    <div className="flex shrink-0 gap-1">
+      {(['png', 'jpg', 'svg'] as const).map((format) => {
+        const isExporting = exportingKey === `${key}-${format}`;
+
+        return (
+          <button
+            key={format}
+            type="button"
+            onClick={() => void exportChartImage(element, key, format)}
+            disabled={loading || exportingKey !== null}
+            className="inline-flex h-6 items-center justify-center rounded border border-slate-200 bg-white px-1.5 text-[10px] font-semibold uppercase text-slate-600 shadow-sm transition hover:border-brand-200 hover:bg-brand-50 hover:text-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
+            title={`ดาวน์โหลด ${format.toUpperCase()}`}
+          >
+            {isExporting ? '...' : format}
+          </button>
+        );
+      })}
+    </div>
+  );
+
   if (loading) return <div className="py-20 text-center text-slate-500">กำลังประมวลผลข้อมูลสถิติ...</div>;
   if (error || !data || !summary) return <div className="py-20 text-center text-red-600">{error || 'ไม่พบข้อมูล'}</div>;
   return (
@@ -239,11 +503,14 @@ export function AnalyticsPage() {
 
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Category Analysis - Pie Chart */}
-        <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h3 className="mb-6 flex items-center gap-2 font-bold text-slate-900">
-            <PieChartIcon className="h-5 w-5 text-brand-600" />
-            สัดส่วนตามประเภทการอบรม
-          </h3>
+        <div ref={categoryChartRef} className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="mb-6 flex items-start justify-between gap-3">
+            <h3 className="flex items-center gap-2 font-bold text-slate-1000">
+              <PieChartIcon className="h-5 w-3 text-brand-600" />
+              สัดส่วนตามประเภทการอบรม
+            </h3>
+            {renderChartExportButtons(categoryChartRef.current, 'training-categories')}
+          </div>
           <div className="grid gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(260px,0.9fr)] lg:items-center">
             <div className={`${isMobile ? 'h-[250px]' : 'h-[300px]'} w-full`}>
               <ResponsiveContainer width="100%" height="100%">
@@ -255,8 +522,8 @@ export function AnalyticsPage() {
                     cx="50%"
                     cy={isMobile ? '52%' : '50%'}
                     outerRadius={isMobile ? 78 : 100}
-                  label={false}
-                  labelLine={false}
+                    label={({ percent }) => `${Math.round((percent || 0) * 100)}%`}
+                    labelLine={false}
                   >
                     {data.categories.map((_, index) => (
                       <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
@@ -295,15 +562,18 @@ export function AnalyticsPage() {
         </div>
 
         {/* Work Group Analysis - Bar Chart */}
-        <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h3 className="mb-6 flex items-center gap-2 font-bold text-slate-900">
-            <Users className="h-5 w-5 text-brand-600" />
-            จำนวนการอบรมแยกตามกลุ่มงาน
-          </h3>
+        <div ref={workGroupChartRef} className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="mb-6 flex items-start justify-between gap-3">
+            <h3 className="flex items-center gap-2 font-bold text-slate-900">
+              <Users className="h-5 w-5 text-brand-600" />
+              จำนวนการอบรมแยกตามกลุ่มงาน
+            </h3>
+            {renderChartExportButtons(workGroupChartRef.current, 'work-groups')}
+          </div>
           <div className={`${isMobile ? 'h-[340px]' : 'h-[300px]'} w-full flex items-center justify-center`}>
-            {(data?.workGroups?.length ?? 0) > 0 ? (
+            {workGroupChartData.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={data.workGroups} layout="vertical">
+                <BarChart data={workGroupChartData} layout="vertical" margin={{ right: 34 }}>
                   <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#f1f5f9" />
                   <XAxis type="number" hide />
                   <YAxis 
@@ -320,7 +590,9 @@ export function AnalyticsPage() {
                     formatter={(value) => [`${value} รายการ`, 'จำนวน']}
                     labelFormatter={(label) => `กลุ่มงาน: ${label}`}
                   />
-                  <Bar dataKey="count" fill="#3b82f6" radius={[0, 4, 4, 0]} barSize={20} />
+                  <Bar dataKey="count" fill="#3b82f6" radius={[0, 4, 4, 0]} barSize={20}>
+                    <LabelList dataKey="percent" position="right" formatter={(value: number) => `${value}%`} fill="#0f172a" fontSize={11} />
+                  </Bar>
                 </BarChart>
               </ResponsiveContainer>
             ) : (
@@ -330,11 +602,14 @@ export function AnalyticsPage() {
         </div>
 
         {/* Development Trend - Area Chart */}
-        <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm lg:col-span-2">
-          <h3 className="mb-6 flex items-center gap-2 font-bold text-slate-900">
-            <TrendingUp className="h-5 w-5 text-brand-600" />
-            แนวโน้มการพัฒนาบุคลากรรายเดือน
-          </h3>
+        <div ref={monthlyDevelopmentRef} className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm lg:col-span-2">
+          <div className="mb-6 flex items-start justify-between gap-3">
+            <h3 className="flex items-center gap-2 font-bold text-slate-900">
+              <TrendingUp className="h-5 w-5 text-brand-600" />
+              แนวโน้มการพัฒนาบุคลากรรายเดือน
+            </h3>
+            {renderChartExportButtons(monthlyDevelopmentRef.current, 'monthly-development')}
+          </div>
           <div className="h-[300px] w-full">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={summary.monthlyTrend}>
