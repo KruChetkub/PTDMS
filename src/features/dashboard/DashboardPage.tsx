@@ -434,24 +434,25 @@ export function DashboardPage() {
 
       <section className="mb-3">
         <div className="mb-1">
-          <h2 className="text-base font-semibold text-slate-1000">ข้อมูลบุคลากร</h2>
+          <h2 className="text-xl font-semibold text-slate-1000">ข้อมูลพื้นฐานบุคลากร</h2>
         </div>
 
         <div className="rounded-md border border-slate-200 bg-gradient-to-br from-slate-50 via-white to-blue-50/70 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.75)]">
           <section className="mb-4 rounded-md border border-amber-100 bg-gradient-to-r from-white via-amber-50/70 to-white p-4 shadow-sm ring-1 ring-amber-900/5">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <p className="text-sm font-medium text-slate-500">KPI บุคลากร</p>
-                <h2 className="mt-1 text-base font-semibold text-slate-900">อายุเฉลี่ย</h2>
+                <p className="text-sm font-medium text-slate-500"></p>
+                <h2 className="mt-1 text-lg font-semibold text-slate-900">อายุเฉลี่ยของบุคลากรภายในกองยุทธศาสตร์และแผนงาน</h2>
               </div>
               <div className="flex items-center gap-4">
-                <div className="text-right">
-                  <p className="text-4xl font-bold tracking-tight text-slate-950">
-                    {loading ? '...' : summary.demographics.averageAge !== null ? summary.demographics.averageAge.toLocaleString() : '-'}
-                  </p>
-                  <p className="text-sm font-medium text-slate-500">ปี</p>
-                </div>
-                <div className="rounded-md bg-amber-100 p-3 text-amber-700">
+               {/* เพิ่ม flex items-baseline gap-1 เพื่อบังคับให้เรียงต่อกันแนวนอน */}
+                  <div className="text-right flex items-baseline justify-end gap-1">
+                        <p className="text-4xl font-bold tracking-tight text-slate-950">
+                        {loading ? '...' : summary.demographics.averageAge !== null ? summary.demographics.averageAge.toLocaleString() : '-'}
+                        </p>
+                         <p className="text-xl font-semibold text-slate-1000">ปี</p>
+                   </div>                
+                   <div className="rounded-md bg-amber-100 p-3 text-amber-700">
                   <CalendarDays className="h-6 w-6" aria-hidden="true" />
                 </div>
               </div>
@@ -498,7 +499,7 @@ export function DashboardPage() {
                 <div key={item.label} className="flex items-center gap-2 text-slate-600">
                   <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: genderColors[index % genderColors.length] }} />
                   <span className="truncate">{item.label}</span>
-                  <span className="ml-auto font-medium text-slate-900">{item.count.toLocaleString()}</span>
+                  <span className="ml-2 font-medium text-slate-900">{item.count.toLocaleString()}</span>คน
                 </div>
               ))}
             </div>
@@ -569,7 +570,7 @@ export function DashboardPage() {
                 <div key={item.label} className="flex items-center gap-2 text-slate-600">
                   <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: generationColors[index % generationColors.length] }} />
                   <span className="truncate">{item.label}</span>
-                  <span className="ml-auto font-medium text-slate-900">{item.count.toLocaleString()}</span>
+                  <span className="ml-2 font-medium text-slate-900">{item.count.toLocaleString()}</span>คน
                 </div>
               ))}
             </div>

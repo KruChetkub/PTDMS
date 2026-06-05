@@ -12,6 +12,7 @@ type AuthState = {
   error: string | null;
   initialize: () => Promise<void>;
   loadProfile: (userId: string) => Promise<Profile | null>;
+  refreshProfile: () => Promise<Profile | null>;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string, fullName: string) => Promise<void>;
   requestPasswordReset: (email: string) => Promise<void>;
@@ -108,6 +109,17 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
 
     return data;
+  },
+
+  refreshProfile: async () => {
+    const userId = get().user?.id;
+    if (!userId) {
+      return null;
+    }
+
+    const profile = await get().loadProfile(userId);
+    set({ profile });
+    return profile;
   },
 
   signIn: async (email: string, password: string) => {

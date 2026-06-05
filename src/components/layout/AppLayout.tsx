@@ -10,6 +10,7 @@ import {
   LogOut,
   Shield,
   Sparkles,
+  UserCog,
   UserCircle,
   Users,
 } from 'lucide-react';
@@ -75,6 +76,12 @@ const navItems: NavItem[] = [
     label: 'Self-Service',
     icon: FileText,
     roles: ['super_admin', 'admin', 'hr', 'personnel'],
+  },
+  {
+    to: '/settings',
+    label: 'ตั้งค่าข้อมูล',
+    icon: UserCog,
+    roles: ['super_admin', 'admin', 'executive', 'hr', 'personnel'],
   },
   {
     to: '/reports',

@@ -150,3 +150,30 @@ export async function updatePersonnelProfile(
     'อัปเดตโปรไฟล์บุคลากร',
   );
 }
+
+export async function updateOwnProfileDetails(data: {
+  employee_code?: string | null;
+  full_name?: string | null;
+  position?: string | null;
+  department?: string | null;
+  work_group?: string | null;
+  gender?: 'male' | 'female' | null;
+  education?: 'ต่ำกว่าปริญญาตรี' | 'ปริญญาตรี' | 'ปริญญาโท' | 'ปริญญาเอก' | null;
+  birth_date?: string | null;
+  employment_type?: 'ข้าราชการ' | 'พนักงานราชการ' | 'พนักงานกระทรวงสาธารณสุข' | 'ลูกจ้างชั่วคราว' | 'จ้างเหมาบริการฯ (พขร.)' | null;
+}) {
+  await runSupabaseQuery(
+    supabase.rpc('update_own_profile_details' as any, {
+      p_employee_code: data.employee_code || '',
+      p_full_name: data.full_name || '',
+      p_position: data.position || '',
+      p_department: data.department || '',
+      p_work_group: data.work_group || '',
+      p_gender: data.gender,
+      p_education: data.education || '',
+      p_birth_date: data.birth_date,
+      p_employment_type: data.employment_type,
+    }),
+    'อัปเดตข้อมูลส่วนบุคคล',
+  );
+}

@@ -18,6 +18,7 @@ import { ProfilePage } from '../features/personnel/ProfilePage';
 import { PersonnelListPage } from '../features/personnel/PersonnelListPage';
 import { IndividualProfilePage } from '../features/personnel/IndividualProfilePage';
 import { SelfServicePage } from '../features/self-service/SelfServicePage';
+import { AccountSettingsPage } from '../features/settings/AccountSettingsPage';
 import { GuestRoute } from '../components/auth/GuestRoute';
 import { ReportsPage } from '../features/reports/ReportsPage';
 import { UserManagementPage } from '../features/admin/UserManagementPage';
@@ -86,6 +87,10 @@ export const router = createBrowserRouter([
           {
             path: '/self-service',
             element: <SelfServicePage />,
+          },
+          {
+            path: '/settings',
+            element: <AccountSettingsPage />,
           },
         ],
       },
