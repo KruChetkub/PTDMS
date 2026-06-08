@@ -277,6 +277,26 @@ export type Database = {
         };
         Returns: string;
       };
+      update_own_profile_details: {
+        Args: {
+          p_employee_code: string;
+          p_full_name: string;
+          p_position: string;
+          p_department: string;
+          p_work_group: string;
+          p_gender: 'male' | 'female' | null;
+          p_education: 'ต่ำกว่าปริญญาตรี' | 'ปริญญาตรี' | 'ปริญญาโท' | 'ปริญญาเอก' | null;
+          p_birth_date: string | null;
+          p_employment_type:
+            | 'ข้าราชการ'
+            | 'พนักงานราชการ'
+            | 'พนักงานกระทรวงสาธารณสุข'
+            | 'ลูกจ้างชั่วคราว'
+            | 'จ้างเหมาบริการฯ (พขร.)'
+            | null;
+        };
+        Returns: void;
+      };
     };
     Enums: {
       user_role: UserRole;

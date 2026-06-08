@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Activity, CalendarCheck, ExternalLink, RefreshCw, Search, UserCheck, UserCircle, Users } from 'lucide-react';
+import { Activity, CalendarCheck, List, RefreshCw, Search, UserCheck, UserCircle, Users } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { PageHeader } from '../../components/ui/PageHeader';
 import { listPersonnel, type PersonnelSummary } from '../../services/personnel.service';
@@ -134,93 +134,164 @@ export function PersonnelListPage() {
         </div>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-        {loading ? (
-          Array.from({ length: 8 }).map((_, i) => (
-            <div key={i} className="animate-pulse rounded-xl border border-slate-200 bg-white p-5">
-              <div className="flex items-center gap-4">
-                <div className="h-12 w-12 rounded-full bg-slate-100"></div>
-                <div className="flex-1 space-y-2">
-                  <div className="h-4 w-2/3 rounded bg-slate-100"></div>
-                  <div className="h-3 w-1/2 rounded bg-slate-100"></div>
-                </div>
-              </div>
-            </div>
-          ))
-        ) : filtered.length === 0 ? (
-          <div className="col-span-full py-12 text-center text-slate-500">
-            ไม่พบข้อมูลบุคลากรตามที่ค้นหา
-          </div>
-        ) : (
-          filtered.map((person) => (
-            <div key={person.user_id} className="group relative rounded-xl border border-slate-200 bg-white p-5 transition hover:border-brand-300 hover:shadow-md">
-              <div className="flex items-start justify-between">
+      <div className="lg:hidden">
+        <div className="grid gap-4 sm:grid-cols-2">
+          {loading ? (
+            Array.from({ length: 8 }).map((_, i) => (
+              <div key={i} className="animate-pulse rounded-md border border-slate-200 bg-white p-5">
                 <div className="flex items-center gap-4">
-                  {person.avatar_url ? (
-                    <img src={person.avatar_url} alt="" className="h-12 w-12 rounded-full object-cover" />
-                  ) : (
-                    <div className="flex h-12 w-12 items-center justify-center rounded-full bg-brand-50 text-brand-600">
-                      <UserCircle className="h-8 w-8" />
-                    </div>
-                  )}
-                  <div>
-                    <h3 className="font-semibold text-slate-900 group-hover:text-brand-600">{person.full_name}</h3>
-                    <p className="text-xs text-slate-500">{person.employee_code || ''}</p>
+                  <div className="h-12 w-12 rounded-full bg-slate-100"></div>
+                  <div className="flex-1 space-y-2">
+                    <div className="h-4 w-2/3 rounded bg-slate-100"></div>
+                    <div className="h-3 w-1/2 rounded bg-slate-100"></div>
                   </div>
                 </div>
-                <Link 
-                  to={`/personnel/${person.user_id}`}
-                  className="rounded-full p-1 text-slate-400 hover:bg-slate-50 hover:text-brand-600"
-                  title="ดูโปรไฟล์"
-                >
-                  <ExternalLink className="h-4 w-4" />
-                </Link>
               </div>
-
-              <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
-                <div>
-                  <p className="font-medium uppercase tracking-wider text-slate-400">หน่วยงาน</p>
-                  <p className="text-slate-700 truncate">{person.department || '-'}</p>
-                </div>
-                <div>
-                  <p className="font-medium uppercase tracking-wider text-slate-400">กลุ่มงาน</p>
-                  <p className="truncate text-slate-700">{person.work_group || '-'}</p>
-                </div>
-                <div>
-                  <p className="font-medium uppercase tracking-wider text-slate-400">สิทธิ์การใช้งาน</p>
-                  <p className="text-slate-700">{roleLabels[person.role]}</p>
-                </div>
-                <div>
-                  <p className="font-medium uppercase tracking-wider text-slate-400">หลักสูตรเด่น</p>
-                  <p className="truncate text-slate-700">{person.top_category || '-'}</p>
-                </div>
-              </div>
-
-              <div className="mt-4 grid grid-cols-3 gap-2 border-t border-slate-100 pt-4">
-                <div className="flex flex-col">
-                  <span className="text-lg font-bold text-brand-600">{person.training_count.toLocaleString()}</span>
-                  <span className="text-[10px] font-bold uppercase tracking-tight text-slate-400">ทั้งหมด</span>
-                </div>
-                <div className="flex flex-col">
-                  <span className="text-lg font-bold text-emerald-600">{person.current_year_training_count.toLocaleString()}</span>
-                  <span className="text-[10px] font-bold uppercase tracking-tight text-slate-400">ปีนี้</span>
-                </div>
-                <div className="flex flex-col">
-                  <span className="truncate text-sm font-bold text-slate-700">{formatThaiDate(person.last_training_date)}</span>
-                  <span className="text-[10px] font-bold uppercase tracking-tight text-slate-400">ล่าสุด</span>
-                </div>
-              </div>
-
-              <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-3">
-                <span className="truncate text-xs text-slate-500">{person.position || 'ไม่ระบุตำแหน่ง'}</span>
-                <div className={`rounded px-2 py-1 text-[10px] font-bold uppercase ring-1 ${statusStyle(person.status)}`}>
-                  {person.status}
-                </div>
-              </div>
+            ))
+          ) : filtered.length === 0 ? (
+            <div className="col-span-full py-12 text-center text-slate-500">
+              ไม่พบข้อมูลบุคลากรตามที่ค้นหา
             </div>
-          ))
-        )}
+          ) : (
+            filtered.map((person) => (
+              <Link
+                key={person.user_id}
+                to={`/personnel/${person.user_id}`}
+                className="group block rounded-md border border-slate-200 bg-white p-4 transition hover:border-brand-300 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex min-w-0 items-center gap-3">
+                    {person.avatar_url ? (
+                      <img src={person.avatar_url} alt="" className="h-11 w-11 rounded-full object-cover" />
+                    ) : (
+                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-brand-50 text-brand-600">
+                        <UserCircle className="h-7 w-7" />
+                      </div>
+                    )}
+                    <div className="min-w-0">
+                      <h3 className="truncate font-semibold text-slate-900 group-hover:text-brand-600">{person.full_name}</h3>
+                      <p className="text-xs text-slate-500">{person.employee_code || ''}</p>
+                    </div>
+                  </div>
+                  <div className={`shrink-0 rounded px-2 py-1 text-[10px] font-bold uppercase ring-1 ${statusStyle(person.status)}`}>
+                    {person.status}
+                  </div>
+                </div>
+
+                <div className="mt-4 grid grid-cols-1 gap-2 text-xs min-[420px]:grid-cols-2">
+                  <div>
+                    <p className="font-medium uppercase tracking-wider text-slate-400">หน่วยงาน</p>
+                    <p className="truncate text-slate-700">{person.department || '-'}</p>
+                  </div>
+                  <div>
+                    <p className="font-medium uppercase tracking-wider text-slate-400">กลุ่มงาน</p>
+                    <p className="truncate text-slate-700">{person.work_group || '-'}</p>
+                  </div>
+                  <div>
+                    <p className="font-medium uppercase tracking-wider text-slate-400">สิทธิ์การใช้งาน</p>
+                    <p className="text-slate-700">{roleLabels[person.role]}</p>
+                  </div>
+                  <div>
+                    <p className="font-medium uppercase tracking-wider text-slate-400">หลักสูตรเด่น</p>
+                    <p className="truncate text-slate-700">{person.top_category || '-'}</p>
+                  </div>
+                </div>
+
+                <div className="mt-4 grid grid-cols-3 gap-2 border-t border-slate-100 pt-4">
+                  <div className="flex flex-col">
+                    <span className="text-lg font-bold text-brand-600">{person.training_count.toLocaleString()}</span>
+                    <span className="text-[10px] font-bold uppercase tracking-tight text-slate-400">ทั้งหมด</span>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-lg font-bold text-emerald-600">{person.current_year_training_count.toLocaleString()}</span>
+                    <span className="text-[10px] font-bold uppercase tracking-tight text-slate-400">ปีนี้</span>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="truncate text-sm font-bold text-slate-700">{formatThaiDate(person.last_training_date)}</span>
+                    <span className="text-[10px] font-bold uppercase tracking-tight text-slate-400">ล่าสุด</span>
+                  </div>
+                </div>
+
+                <div className="mt-4 flex items-center justify-between gap-3 border-t border-slate-100 pt-3">
+                  <span className="truncate text-xs text-slate-500">{person.position || 'ไม่ระบุตำแหน่ง'}</span>
+                  <span className="shrink-0 text-xs font-medium text-brand-600">ดูรายละเอียด</span>
+                </div>
+              </Link>
+            ))
+          )}
+        </div>
       </div>
+
+      <section className="hidden rounded-md border border-slate-200 bg-white shadow-sm lg:block">
+        <div className="flex items-center gap-2 border-b border-slate-200 px-4 py-3 text-sm font-semibold text-slate-800">
+          <List className="h-4 w-4" aria-hidden="true" />
+          <span>☰ รายการ</span>
+        </div>
+
+        {loading ? (
+          <div className="divide-y divide-slate-100">
+            {Array.from({ length: 8 }).map((_, i) => (
+              <div key={i} className="animate-pulse px-4 py-4">
+                <div className="flex items-center gap-4">
+                  <div className="h-10 w-10 rounded-full bg-slate-100"></div>
+                  <div className="flex-1 space-y-2">
+                    <div className="h-4 w-1/4 rounded bg-slate-100"></div>
+                    <div className="h-3 w-2/5 rounded bg-slate-100"></div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="py-12 text-center text-slate-500">ไม่พบข้อมูลบุคลากรตามที่ค้นหา</div>
+        ) : (
+          <div className="divide-y divide-slate-100">
+            {filtered.map((person) => (
+              <Link
+                key={person.user_id}
+                to={`/personnel/${person.user_id}`}
+                className="grid grid-cols-[minmax(260px,1.5fr)_minmax(180px,1fr)_minmax(150px,0.8fr)_minmax(110px,0.6fr)_minmax(110px,0.6fr)] items-center gap-4 px-4 py-4 transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-brand-500"
+              >
+                <div className="flex min-w-0 items-center gap-3">
+                  {person.avatar_url ? (
+                    <img src={person.avatar_url} alt="" className="h-10 w-10 rounded-full object-cover" />
+                  ) : (
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-50 text-brand-600">
+                      <UserCircle className="h-6 w-6" />
+                    </div>
+                  )}
+                  <div className="min-w-0">
+                    <p className="truncate font-semibold text-slate-900">{person.full_name}</p>
+                    <p className="truncate text-xs text-slate-500">{person.employee_code || 'ไม่มีรหัสบุคลากร'}</p>
+                  </div>
+                </div>
+
+                <div className="min-w-0">
+                  <p className="truncate text-sm text-slate-800">{person.department || '-'}</p>
+                  <p className="truncate text-xs text-slate-500">{person.work_group || '-'}</p>
+                </div>
+
+                <div className="min-w-0">
+                  <p className="truncate text-sm text-slate-800">{person.position || 'ไม่ระบุตำแหน่ง'}</p>
+                  <p className="truncate text-xs text-slate-500">{roleLabels[person.role]}</p>
+                </div>
+
+                <div className="text-sm text-slate-700">
+                  <span className="font-semibold text-brand-600">{person.training_count.toLocaleString()}</span>
+                  <span className="ml-1 text-xs text-slate-500">ครั้ง</span>
+                </div>
+
+                <div className="flex items-center justify-between gap-3">
+                  <div className={`rounded px-2 py-1 text-[10px] font-bold uppercase ring-1 ${statusStyle(person.status)}`}>
+                    {person.status}
+                  </div>
+                  <span className="text-xs font-medium text-brand-600">รายละเอียด</span>
+                </div>
+              </Link>
+            ))}
+          </div>
+        )}
+      </section>
     </div>
   );
 }
