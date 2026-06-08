@@ -3,7 +3,6 @@ import { ProtectedRoute } from '../components/auth/ProtectedRoute';
 import { AppLayout } from '../components/layout/AppLayout';
 import { CalendarLayout } from '../components/layout/CalendarLayout';
 import { LoginPage } from '../features/auth/pages/LoginPage';
-import { RegisterPage } from '../features/auth/pages/RegisterPage';
 import { ForgotPasswordPage } from '../features/auth/pages/ForgotPasswordPage';
 import { ResetPasswordPage } from '../features/auth/pages/ResetPasswordPage';
 import { AuthCallbackPage } from '../features/auth/pages/AuthCallbackPage';
@@ -38,10 +37,6 @@ export const router = createBrowserRouter([
       {
         path: '/login',
         element: <LoginPage />,
-      },
-      {
-        path: '/register',
-        element: <RegisterPage />,
       },
       {
         path: '/forgot-password',

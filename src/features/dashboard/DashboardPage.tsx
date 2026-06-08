@@ -620,7 +620,7 @@ export function DashboardPage() {
         <section ref={monthlyTrendRef} className="rounded-md border border-slate-200 bg-white p-5 shadow-sm">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <h2 className="text-base font-semibold text-slate-900">แนวโน้มการอบรมรายเดือน</h2>
+              <h2 className="text-base font-semibold text-slate-900">สถิติการอบรมรายเดือน</h2>
               <p className="mt-1 text-xs font-semibold text-brand-700">
                 จำนวนรายการรวม {summary.monthlyTrend.reduce((sum, item) => sum + item.count, 0).toLocaleString()} รายการ
               </p>
@@ -647,7 +647,7 @@ export function DashboardPage() {
 
         <section ref={yearlyTrendRef} className="rounded-md border border-slate-200 bg-white p-5 shadow-sm">
           <div className="flex items-start justify-between gap-3">
-            <h2 className="text-base font-semibold text-slate-900">แนวโน้มการอบรมรายปี</h2>
+            <h2 className="text-base font-semibold text-slate-900">สถิติการอบรมรายปี</h2>
             {renderChartExportButtons(yearlyTrendRef.current, 'yearly-training')}
           </div>
           <div className="mt-4 h-72">

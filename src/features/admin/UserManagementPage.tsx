@@ -7,15 +7,23 @@ import {
   Search,
   Trash2,
   UserCheck,
+  UserPlus,
   UserX,
 } from 'lucide-react';
 import { PageHeader } from '../../components/ui/PageHeader';
 import { ConfirmModal } from '../../components/ui/ConfirmModal';
-import { listAllUsers, updateUserDetails, updateUserRole, updateUserStatus, deleteUser } from '../../services/admin.service';
+import { createManagedUser, listAllUsers, updateUserDetails, updateUserRole, updateUserStatus, deleteUser } from '../../services/admin.service';
 import type { Profile } from '../../types/database.types';
 import { useAuthStore } from '../../stores/auth.store';
 import type { UserRole, ProfileStatus } from '../../types/roles';
 import { roleLabels } from '../../types/roles';
+
+type CreateFormState = {
+  fullName: string;
+  email: string;
+  password: string;
+  role: UserRole;
+};
 
 type EditFormState = {
   employee_code: string;
@@ -36,6 +44,7 @@ const genderLabels = {
 
 const educationOptions: EditFormState['education'][] = ['', 'ต่ำกว่าปริญญาตรี', 'ปริญญาตรี', 'ปริญญาโท', 'ปริญญาเอก'];
 const employmentTypeOptions: EditFormState['employment_type'][] = ['', 'ข้าราชการ', 'พนักงานราชการ', 'พนักงานกระทรวงสาธารณสุข', 'ลูกจ้างชั่วคราว', 'จ้างเหมาบริการฯ (พขร.)'];
+const createRoleOptions: UserRole[] = ['personnel', 'hr', 'executive', 'admin'];
 
 function parseThaiDateToISO(value: string) {
   if (!value) return null;
@@ -102,6 +111,16 @@ function getErrorMessage(err: unknown, fallback: string) {
   return fallback;
 }
 
+function getCreateUserErrorMessage(err: unknown) {
+  const message = getErrorMessage(err, 'ไม่สามารถสร้างผู้ใช้งานได้');
+
+  if (message === 'User already registered') {
+    return 'มี email นี้อยู่ในระบบแล้ว';
+  }
+
+  return message;
+}
+
 export function UserManagementPage() {
   const [users, setUsers] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(true);
@@ -112,6 +131,16 @@ export function UserManagementPage() {
     isOpen: false,
     userId: '',
     fullName: '',
+  });
+  const [createModal, setCreateModal] = useState<{ isOpen: boolean; form: CreateFormState; error: string | null }>({
+    isOpen: false,
+    form: {
+      fullName: '',
+      email: '',
+      password: '',
+      role: 'personnel',
+    },
+    error: null,
   });
   const [editModal, setEditModal] = useState<{ isOpen: boolean; user: Profile | null; form: EditFormState }>({
     isOpen: false,
@@ -133,6 +162,7 @@ export function UserManagementPage() {
   const currentProfile = useAuthStore((state) => state.profile);
   const currentRole = currentProfile?.role;
   const canManageRoleAndStatus = currentRole === 'super_admin' || currentRole === 'admin';
+  const canCreateUsers = currentRole === 'super_admin' || currentRole === 'admin';
   const canManageUsers = currentRole === 'super_admin' || currentRole === 'admin' || currentRole === 'hr';
 
   const loadUsers = async () => {
@@ -196,6 +226,69 @@ export function UserManagementPage() {
       await loadUsers();
     } catch (err) {
       alert(getErrorMessage(err, 'ไม่สามารถลบผู้ใช้งานได้'));
+    } finally {
+      setUpdating(null);
+    }
+  };
+
+  const handleOpenCreate = () => {
+    setCreateModal({
+      isOpen: true,
+      form: {
+        fullName: '',
+        email: '',
+        password: '',
+        role: 'personnel',
+      },
+      error: null,
+    });
+  };
+
+  const handleCreateField = (field: keyof CreateFormState, value: string) => {
+    setCreateModal((prev) => ({
+      ...prev,
+      error: null,
+      form: {
+        ...prev.form,
+        [field]: value,
+      },
+    }));
+  };
+
+  const handleCreateUser = async () => {
+    if (!canCreateUsers) return;
+
+    const fullName = createModal.form.fullName.trim();
+    const email = createModal.form.email.trim();
+    const password = createModal.form.password;
+
+    if (fullName.length < 2) {
+      setCreateModal((prev) => ({ ...prev, error: 'กรุณากรอกชื่อ-นามสกุล' }));
+      return;
+    }
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setCreateModal((prev) => ({ ...prev, error: 'กรุณากรอกอีเมลให้ถูกต้อง' }));
+      return;
+    }
+
+    if (password.length < 8) {
+      setCreateModal((prev) => ({ ...prev, error: 'รหัสผ่านควรมีอย่างน้อย 8 ตัวอักษร' }));
+      return;
+    }
+
+    setUpdating('create-user');
+    try {
+      await createManagedUser({
+        fullName,
+        email,
+        password,
+        role: createModal.form.role,
+      });
+      setCreateModal((prev) => ({ ...prev, isOpen: false, error: null }));
+      await loadUsers();
+    } catch (err) {
+      setCreateModal((prev) => ({ ...prev, error: getCreateUserErrorMessage(err) }));
     } finally {
       setUpdating(null);
     }
@@ -270,7 +363,7 @@ export function UserManagementPage() {
         description="บริหารจัดการบัญชีผู้ใช้งาน กำหนดสิทธิ์ และอัปเดตรายละเอียดบุคลากร"
       />
 
-      <div className="flex items-center gap-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm lg:flex-row lg:items-center lg:gap-4">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           <input
@@ -281,7 +374,19 @@ export function UserManagementPage() {
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
-        <div className="hidden text-xs text-slate-500 lg:block">จำนวนผู้ใช้ทั้งหมด: {users.length} ท่าน</div>
+        <div className="flex items-center justify-between gap-3">
+          <div className="text-xs text-slate-500">จำนวนผู้ใช้ทั้งหมด: {users.length} ท่าน</div>
+          {canCreateUsers && (
+            <button
+              type="button"
+              onClick={handleOpenCreate}
+              className="inline-flex items-center justify-center gap-2 rounded-md bg-brand-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-brand-700"
+            >
+              <UserPlus className="h-4 w-4" aria-hidden="true" />
+              เพิ่มผู้ใช้
+            </button>
+          )}
+        </div>
       </div>
 
       {error && <div className="rounded-md bg-red-50 p-4 text-sm text-red-600">{error}</div>}
@@ -412,6 +517,66 @@ export function UserManagementPage() {
         confirmLabel="ลบผู้ใช้งาน"
         isLoading={updating === deleteModal.userId}
         variant="danger"
+      />
+
+      <ConfirmModal
+        isOpen={createModal.isOpen}
+        onClose={() => setCreateModal((prev) => ({ ...prev, isOpen: false }))}
+        onConfirm={handleCreateUser}
+        title="เพิ่มผู้ใช้ใหม่"
+        message={(
+          <div className="mt-4 space-y-3 text-left">
+            {createModal.error ? (
+              <div className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{createModal.error}</div>
+            ) : null}
+            <label className="block">
+              <span className="text-sm font-medium text-slate-700">ชื่อ-นามสกุล</span>
+              <input
+                type="text"
+                autoComplete="name"
+                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+                value={createModal.form.fullName}
+                onChange={(e) => handleCreateField('fullName', e.target.value)}
+              />
+            </label>
+            <label className="block">
+              <span className="text-sm font-medium text-slate-700">Email</span>
+              <input
+                type="email"
+                autoComplete="email"
+                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+                value={createModal.form.email}
+                onChange={(e) => handleCreateField('email', e.target.value)}
+              />
+            </label>
+            <label className="block">
+              <span className="text-sm font-medium text-slate-700">Password</span>
+              <input
+                type="password"
+                autoComplete="new-password"
+                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+                value={createModal.form.password}
+                onChange={(e) => handleCreateField('password', e.target.value)}
+              />
+            </label>
+            <label className="block">
+              <span className="text-sm font-medium text-slate-700">Role</span>
+              <select
+                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+                value={createModal.form.role}
+                onChange={(e) => handleCreateField('role', e.target.value as UserRole)}
+              >
+                {createRoleOptions.map((role) => (
+                  <option key={role} value={role}>{roleLabels[role]}</option>
+                ))}
+              </select>
+            </label>
+          </div>
+        )}
+        confirmLabel="สร้างผู้ใช้"
+        cancelLabel="ยกเลิก"
+        isLoading={updating === 'create-user'}
+        variant="info"
       />
 
       <ConfirmModal

@@ -103,12 +103,12 @@ export function LoginPage() {
           </button>
 
           <div className="flex items-center justify-between text-sm">
-            <Link className="font-medium text-pink-700 hover:text-pink-600" to="/forgot-password">
+           <Link className="font-medium text-pink-700 hover:text-pink-600" to="/forgot-password">
               ลืมรหัสผ่าน
             </Link>
-            <Link className="font-medium text-pink-700 hover:text-pink-600" to="/register">
-              
-            </Link>
+         {/*    <Link className="font-medium text-pink-700 hover:text-pink-600" to="/register">
+              register
+            </Link> */}
           </div>
         </form>
       </div>
