@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ArrowRight, CalendarDays, GraduationCap, LogOut, ShieldCheck, Sparkles } from 'lucide-react';
+import { ArrowRight, CalendarDays, GraduationCap, LogOut, Monitor, ShieldCheck, Sparkles } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ConfirmModal } from '../../components/ui/ConfirmModal';
 import { useAuthStore } from '../../stores/auth.store';
@@ -16,7 +16,7 @@ type PortalCard = {
   meta: string;
 };
 
-const systems: PortalCard[] = [
+const coreSystems: PortalCard[] = [
   {
     title: 'Personnel Training & Development Management System',
     description: 'บริหารจัดการข้อมูลการฝึกอบรมและการพัฒนาบุคลากรภายใน',
@@ -37,12 +37,25 @@ const systems: PortalCard[] = [
   },
 ];
 
+const assetSystems: PortalCard[] = [
+  {
+    title: 'IT Asset Dashboard',
+    description: 'ระบบติดตามครุภัณฑ์คอมพิวเตอร์ สเปกเครื่อง สถานะคุณภาพ และข้อมูลผู้ใช้งาน',
+    to: '/it-assets',
+    icon: Monitor,
+    roles: ['super_admin', 'admin', 'executive', 'hr', 'personnel'],
+    accent: 'from-blue-700 to-teal-500',
+    meta: 'IT Assets',
+  },
+];
+
 export function PortalPage() {
   const navigate = useNavigate();
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const { profile, signOut } = useAuthStore();
-  const visibleSystems = systems.filter((system) => canAccess(profile?.role, system.roles));
+  const visibleCoreSystems = coreSystems.filter((system) => canAccess(profile?.role, system.roles));
+  const visibleAssetSystems = assetSystems.filter((system) => canAccess(profile?.role, system.roles));
   const getSystemPath = (system: PortalCard) => {
     if (system.to === '/dashboard' && profile?.role === 'personnel') {
       return '/profile';
@@ -124,7 +137,7 @@ export function PortalPage() {
         </section>
 
         <div className="mt-6 grid gap-4 lg:grid-cols-2">
-          {visibleSystems.map((system) => {
+          {visibleCoreSystems.map((system) => {
             const Icon = system.icon;
             return (
               <Link
@@ -156,6 +169,47 @@ export function PortalPage() {
             );
           })}
         </div>
+
+        {visibleAssetSystems.length > 0 ? (
+          <section className="mt-6 border-t border-slate-200 pt-6">
+            <div className="mb-3">
+              <h2 className="text-sm font-semibold uppercase text-slate-500">Separate IT Asset System</h2>
+            </div>
+            <div className="grid gap-4 lg:grid-cols-2">
+              {visibleAssetSystems.map((system) => {
+                const Icon = system.icon;
+                return (
+                  <Link
+                    key={system.to}
+                    to={getSystemPath(system)}
+                    className="group rounded-md border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-lg"
+                  >
+                    <div className="flex min-h-48 flex-col justify-between gap-6">
+                      <div>
+                        <div className="flex items-start justify-between gap-4">
+                          <div className={`rounded-md bg-gradient-to-br ${system.accent} p-3 text-white shadow-sm`}>
+                            <Icon className="h-7 w-7" aria-hidden="true" />
+                          </div>
+                          <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">
+                            <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
+                            {system.meta}
+                          </span>
+                        </div>
+                        <h2 className="mt-5 text-xl font-semibold tracking-normal text-slate-950">{system.title}</h2>
+                        <p className="mt-2 text-sm leading-6 text-slate-600">{system.description}</p>
+                      </div>
+
+                      <div className="flex items-center justify-between border-t border-slate-100 pt-4 text-sm font-semibold text-brand-700">
+                        <span>เข้าใช้งาน</span>
+                        <ArrowRight className="h-4 w-4 transition group-hover:translate-x-1" aria-hidden="true" />
+                      </div>
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+          </section>
+        ) : null}
       </main>
 
       <ConfirmModal

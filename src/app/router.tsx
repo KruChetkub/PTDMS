@@ -23,6 +23,8 @@ import { ReportsPage } from '../features/reports/ReportsPage';
 import { UserManagementPage } from '../features/admin/UserManagementPage';
 import { SecurityPage } from '../features/admin/SecurityPage';
 import { StrategyCalendarPage } from '../features/strategy-calendar/StrategyCalendarPage';
+import { ItAssetsPage } from '../features/it-assets/ItAssetsPage';
+import { ItAssetsManagePage } from '../features/it-assets/ItAssetsManagePage';
 import { ForbiddenPage } from '../features/system/ForbiddenPage';
 import { NotFoundPage } from '../features/system/NotFoundPage';
 
@@ -62,6 +64,10 @@ export const router = createBrowserRouter([
       {
         path: '/pending-approval',
         element: <PendingApprovalPage />,
+      },
+      {
+        path: '/it-assets',
+        element: <ItAssetsPage />,
       },
       {
         element: <CalendarLayout />,
@@ -144,6 +150,15 @@ export const router = createBrowserRouter([
             element: <UserManagementPage />,
           },
         ],
+      },
+    ],
+  },
+  {
+    element: <ProtectedRoute allowedRoles={['super_admin', 'admin']} />,
+    children: [
+      {
+        path: '/it-assets/manage',
+        element: <ItAssetsManagePage />,
       },
     ],
   },

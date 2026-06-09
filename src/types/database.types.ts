@@ -110,6 +110,44 @@ export type StrategyEvent = {
   updated_at: string;
 };
 
+export type ItAsset = {
+  id: string;
+  source_row_number: number | null;
+  asset_code: string;
+  computer_name: string | null;
+  machine_brand_model: string | null;
+  asset_type: string | null;
+  operating_system: string | null;
+  office_software: string | null;
+  cpu: string | null;
+  mainboard: string | null;
+  memory_gb: number | null;
+  graphics: string | null;
+  video_memory: string | null;
+  disk1_type: string | null;
+  disk1_product: string | null;
+  disk1_drive_letters: string | null;
+  disk1_hours: number | null;
+  disk2_type: string | null;
+  disk2_product: string | null;
+  disk2_drive_letters: string | null;
+  disk2_hours: number | null;
+  total_disk_hours: number | null;
+  monitor1_brand: string | null;
+  monitor1_manufacture_date: string | null;
+  monitor2_brand: string | null;
+  monitor2_serial_number: string | null;
+  monitor2_manufacture_date: string | null;
+  user_name: string | null;
+  user_position: string | null;
+  work_group: string | null;
+  received_date: string | null;
+  received_date_raw: string | null;
+  source_asset_code: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type Database = {
   public: {
     Tables: {
@@ -255,6 +293,48 @@ export type Database = {
           updated_at?: string;
         };
         Update: Partial<Omit<StrategyEvent, 'id' | 'created_at'>>;
+        Relationships: [];
+      };
+      it_assets: {
+        Row: ItAsset;
+        Insert: {
+          id?: string;
+          source_row_number?: number | null;
+          asset_code: string;
+          computer_name?: string | null;
+          machine_brand_model?: string | null;
+          asset_type?: string | null;
+          operating_system?: string | null;
+          office_software?: string | null;
+          cpu?: string | null;
+          mainboard?: string | null;
+          memory_gb?: number | null;
+          graphics?: string | null;
+          video_memory?: string | null;
+          disk1_type?: string | null;
+          disk1_product?: string | null;
+          disk1_drive_letters?: string | null;
+          disk1_hours?: number | null;
+          disk2_type?: string | null;
+          disk2_product?: string | null;
+          disk2_drive_letters?: string | null;
+          disk2_hours?: number | null;
+          total_disk_hours?: number | null;
+          monitor1_brand?: string | null;
+          monitor1_manufacture_date?: string | null;
+          monitor2_brand?: string | null;
+          monitor2_serial_number?: string | null;
+          monitor2_manufacture_date?: string | null;
+          user_name?: string | null;
+          user_position?: string | null;
+          work_group?: string | null;
+          received_date?: string | null;
+          received_date_raw?: string | null;
+          source_asset_code?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Omit<ItAsset, 'id' | 'created_at'>>;
         Relationships: [];
       };
     };
