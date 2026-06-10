@@ -1345,8 +1345,8 @@ export function StrategyCalendarPage() {
                     onChange={(event) => setForm((current) => ({ ...current, color: event.target.value }))}
                     className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
                   >
-                    <option value="slate">ทั่วไป (สีเทา)</option>
                     <option value="blue">การประชุม (สีฟ้า)</option>
+                    <option value="slate">ทั่วไป (สีเทา)</option>
                     <option value="emerald">โครงการ/กิจกรรม (สีเขียว)</option>
                     <option value="amber">ลงพื้นที่/เดินทาง (สีเหลือง)</option>
                     <option value="red">ด่วน/สำคัญ (สีแดง)</option>
