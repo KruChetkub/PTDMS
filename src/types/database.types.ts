@@ -148,6 +148,14 @@ export type ItAsset = {
   updated_at: string;
 };
 
+export type ItAssetEvaluationSettings = {
+  id: string;
+  criteria: Record<string, unknown>;
+  updated_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type Database = {
   public: {
     Tables: {
@@ -335,6 +343,18 @@ export type Database = {
           updated_at?: string;
         };
         Update: Partial<Omit<ItAsset, 'id' | 'created_at'>>;
+        Relationships: [];
+      };
+      it_asset_evaluation_settings: {
+        Row: ItAssetEvaluationSettings;
+        Insert: {
+          id?: string;
+          criteria: Record<string, unknown>;
+          updated_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Omit<ItAssetEvaluationSettings, 'id' | 'created_at'>>;
         Relationships: [];
       };
     };

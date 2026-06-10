@@ -50,6 +50,35 @@ export type ItAssetHealth = {
   };
 };
 
+export type ItAssetEvaluationCriteria = {
+  ram: {
+    highMinGb: number;
+    highScore: number;
+    mediumMinGb: number;
+    mediumScore: number;
+    lowScore: number;
+  };
+  disk: {
+    nvmeScore: number;
+    ssdScore: number;
+    otherScore: number;
+  };
+  os: {
+    windows11Score: number;
+    windows10Score: number;
+    otherScore: number;
+  };
+  penalty: {
+    diskHoursOver: number;
+    points: number;
+  };
+  grades: {
+    aMin: number;
+    bMin: number;
+    cMin: number;
+  };
+};
+
 export type ItAssetViewModel = ItAsset & {
   ageText: string;
   ageYears: number;

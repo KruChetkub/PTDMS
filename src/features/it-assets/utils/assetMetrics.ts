@@ -1,6 +1,35 @@
-import type { ItAsset, ItAssetHealth, ItAssetViewModel } from '../types';
+import type { ItAsset, ItAssetEvaluationCriteria, ItAssetHealth, ItAssetViewModel } from '../types';
 
 export const itAssetChartColors = ['#2563eb', '#16a34a', '#f97316', '#dc2626', '#0891b2', '#7c3aed', '#ca8a04', '#475569'];
+
+export const defaultItAssetEvaluationCriteria: ItAssetEvaluationCriteria = {
+  ram: {
+    highMinGb: 16,
+    highScore: 30,
+    mediumMinGb: 8,
+    mediumScore: 20,
+    lowScore: 5,
+  },
+  disk: {
+    nvmeScore: 40,
+    ssdScore: 30,
+    otherScore: 10,
+  },
+  os: {
+    windows11Score: 30,
+    windows10Score: 20,
+    otherScore: 0,
+  },
+  penalty: {
+    diskHoursOver: 43800,
+    points: -20,
+  },
+  grades: {
+    aMin: 80,
+    bMin: 60,
+    cMin: 40,
+  },
+};
 
 export function calculateAssetAge(receivedDate: string | null): { text: string; years: number } {
   if (!receivedDate) {
@@ -35,21 +64,24 @@ export function calculateAssetAge(receivedDate: string | null): { text: string; 
   };
 }
 
-export function calculateHealthScore(asset: Pick<ItAsset, 'memory_gb' | 'disk1_type' | 'operating_system' | 'disk1_hours'>): ItAssetHealth {
+export function calculateHealthScore(
+  asset: Pick<ItAsset, 'memory_gb' | 'disk1_type' | 'operating_system' | 'disk1_hours'>,
+  criteria: ItAssetEvaluationCriteria = defaultItAssetEvaluationCriteria,
+): ItAssetHealth {
   let score = 0;
   const memory = Number(asset.memory_gb || 0);
   const diskType = (asset.disk1_type || '').toLowerCase();
   const osName = (asset.operating_system || '').toLowerCase();
   const diskHours = asset.disk1_hours || 0;
 
-  const ramScore = memory >= 16 ? 30 : memory >= 8 ? 20 : 5;
-  const diskScore = diskType.includes('nvme') || diskType.includes('m.2') ? 40 : diskType.includes('ssd') ? 30 : 10;
-  const osScore = osName.includes('windows 11') ? 30 : osName.includes('windows 10') ? 20 : 0;
-  const penalty = diskHours > 43800 ? -20 : 0;
+  const ramScore = memory >= criteria.ram.highMinGb ? criteria.ram.highScore : memory >= criteria.ram.mediumMinGb ? criteria.ram.mediumScore : criteria.ram.lowScore;
+  const diskScore = diskType.includes('nvme') || diskType.includes('m.2') ? criteria.disk.nvmeScore : diskType.includes('ssd') ? criteria.disk.ssdScore : criteria.disk.otherScore;
+  const osScore = osName.includes('windows 11') ? criteria.os.windows11Score : osName.includes('windows 10') ? criteria.os.windows10Score : criteria.os.otherScore;
+  const penalty = diskHours > criteria.penalty.diskHoursOver ? criteria.penalty.points : 0;
 
   score = Math.max(0, Math.min(100, ramScore + diskScore + osScore + penalty));
 
-  if (score >= 80) {
+  if (score >= criteria.grades.aMin) {
     return {
       score,
       grade: 'A',
@@ -58,7 +90,7 @@ export function calculateHealthScore(asset: Pick<ItAsset, 'memory_gb' | 'disk1_t
     };
   }
 
-  if (score >= 60) {
+  if (score >= criteria.grades.bMin) {
     return {
       score,
       grade: 'B',
@@ -67,7 +99,7 @@ export function calculateHealthScore(asset: Pick<ItAsset, 'memory_gb' | 'disk1_t
     };
   }
 
-  if (score >= 40) {
+  if (score >= criteria.grades.cMin) {
     return {
       score,
       grade: 'C',
@@ -84,14 +116,14 @@ export function calculateHealthScore(asset: Pick<ItAsset, 'memory_gb' | 'disk1_t
   };
 }
 
-export function toItAssetViewModel(asset: ItAsset): ItAssetViewModel {
+export function toItAssetViewModel(asset: ItAsset, criteria: ItAssetEvaluationCriteria = defaultItAssetEvaluationCriteria): ItAssetViewModel {
   const age = calculateAssetAge(asset.received_date);
 
   return {
     ...asset,
     ageText: asset.received_date ? age.text : '-',
     ageYears: age.years,
-    health: calculateHealthScore(asset),
+    health: calculateHealthScore(asset, criteria),
   };
 }
 

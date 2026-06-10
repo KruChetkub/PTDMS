@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Activity, AlertCircle, ArrowLeft, CheckCircle2, HardDrive, Monitor, PencilLine, RefreshCw, Search, Server, X } from 'lucide-react';
-import { Bar, BarChart, CartesianGrid, Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { Bar, BarChart, CartesianGrid, Cell, LabelList, Legend, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { getItAssetEvaluationCriteria } from '../../services/it-asset-evaluation.service';
 import { getItAssets } from '../../services/it-asset.service';
 import { useAuthStore } from '../../stores/auth.store';
 import { formatThaiDate } from '../../utils/thaiDate';
@@ -37,6 +38,7 @@ export function ItAssetsPage() {
   const [assets, setAssets] = useState<ItAssetViewModel[]>([]);
   const [filters, setFilters] = useState<ItAssetFilters>(emptyFilters);
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedGrade, setSelectedGrade] = useState<'A' | 'B' | 'C' | 'D' | null>(null);
   const [selectedAsset, setSelectedAsset] = useState<ItAssetViewModel | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -46,8 +48,8 @@ export function ItAssetsPage() {
     try {
       setIsLoading(true);
       setError(null);
-      const data = await getItAssets();
-      setAssets(data.map(toItAssetViewModel));
+      const [data, criteria] = await Promise.all([getItAssets(), getItAssetEvaluationCriteria()]);
+      setAssets(data.map((asset) => toItAssetViewModel(asset, criteria)));
     } catch (loadError) {
       console.error('Failed to load IT assets:', loadError);
       setError('ไม่สามารถโหลดข้อมูลครุภัณฑ์คอมพิวเตอร์ได้');
@@ -131,6 +133,10 @@ export function ItAssetsPage() {
     return { windows11Count, fastDiskCount, averageHours, osChartData, gradeChartData, diskChartData };
   }, [filteredAssets]);
 
+  const displayedAssets = useMemo(() => {
+    return selectedGrade ? filteredAssets.filter((asset) => asset.health.grade === selectedGrade) : filteredAssets;
+  }, [filteredAssets, selectedGrade]);
+
   const toggleFilter = (key: keyof ItAssetFilters, value: string) => {
     setFilters((current) => ({
       ...current,
@@ -141,6 +147,7 @@ export function ItAssetsPage() {
   const resetFilters = () => {
     setFilters(emptyFilters);
     setSearchTerm('');
+    setSelectedGrade(null);
   };
 
   return (
@@ -251,7 +258,17 @@ export function ItAssetsPage() {
                   <div className="h-64">
                     <ResponsiveContainer width="100%" height="100%">
                       <PieChart>
-                        <Pie data={stats.osChartData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={58} outerRadius={84} paddingAngle={4}>
+                        <Pie
+                          data={stats.osChartData}
+                          dataKey="value"
+                          nameKey="name"
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={58}
+                          outerRadius={84}
+                          paddingAngle={4}
+                          label={({ value }) => value}
+                        >
                           {stats.osChartData.map((entry, index) => (
                             <Cell key={entry.name} fill={itAssetChartColors[index % itAssetChartColors.length]} />
                           ))}
@@ -264,7 +281,24 @@ export function ItAssetsPage() {
                 </section>
 
                 <section className="rounded-md border border-slate-200 bg-white p-5 shadow-sm xl:col-span-2">
-                  <h2 className="mb-4 text-base font-semibold text-slate-950">จำนวนเครื่องแยกตามเกรด</h2>
+                  <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <h2 className="text-base font-semibold text-slate-950">จำนวนเครื่องแยกตามเกรด</h2>
+                      <p className="mt-1 text-sm text-slate-500">
+                        {stats.gradeChartData.map((item) => `เกรด ${item.grade}: ${item.value.toLocaleString()}`).join(' / ')}
+                      </p>
+                    </div>
+                    {selectedGrade ? (
+                      <button
+                        type="button"
+                        onClick={() => setSelectedGrade(null)}
+                        className="inline-flex items-center gap-2 rounded-md border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-50"
+                      >
+                        <X className="h-3.5 w-3.5" aria-hidden="true" />
+                        เกรด {selectedGrade}
+                      </button>
+                    ) : null}
+                  </div>
                   <div className="h-64">
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={stats.gradeChartData} margin={{ top: 5, right: 16, left: 0, bottom: 5 }}>
@@ -272,10 +306,21 @@ export function ItAssetsPage() {
                         <XAxis dataKey="name" tick={{ fontSize: 12 }} />
                         <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
                         <Tooltip />
-                        <Bar dataKey="value" name="จำนวนเครื่อง" radius={[4, 4, 0, 0]} barSize={42}>
+                        <Bar
+                          dataKey="value"
+                          name="จำนวนเครื่อง"
+                          radius={[4, 4, 0, 0]}
+                          barSize={42}
+                          cursor="pointer"
+                          onClick={(data) => {
+                            const grade = data.grade as 'A' | 'B' | 'C' | 'D';
+                            setSelectedGrade((current) => (current === grade ? null : grade));
+                          }}
+                        >
+                          <LabelList dataKey="value" position="top" className="fill-slate-700 text-xs font-semibold" />
                           {stats.gradeChartData.map((entry) => {
                             const color = entry.grade === 'A' ? '#16a34a' : entry.grade === 'B' ? '#2563eb' : entry.grade === 'C' ? '#f97316' : '#dc2626';
-                            return <Cell key={entry.grade} fill={color} />;
+                            return <Cell key={entry.grade} fill={color} fillOpacity={selectedGrade && selectedGrade !== entry.grade ? 0.35 : 1} />;
                           })}
                         </Bar>
                       </BarChart>
@@ -286,8 +331,8 @@ export function ItAssetsPage() {
 
               <section className="rounded-md border border-slate-200 bg-white p-5 shadow-sm">
                 <div className="mb-4 flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
-                  <h2 className="text-base font-semibold text-slate-950">รายการครุภัณฑ์</h2>
-                  <p className="text-sm text-slate-500">แสดง {Math.min(filteredAssets.length, 100)} จาก {filteredAssets.length} รายการ</p>
+                  <h2 className="text-base font-semibold text-slate-950">{selectedGrade ? `รายการครุภัณฑ์เกรด ${selectedGrade}` : 'รายการครุภัณฑ์'}</h2>
+                  <p className="text-sm text-slate-500">แสดง {Math.min(displayedAssets.length, 100)} จาก {displayedAssets.length} รายการ</p>
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full min-w-[980px] border-collapse text-left text-sm">
@@ -304,7 +349,7 @@ export function ItAssetsPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {filteredAssets.slice(0, 100).map((asset) => (
+                      {displayedAssets.slice(0, 100).map((asset) => (
                         <tr key={asset.id} className="cursor-pointer transition hover:bg-slate-50" onClick={() => setSelectedAsset(asset)}>
                           <td className="px-2 py-3 font-mono text-xs font-semibold text-blue-700">{asset.asset_code}</td>
                           <td className="px-2 py-3">
@@ -331,7 +376,7 @@ export function ItAssetsPage() {
                           <td className="px-2 py-3 text-center text-slate-700">{asset.ageText}</td>
                         </tr>
                       ))}
-                      {filteredAssets.length === 0 ? (
+                      {displayedAssets.length === 0 ? (
                         <tr>
                           <td colSpan={8} className="px-2 py-10 text-center text-slate-400">ไม่พบข้อมูลที่ตรงกับเงื่อนไข</td>
                         </tr>
