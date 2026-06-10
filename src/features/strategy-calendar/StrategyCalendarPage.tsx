@@ -299,7 +299,7 @@ export function StrategyCalendarPage() {
     endDate: '',
     startTime: '',
     endTime: '',
-    color: 'slate',
+    color: 'blue',
     location: '',
   });
 
@@ -457,7 +457,7 @@ export function StrategyCalendarPage() {
 
   const resetForm = () => {
     setEditingEventId(null);
-    setForm({ title: '', description: '', endDate: '', startTime: '', endTime: '', color: 'slate', location: '' });
+    setForm({ title: '', description: '', endDate: '', startTime: '', endTime: '', color: 'blue', location: '' });
   };
 
   const startEdit = (event: StrategyEventRow) => {
