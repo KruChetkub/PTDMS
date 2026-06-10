@@ -272,7 +272,7 @@ function getEventColorClass(color: string | null | undefined) {
 const ITEMS_PER_PAGE = 5;
 
 type TabType = 'dashboard' | 'list';
-type ListFilter = 'month' | 'week';
+type ListFilter = 'all' | 'month' | 'week';
 type DashboardFilterMode = 'all' | 'month' | 'year';
 
 export function StrategyCalendarPage() {
@@ -288,7 +288,7 @@ export function StrategyCalendarPage() {
   const [error, setError] = useState<string | null>(null);
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<TabType>('dashboard');
-  const [listFilter, setListFilter] = useState<ListFilter>('month');
+  const [listFilter, setListFilter] = useState<ListFilter>('all');
   const [dashboardFilterMode, setDashboardFilterMode] = useState<DashboardFilterMode>('all');
   const [dashboardMonth, setDashboardMonth] = useState(() => new Date().getMonth() + 1);
   const [dashboardYear, setDashboardYear] = useState(() => new Date().getFullYear());
@@ -389,7 +389,7 @@ export function StrategyCalendarPage() {
   const publishedEvents = events.filter((event) => event.status === 'published');
   const dashboardSourceEvents = canFilterDashboard ? dashboardEvents : events;
   const dashboardPublishedEvents = dashboardSourceEvents.filter((event) => event.status === 'published');
-  const visibleEvents = events;
+  const visibleEvents = canFilterDashboard ? dashboardSourceEvents : events;
   const upcomingCount = publishedEvents.filter((event) => event.event_date >= todayKey).length;
   const dashboardUpcomingCount = dashboardPublishedEvents.filter((event) => event.event_date >= todayKey).length;
   const dashboardCancelledCount = dashboardSourceEvents.filter((event) => event.status === 'cancelled').length;
@@ -422,6 +422,10 @@ export function StrategyCalendarPage() {
 
   // Weekly filter
   const filteredEvents = useMemo(() => {
+    if (listFilter === 'all') {
+      return visibleEvents;
+    }
+
     if (listFilter === 'week') {
       const selDate = parseDateKey(selectedDate);
       const dayOfWeek = (selDate.getDay() + 6) % 7;
@@ -436,8 +440,13 @@ export function StrategyCalendarPage() {
         return e.event_date <= we && eEnd >= ws;
       });
     }
-    return visibleEvents;
-  }, [visibleEvents, listFilter, selectedDate]);
+    const monthStart = `${monthDate.getFullYear()}-${String(monthDate.getMonth() + 1).padStart(2, '0')}-01`;
+    const monthEnd = toDateKey(new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0));
+    return visibleEvents.filter(e => {
+      const eEnd = e.end_date || e.event_date;
+      return e.event_date <= monthEnd && eEnd >= monthStart;
+    });
+  }, [visibleEvents, listFilter, selectedDate, monthDate]);
 
   const totalFilteredPages = Math.max(1, Math.ceil(filteredEvents.length / ITEMS_PER_PAGE));
   const safeListPage = Math.min(listPage, totalFilteredPages - 1);
@@ -486,7 +495,7 @@ export function StrategyCalendarPage() {
 
     try {
       let start = '1900-01-01';
-      let end = todayKey;
+      let end = '2100-12-31';
 
       if (!canFilterDashboard) {
         const range = getMonthRange(monthDate);
@@ -640,6 +649,7 @@ export function StrategyCalendarPage() {
         </div>
       ) : null}
 
+      {canFilterDashboard ? (
       <section className="mb-6 rounded-md border border-slate-200 bg-white shadow-sm">
         {/* Tabs: Dashboard / List */}
         <div className="flex flex-col gap-3 border-b border-slate-100 p-4 sm:flex-row sm:items-center sm:justify-between">
@@ -676,30 +686,25 @@ export function StrategyCalendarPage() {
             <div className="flex items-center gap-2">
               <Filter className="h-4 w-4 text-slate-400" aria-hidden="true" />
               <div className="inline-flex rounded-md border border-slate-200 bg-white p-0.5">
-                <button
-                  type="button"
-                  onClick={() => { setListFilter('week'); setListPage(0); }}
-                  className={cn(
-                    'rounded-md px-3 py-1.5 text-xs font-semibold transition',
-                    listFilter === 'week'
-                      ? 'bg-slate-950 text-white'
-                      : 'text-slate-500 hover:text-slate-700',
-                  )}
-                >
-                  รายสัปดาห์
-                </button>
-                <button
-                  type="button"
-                  onClick={() => { setListFilter('month'); setListPage(0); }}
-                  className={cn(
-                    'rounded-md px-3 py-1.5 text-xs font-semibold transition',
-                    listFilter === 'month'
-                      ? 'bg-slate-950 text-white'
-                      : 'text-slate-500 hover:text-slate-700',
-                  )}
-                >
-                  รายเดือน
-                </button>
+                {([
+                  ['all', 'ทั้งหมด'],
+                  ['week', 'รายสัปดาห์'],
+                  ['month', 'รายเดือน'],
+                ] as Array<[ListFilter, string]>).map(([mode, label]) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => { setListFilter(mode); setListPage(0); }}
+                    className={cn(
+                      'rounded-md px-3 py-1.5 text-xs font-semibold transition',
+                      listFilter === mode
+                        ? 'bg-slate-950 text-white'
+                        : 'text-slate-500 hover:text-slate-700',
+                    )}
+                  >
+                    {label}
+                  </button>
+                ))}
               </div>
               <span className="text-xs text-slate-400">
                 {filteredEvents.length} รายการ
@@ -849,7 +854,7 @@ export function StrategyCalendarPage() {
             {filteredEvents.length === 0 ? (
               <div className="p-4">
                 <div className="rounded-md border border-dashed border-slate-300 bg-slate-50 px-3 py-8 text-center text-sm text-slate-500">
-                  {listFilter === 'week' ? 'ยังไม่มีกิจกรรมในสัปดาห์นี้' : 'ยังไม่มีกิจกรรมในเดือนนี้'}
+                  {listFilter === 'all' ? 'ยังไม่มีกิจกรรมทั้งหมด' : listFilter === 'week' ? 'ยังไม่มีกิจกรรมในสัปดาห์นี้' : 'ยังไม่มีกิจกรรมในเดือนนี้'}
                 </div>
               </div>
             ) : (
@@ -1086,6 +1091,7 @@ export function StrategyCalendarPage() {
           </>
         ) : null}
       </section>
+      ) : null}
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
         <section className="rounded-md border border-slate-200 bg-white shadow-sm">
