@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { BarChart3, CalendarDays, ChevronLeft, ChevronRight, Clock, Edit3, Filter, LayoutDashboard, List, MapPin, Plus, RefreshCw, RotateCcw, XCircle } from 'lucide-react';
 import { PageHeader } from '../../components/ui/PageHeader';
 import {
@@ -273,18 +273,25 @@ const ITEMS_PER_PAGE = 5;
 
 type TabType = 'dashboard' | 'list';
 type ListFilter = 'month' | 'week';
+type DashboardFilterMode = 'all' | 'month' | 'year';
 
 export function StrategyCalendarPage() {
   const { profile } = useAuthStore();
+  const selectedDateEventsRef = useRef<HTMLDivElement | null>(null);
   const [monthDate, setMonthDate] = useState(() => new Date());
   const [selectedDate, setSelectedDate] = useState(() => toDateKey(new Date()));
   const [events, setEvents] = useState<StrategyEventRow[]>([]);
+  const [dashboardEvents, setDashboardEvents] = useState<StrategyEventRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [dashboardLoading, setDashboardLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<TabType>('dashboard');
   const [listFilter, setListFilter] = useState<ListFilter>('month');
+  const [dashboardFilterMode, setDashboardFilterMode] = useState<DashboardFilterMode>('all');
+  const [dashboardMonth, setDashboardMonth] = useState(() => new Date().getMonth() + 1);
+  const [dashboardYear, setDashboardYear] = useState(() => new Date().getFullYear());
   const [listPage, setListPage] = useState(0);
   const [form, setForm] = useState({
     title: '',
@@ -299,6 +306,11 @@ export function StrategyCalendarPage() {
   const monthLabel = `${thaiMonths[monthDate.getMonth()]} ${monthDate.getFullYear() + 543}`;
   const calendarDays = useMemo(() => getCalendarDays(monthDate), [monthDate]);
   const todayKey = toDateKey(new Date());
+  const canFilterDashboard = profile?.role === 'super_admin' || profile?.role === 'admin';
+  const dashboardYearOptions = useMemo(() => {
+    const currentYear = new Date().getFullYear();
+    return Array.from({ length: 11 }, (_, index) => currentYear - 5 + index);
+  }, []);
 
   const eventsByDate = useMemo(() => {
     const weeks: Date[][] = [];
@@ -375,9 +387,12 @@ export function StrategyCalendarPage() {
   
   const selectedEvents = (eventsByDate[selectedDate] || []).filter((item): item is StrategyEventRow => item !== null);
   const publishedEvents = events.filter((event) => event.status === 'published');
+  const dashboardSourceEvents = canFilterDashboard ? dashboardEvents : events;
+  const dashboardPublishedEvents = dashboardSourceEvents.filter((event) => event.status === 'published');
   const visibleEvents = events;
   const upcomingCount = publishedEvents.filter((event) => event.event_date >= todayKey).length;
-  const cancelledCount = events.filter((event) => event.status === 'cancelled').length;
+  const dashboardUpcomingCount = dashboardPublishedEvents.filter((event) => event.event_date >= todayKey).length;
+  const dashboardCancelledCount = dashboardSourceEvents.filter((event) => event.status === 'cancelled').length;
 
   // Dashboard stats by color
   const statsByColor = useMemo(() => {
@@ -385,9 +400,25 @@ export function StrategyCalendarPage() {
     return colorKeys.map(color => ({
       color,
       label: eventColorLabels[color] || color,
-      count: publishedEvents.filter(e => (e.color || 'slate') === color).length,
+      count: dashboardPublishedEvents.filter(e => (e.color || 'slate') === color).length,
     }));
-  }, [publishedEvents]);
+  }, [dashboardPublishedEvents]);
+
+  const dashboardFilterLabel = useMemo(() => {
+    if (!canFilterDashboard) {
+      return `ภาพรวมกิจกรรม ${monthLabel}`;
+    }
+
+    if (dashboardFilterMode === 'month') {
+      return `กิจกรรมเดือน${thaiMonths[dashboardMonth - 1]} ${dashboardYear + 543}`;
+    }
+
+    if (dashboardFilterMode === 'year') {
+      return `กิจกรรมปี ${dashboardYear + 543}`;
+    }
+
+    return 'ภาพรวมกิจกรรมทั้งหมดถึงปัจจุบัน';
+  }, [canFilterDashboard, dashboardFilterMode, dashboardMonth, dashboardYear, monthLabel]);
 
   // Weekly filter
   const filteredEvents = useMemo(() => {
@@ -449,9 +480,42 @@ export function StrategyCalendarPage() {
     }
   };
 
+  const loadDashboardEvents = async () => {
+    setDashboardLoading(true);
+    setError(null);
+
+    try {
+      let start = '1900-01-01';
+      let end = todayKey;
+
+      if (!canFilterDashboard) {
+        const range = getMonthRange(monthDate);
+        start = range.start;
+        end = range.end;
+      } else if (dashboardFilterMode === 'month') {
+        start = `${dashboardYear}-${String(dashboardMonth).padStart(2, '0')}-01`;
+        end = toDateKey(new Date(dashboardYear, dashboardMonth, 0));
+      } else if (dashboardFilterMode === 'year') {
+        start = `${dashboardYear}-01-01`;
+        end = `${dashboardYear}-12-31`;
+      }
+
+      const data = await listStrategyEvents(start, end);
+      setDashboardEvents(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'ไม่สามารถโหลดข้อมูลแดชบอร์ดได้');
+    } finally {
+      setDashboardLoading(false);
+    }
+  };
+
   useEffect(() => {
     void loadEvents();
   }, [monthDate]);
+
+  useEffect(() => {
+    void loadDashboardEvents();
+  }, [canFilterDashboard, dashboardFilterMode, dashboardMonth, dashboardYear, monthDate, todayKey]);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -494,6 +558,7 @@ export function StrategyCalendarPage() {
 
       resetForm();
       await loadEvents();
+      await loadDashboardEvents();
     } catch (err) {
       setError(err instanceof Error ? err.message : editingEventId ? 'แก้ไขกิจกรรมไม่สำเร็จ' : 'บันทึกกิจกรรมไม่สำเร็จ');
     } finally {
@@ -506,6 +571,7 @@ export function StrategyCalendarPage() {
     try {
       await cancelStrategyEvent(eventId);
       await loadEvents();
+      await loadDashboardEvents();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'ยกเลิกกิจกรรมไม่สำเร็จ');
     }
@@ -516,6 +582,7 @@ export function StrategyCalendarPage() {
     try {
       await restoreStrategyEvent(eventId);
       await loadEvents();
+      await loadDashboardEvents();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'กู้คืนกิจกรรมไม่สำเร็จ');
     }
@@ -525,10 +592,17 @@ export function StrategyCalendarPage() {
     setMonthDate((current) => new Date(current.getFullYear(), current.getMonth() + amount, 1));
   };
 
+  const selectCalendarDate = (dateKey: string) => {
+    setSelectedDate(dateKey);
+    window.setTimeout(() => {
+      selectedDateEventsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 0);
+  };
+
   const selectToday = () => {
     const today = new Date();
     setMonthDate(new Date(today.getFullYear(), today.getMonth(), 1));
-    setSelectedDate(toDateKey(today));
+    selectCalendarDate(toDateKey(today));
   };
 
   return (
@@ -536,7 +610,7 @@ export function StrategyCalendarPage() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <PageHeader
           title="ปฏิทินกิจกรรมกองยุทธศาสตร์และแผนงาน"
-          description="แจ้งกิจกรรมภายในกองฯ และติดตามกำหนดการในมุมมองปฏิทินประเทศไทย"
+          description="แจ้งกิจกรรมภายในกองฯ และติดตามกำหนดการ"
         />
         <div className="flex flex-wrap gap-2">
           <button
@@ -548,7 +622,10 @@ export function StrategyCalendarPage() {
           </button>
           <button
             type="button"
-            onClick={() => void loadEvents()}
+            onClick={() => {
+              void loadEvents();
+              void loadDashboardEvents();
+            }}
             className="inline-flex items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100"
           >
             <RefreshCw className="h-4 w-4" aria-hidden="true" />
@@ -629,9 +706,58 @@ export function StrategyCalendarPage() {
               </span>
             </div>
           ) : (
-            <p className="text-sm text-slate-500">
-              ภาพรวมกิจกรรม {monthLabel}
-            </p>
+            <div className="flex flex-col gap-2 sm:items-end">
+              <p className="text-sm text-slate-500">{dashboardFilterLabel}</p>
+              {canFilterDashboard ? (
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="inline-flex rounded-md border border-slate-200 bg-white p-0.5">
+                    {([
+                      ['all', 'ทั้งหมด'],
+                      ['month', 'รายเดือน'],
+                      ['year', 'รายปี'],
+                    ] as Array<[DashboardFilterMode, string]>).map(([mode, label]) => (
+                      <button
+                        key={mode}
+                        type="button"
+                        onClick={() => setDashboardFilterMode(mode)}
+                        className={cn(
+                          'rounded-md px-3 py-1.5 text-xs font-semibold transition',
+                          dashboardFilterMode === mode ? 'bg-slate-950 text-white' : 'text-slate-500 hover:text-slate-700',
+                        )}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                  {dashboardFilterMode === 'month' ? (
+                    <select
+                      value={dashboardMonth}
+                      onChange={(event) => setDashboardMonth(Number(event.target.value))}
+                      className="rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs font-semibold text-slate-600 outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+                    >
+                      {thaiMonths.map((month, index) => (
+                        <option key={month} value={index + 1}>
+                          {month}
+                        </option>
+                      ))}
+                    </select>
+                  ) : null}
+                  {dashboardFilterMode !== 'all' ? (
+                    <select
+                      value={dashboardYear}
+                      onChange={(event) => setDashboardYear(Number(event.target.value))}
+                      className="rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs font-semibold text-slate-600 outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+                    >
+                      {dashboardYearOptions.map((year) => (
+                        <option key={year} value={year}>
+                          {year + 543}
+                        </option>
+                      ))}
+                    </select>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
           )}
         </div>
 
@@ -642,22 +768,22 @@ export function StrategyCalendarPage() {
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               <div className="rounded-xl bg-gradient-to-br from-slate-800 to-slate-950 p-4 text-white shadow">
                 <p className="text-xs font-medium text-slate-300">กิจกรรมทั้งหมด</p>
-                <p className="mt-2 text-3xl font-bold">{loading ? '...' : events.length}</p>
-                <p className="mt-1 text-[11px] text-slate-400">รายการในเดือนนี้</p>
+                <p className="mt-2 text-3xl font-bold">{dashboardLoading ? '...' : dashboardSourceEvents.length}</p>
+                <p className="mt-1 text-[11px] text-slate-400">{dashboardFilterLabel}</p>
               </div>
               <div className="rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-700 p-4 text-white shadow">
                 <p className="text-xs font-medium text-emerald-100">เผยแพร่แล้ว</p>
-                <p className="mt-2 text-3xl font-bold">{loading ? '...' : publishedEvents.length}</p>
+                <p className="mt-2 text-3xl font-bold">{dashboardLoading ? '...' : dashboardPublishedEvents.length}</p>
                 <p className="mt-1 text-[11px] text-emerald-200">กิจกรรมที่ดำเนินการ</p>
               </div>
               <div className="rounded-xl bg-gradient-to-br from-blue-500 to-blue-700 p-4 text-white shadow">
                 <p className="text-xs font-medium text-blue-100">กำลังจะมาถึง</p>
-                <p className="mt-2 text-3xl font-bold">{loading ? '...' : upcomingCount}</p>
+                <p className="mt-2 text-3xl font-bold">{dashboardLoading ? '...' : dashboardUpcomingCount}</p>
                 <p className="mt-1 text-[11px] text-blue-200">กิจกรรมที่ยังไม่ถึง</p>
               </div>
               <div className="rounded-xl bg-gradient-to-br from-red-500 to-red-600 p-4 text-white shadow">
                 <p className="text-xs font-medium text-red-100">ยกเลิก</p>
-                <p className="mt-2 text-3xl font-bold">{loading ? '...' : cancelledCount}</p>
+                <p className="mt-2 text-3xl font-bold">{dashboardLoading ? '...' : dashboardCancelledCount}</p>
                 <p className="mt-1 text-[11px] text-red-200">กิจกรรมที่ยกเลิก</p>
               </div>
             </div>
@@ -690,12 +816,12 @@ export function StrategyCalendarPage() {
                 กิจกรรมที่กำลังจะมาถึง
               </h3>
               <div className="mt-3 space-y-2">
-                {publishedEvents.filter(e => e.event_date >= todayKey).slice(0, 5).length === 0 ? (
+                {dashboardPublishedEvents.filter(e => e.event_date >= todayKey).slice(0, 5).length === 0 ? (
                   <p className="rounded-md border border-dashed border-slate-300 bg-slate-50 px-3 py-6 text-center text-sm text-slate-500">
                     ยังไม่มีกิจกรรมที่กำลังจะมาถึง
                   </p>
                 ) : (
-                  publishedEvents.filter(e => e.event_date >= todayKey).sort((a, b) => a.event_date.localeCompare(b.event_date)).slice(0, 5).map(item => (
+                  dashboardPublishedEvents.filter(e => e.event_date >= todayKey).sort((a, b) => a.event_date.localeCompare(b.event_date)).slice(0, 5).map(item => (
                     <div key={item.id} className="flex items-center gap-3 rounded-lg border border-slate-100 bg-white p-3 transition hover:shadow-sm">
                       <div className={cn('h-2 w-2 shrink-0 rounded-full', eventColorDotClasses[item.color || 'slate'] || 'bg-slate-500')}></div>
                       <div className="min-w-0 flex-1">
@@ -1011,7 +1137,7 @@ export function StrategyCalendarPage() {
                 <button
                   key={dateKey}
                   type="button"
-                  onClick={() => setSelectedDate(dateKey)}
+                  onClick={() => selectCalendarDate(dateKey)}
                   className={cn(
                     'min-h-24 border-b border-r border-slate-100 p-2 text-left transition hover:bg-slate-50',
                     !isCurrentMonth && 'bg-slate-50/70 text-slate-400',
@@ -1064,6 +1190,90 @@ export function StrategyCalendarPage() {
                 </button>
               );
             })}
+          </div>
+
+          <div ref={selectedDateEventsRef} className="scroll-mt-6 border-t border-slate-100 p-4">
+            <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+              <h2 className="text-base font-semibold text-slate-950">กิจกรรมของวันที่เลือก</h2>
+              <p className="text-sm text-slate-500">{formatThaiDate(selectedDate)} · {selectedEvents.length} รายการ</p>
+            </div>
+            <div className="mt-3 space-y-2">
+              {selectedEvents.length === 0 ? (
+                <div className="rounded-md border border-dashed border-slate-300 bg-slate-50 px-3 py-6 text-center text-sm text-slate-500">
+                  ยังไม่มีกิจกรรมในวันนี้
+                </div>
+              ) : (
+                selectedEvents.map((item) => (
+                  <article key={item.id} className="rounded-md border border-slate-200 bg-slate-50 p-3">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className={cn('inline-block h-2.5 w-2.5 rounded-full', eventColorDotClasses[item.color || 'slate'] || 'bg-slate-500')}></span>
+                          <h3 className={cn('text-sm font-semibold text-slate-950', item.status === 'cancelled' && 'text-slate-400 line-through')}>
+                            {item.title}
+                          </h3>
+                          <span
+                            className={cn(
+                              'rounded-md px-2 py-1 text-[11px] font-semibold',
+                              item.status === 'cancelled' ? 'bg-red-50 text-red-700' : 'bg-emerald-50 text-emerald-700',
+                            )}
+                          >
+                            {statusLabel(item.status)}
+                          </span>
+                        </div>
+                        <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-500">
+                          <span className="inline-flex items-center gap-1">
+                            <Clock className="h-3.5 w-3.5" aria-hidden="true" />
+                            {formatTime(item)}
+                          </span>
+                          {item.location ? (
+                            <span className="inline-flex items-center gap-1">
+                              <MapPin className="h-3.5 w-3.5" aria-hidden="true" />
+                              {item.location}
+                            </span>
+                          ) : null}
+                          {item.owner_work_group ? <span>กลุ่มงาน: {item.owner_work_group}</span> : null}
+                        </div>
+                        {item.description ? <p className="mt-2 text-sm leading-5 text-slate-600">{item.description}</p> : null}
+                      </div>
+                      {canManageEvent(item) ? (
+                        <div className="flex shrink-0 gap-1">
+                          {item.status !== 'cancelled' ? (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => startEdit(item)}
+                                className="inline-flex items-center gap-1.5 rounded-md border border-brand-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-brand-700 transition hover:bg-brand-50"
+                              >
+                                <Edit3 className="h-3.5 w-3.5" aria-hidden="true" />
+                                แก้ไข
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => void handleCancel(item.id)}
+                                className="inline-flex items-center gap-1.5 rounded-md border border-red-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-red-600 transition hover:bg-red-50"
+                              >
+                                <XCircle className="h-3.5 w-3.5" aria-hidden="true" />
+                                ยกเลิก
+                              </button>
+                            </>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => void handleRestore(item.id)}
+                              className="inline-flex items-center gap-1.5 rounded-md border border-emerald-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-50"
+                            >
+                              <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
+                              กู้คืน
+                            </button>
+                          )}
+                        </div>
+                      ) : null}
+                    </div>
+                  </article>
+                ))
+              )}
+            </div>
           </div>
         </section>
 
@@ -1173,82 +1383,6 @@ export function StrategyCalendarPage() {
             </form>
           </section>
 
-          <section className="rounded-md border border-slate-200 bg-white p-4 shadow-sm">
-            <h2 className="text-base font-semibold text-slate-950">กิจกรรมของวันที่เลือก</h2>
-            <div className="mt-3 space-y-2">
-              {selectedEvents.length === 0 ? (
-                <div className="rounded-md border border-dashed border-slate-300 bg-slate-50 px-3 py-6 text-center text-sm text-slate-500">
-                  ยังไม่มีกิจกรรมในวันนี้
-                </div>
-              ) : (
-                selectedEvents.map((item) => (
-                  <article key={item.id} className="rounded-md border border-slate-200 bg-slate-50 p-3">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <h3 className={cn('text-sm font-semibold text-slate-950', item.status === 'cancelled' && 'text-slate-400 line-through')}>
-                          {item.title}
-                        </h3>
-                        <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-500">
-                          <span className="inline-flex items-center gap-1">
-                            <Clock className="h-3.5 w-3.5" aria-hidden="true" />
-                            {formatTime(item)}
-                          </span>
-                          {item.location ? (
-                            <span className="inline-flex items-center gap-1">
-                              <MapPin className="h-3.5 w-3.5" aria-hidden="true" />
-                              {item.location}
-                            </span>
-                          ) : null}
-                        </div>
-                      </div>
-                      {canManageEvent(item) ? (
-                        <div className="flex shrink-0 gap-1">
-                          {item.status !== 'cancelled' ? (
-                            <>
-                              <button
-                                type="button"
-                                onClick={() => startEdit(item)}
-                                className="inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-400 transition hover:bg-brand-50 hover:text-brand-700"
-                                aria-label="แก้ไขกิจกรรม"
-                                title="แก้ไขกิจกรรม"
-                              >
-                                <Edit3 className="h-4 w-4" aria-hidden="true" />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => void handleCancel(item.id)}
-                                className="inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-400 transition hover:bg-red-50 hover:text-red-600"
-                                aria-label="ยกเลิกกิจกรรม"
-                                title="ยกเลิกกิจกรรม"
-                              >
-                                <XCircle className="h-4 w-4" aria-hidden="true" />
-                              </button>
-                            </>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => void handleRestore(item.id)}
-                              className="inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-400 transition hover:bg-emerald-50 hover:text-emerald-700"
-                              aria-label="กู้คืนกิจกรรม"
-                              title="กู้คืนกิจกรรม"
-                            >
-                              <RotateCcw className="h-4 w-4" aria-hidden="true" />
-                            </button>
-                          )}
-                        </div>
-                      ) : null}
-                    </div>
-                    {item.status === 'cancelled' && item.cancelled_at ? (
-                      <p className="mt-2 text-xs font-medium text-red-600">
-                        ยกเลิกเมื่อ {new Date(item.cancelled_at).toLocaleString('th-TH', { timeZone: 'Asia/Bangkok' })}
-                      </p>
-                    ) : null}
-                    {item.description ? <p className="mt-2 text-sm leading-5 text-slate-600">{item.description}</p> : null}
-                  </article>
-                ))
-              )}
-            </div>
-          </section>
         </aside>
       </div>
     </div>
