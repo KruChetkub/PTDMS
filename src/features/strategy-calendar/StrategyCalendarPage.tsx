@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
-import { BarChart3, CalendarDays, ChevronLeft, ChevronRight, Clock, Edit3, Filter, LayoutDashboard, List, MapPin, Plus, RefreshCw, RotateCcw, XCircle } from 'lucide-react';
+import { BarChart3, CalendarDays, ChevronLeft, ChevronRight, Clock, Edit3, Filter, LayoutDashboard, List, MapPin, Plus, RefreshCw, RotateCcw, X, XCircle } from 'lucide-react';
 import { PageHeader } from '../../components/ui/PageHeader';
 import {
   cancelStrategyEvent,
@@ -135,6 +135,14 @@ const eventColorTextClasses: Record<string, string> = {
   red: 'text-red-700',
   purple: 'text-purple-700',
 };
+
+function formatDateRange(event: StrategyEventRow) {
+  if (!event.end_date || event.end_date === event.event_date) {
+    return formatThaiDate(event.event_date);
+  }
+
+  return `${formatThaiDate(event.event_date)} - ${formatThaiDate(event.end_date)}`;
+}
 
 type TimeSelectProps = {
   label: string;
@@ -275,6 +283,84 @@ type TabType = 'dashboard' | 'list';
 type ListFilter = 'all' | 'month' | 'week';
 type DashboardFilterMode = 'all' | 'month' | 'year';
 
+function StrategyEventDetailModal({
+  event,
+  onClose,
+}: {
+  event: StrategyEventRow | null;
+  onClose: () => void;
+}) {
+  if (!event) {
+    return null;
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4" onClick={onClose}>
+      <div
+        className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white shadow-2xl"
+        onClick={(mouseEvent) => mouseEvent.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-4 border-b border-slate-200 p-5">
+          <div className="min-w-0">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-600">Upcoming Event Detail</p>
+            <h2 className="mt-1 truncate text-xl font-semibold tracking-normal text-slate-950">{event.title}</h2>
+            <p className="mt-1 text-sm text-slate-500">
+              {formatDateRange(event)} · {formatTime(event)}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-md p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
+            aria-label="ปิดรายละเอียดกิจกรรม"
+          >
+            <X className="h-5 w-5" aria-hidden="true" />
+          </button>
+        </div>
+
+        <div className="space-y-5 p-5">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <p className="text-xs font-medium text-slate-500">สถานะ</p>
+              <p className="mt-1 text-sm font-semibold text-slate-950">{statusLabel(event.status)}</p>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <p className="text-xs font-medium text-slate-500">ประเภทกิจกรรม</p>
+              <p className="mt-1 text-sm font-semibold text-slate-950">{eventColorLabels[event.color || 'slate'] || 'ทั่วไป'}</p>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <p className="text-xs font-medium text-slate-500">วันที่</p>
+              <p className="mt-1 text-sm font-semibold text-slate-950">{formatDateRange(event)}</p>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <p className="text-xs font-medium text-slate-500">เวลา</p>
+              <p className="mt-1 text-sm font-semibold text-slate-950">{formatTime(event)}</p>
+            </div>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="rounded-xl border border-slate-200 p-4">
+              <p className="text-xs font-medium text-slate-500">สถานที่</p>
+              <p className="mt-1 text-sm font-semibold text-slate-900">{event.location || '-'}</p>
+            </div>
+            <div className="rounded-xl border border-slate-200 p-4">
+              <p className="text-xs font-medium text-slate-500">กลุ่มงานเจ้าของกิจกรรม</p>
+              <p className="mt-1 text-sm font-semibold text-slate-900">{event.owner_work_group || '-'}</p>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-slate-200 p-4">
+            <p className="text-xs font-medium text-slate-500">รายละเอียด</p>
+            <p className="mt-2 whitespace-pre-line text-sm leading-6 text-slate-700">
+              {event.description || 'ไม่มีรายละเอียดเพิ่มเติม'}
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function StrategyCalendarPage() {
   const { profile } = useAuthStore();
   const selectedDateEventsRef = useRef<HTMLDivElement | null>(null);
@@ -293,6 +379,7 @@ export function StrategyCalendarPage() {
   const [dashboardMonth, setDashboardMonth] = useState(() => new Date().getMonth() + 1);
   const [dashboardYear, setDashboardYear] = useState(() => new Date().getFullYear());
   const [listPage, setListPage] = useState(0);
+  const [selectedUpcomingEvent, setSelectedUpcomingEvent] = useState<StrategyEventRow | null>(null);
   const [form, setForm] = useState({
     title: '',
     description: '',
@@ -307,6 +394,7 @@ export function StrategyCalendarPage() {
   const calendarDays = useMemo(() => getCalendarDays(monthDate), [monthDate]);
   const todayKey = toDateKey(new Date());
   const canFilterDashboard = profile?.role === 'super_admin' || profile?.role === 'admin';
+  const canViewUpcomingEventDetails = canFilterDashboard;
   const dashboardYearOptions = useMemo(() => {
     const currentYear = new Date().getFullYear();
     return Array.from({ length: 11 }, (_, index) => currentYear - 5 + index);
@@ -389,6 +477,14 @@ export function StrategyCalendarPage() {
   const publishedEvents = events.filter((event) => event.status === 'published');
   const dashboardSourceEvents = canFilterDashboard ? dashboardEvents : events;
   const dashboardPublishedEvents = dashboardSourceEvents.filter((event) => event.status === 'published');
+  const upcomingDashboardEvents = useMemo(
+    () =>
+      dashboardPublishedEvents
+        .filter((event) => event.event_date >= todayKey)
+        .sort((a, b) => a.event_date.localeCompare(b.event_date))
+        .slice(0, 5),
+    [dashboardPublishedEvents, todayKey],
+  );
   const visibleEvents = canFilterDashboard ? dashboardSourceEvents : events;
   const upcomingCount = publishedEvents.filter((event) => event.event_date >= todayKey).length;
   const dashboardUpcomingCount = dashboardPublishedEvents.filter((event) => event.event_date >= todayKey).length;
@@ -821,27 +917,48 @@ export function StrategyCalendarPage() {
                 กิจกรรมที่กำลังจะมาถึง
               </h3>
               <div className="mt-3 space-y-2">
-                {dashboardPublishedEvents.filter(e => e.event_date >= todayKey).slice(0, 5).length === 0 ? (
+                {upcomingDashboardEvents.length === 0 ? (
                   <p className="rounded-md border border-dashed border-slate-300 bg-slate-50 px-3 py-6 text-center text-sm text-slate-500">
                     ยังไม่มีกิจกรรมที่กำลังจะมาถึง
                   </p>
                 ) : (
-                  dashboardPublishedEvents.filter(e => e.event_date >= todayKey).sort((a, b) => a.event_date.localeCompare(b.event_date)).slice(0, 5).map(item => (
-                    <div key={item.id} className="flex items-center gap-3 rounded-lg border border-slate-100 bg-white p-3 transition hover:shadow-sm">
-                      <div className={cn('h-2 w-2 shrink-0 rounded-full', eventColorDotClasses[item.color || 'slate'] || 'bg-slate-500')}></div>
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-semibold text-slate-950">{item.title}</p>
-                        <p className="mt-0.5 text-xs text-slate-500">
-                          {formatThaiDate(item.event_date)}
-                          {item.end_date && item.end_date !== item.event_date ? ` - ${formatThaiDate(item.end_date)}` : ''}
-                          {' • '}{formatTime(item)}
-                        </p>
-                      </div>
-                      <span className={cn('shrink-0 rounded-md px-2 py-1 text-[11px] font-semibold text-white', eventColorDotClasses[item.color || 'slate'] || 'bg-slate-500')}>
-                        {eventColorLabels[item.color || 'slate'] || 'ทั่วไป'}
-                      </span>
-                    </div>
-                  ))
+                  upcomingDashboardEvents.map((item) => {
+                    const content = (
+                      <>
+                        <div className={cn('h-2 w-2 shrink-0 rounded-full', eventColorDotClasses[item.color || 'slate'] || 'bg-slate-500')} />
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-semibold text-slate-950">{item.title}</p>
+                          <p className="mt-0.5 text-xs text-slate-500">
+                            {formatThaiDate(item.event_date)}
+                            {item.end_date && item.end_date !== item.event_date ? ` - ${formatThaiDate(item.end_date)}` : ''}
+                            {' • '}{formatTime(item)}
+                          </p>
+                        </div>
+                        <span className={cn('shrink-0 rounded-md px-2 py-1 text-[11px] font-semibold text-white', eventColorDotClasses[item.color || 'slate'] || 'bg-slate-500')}>
+                          {eventColorLabels[item.color || 'slate'] || 'ทั่วไป'}
+                        </span>
+                      </>
+                    );
+
+                    if (!canViewUpcomingEventDetails) {
+                      return (
+                        <div key={item.id} className="flex items-center gap-3 rounded-lg border border-slate-100 bg-white p-3 transition hover:shadow-sm">
+                          {content}
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => setSelectedUpcomingEvent(item)}
+                        className="flex w-full items-center gap-3 rounded-lg border border-slate-100 bg-white p-3 text-left transition hover:border-brand-200 hover:bg-brand-50/40 hover:shadow-sm"
+                      >
+                        {content}
+                      </button>
+                    );
+                  })
                 )}
               </div>
             </div>
@@ -1391,6 +1508,8 @@ export function StrategyCalendarPage() {
 
         </aside>
       </div>
+
+      <StrategyEventDetailModal event={selectedUpcomingEvent} onClose={() => setSelectedUpcomingEvent(null)} />
     </div>
   );
 }
