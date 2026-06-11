@@ -133,6 +133,10 @@ export function ItAssetsPage() {
     return { windows11Count, fastDiskCount, averageHours, osChartData, gradeChartData, diskChartData };
   }, [filteredAssets]);
 
+  const gradeChartMaxValue = useMemo(() => {
+    return Math.max(...stats.gradeChartData.map((item) => item.value), 0);
+  }, [stats.gradeChartData]);
+
   const displayedAssets = useMemo(() => {
     return selectedGrade ? filteredAssets.filter((asset) => asset.health.grade === selectedGrade) : filteredAssets;
   }, [filteredAssets, selectedGrade]);
@@ -301,10 +305,14 @@ export function ItAssetsPage() {
                   </div>
                   <div className="h-64">
                     <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={stats.gradeChartData} margin={{ top: 5, right: 16, left: 0, bottom: 5 }}>
+                      <BarChart data={stats.gradeChartData} margin={{ top: 28, right: 16, left: 0, bottom: 5 }}>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} />
                         <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-                        <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
+                        <YAxis
+                          allowDecimals={false}
+                          domain={[0, Math.max(1, Math.ceil(gradeChartMaxValue * 1.2))]}
+                          tick={{ fontSize: 12 }}
+                        />
                         <Tooltip />
                         <Bar
                           dataKey="value"
