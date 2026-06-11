@@ -69,17 +69,44 @@ export type SpdServiceTelegramSettings = {
   enabled: boolean;
   chatId: string;
   adminRecipientIds: string[];
+  adminUsernames: Record<string, string>;
+  messageTemplate: string;
 };
 
 export type SaveSpdServiceTelegramSettingsValues = SpdServiceTelegramSettings & {
   updatedBy: string;
 };
 
+export type SpdServiceTelegramNotifyResult = {
+  sent: boolean;
+  skipped?: boolean;
+  reason?: string;
+};
+
 const telegramSettingKeys = {
   enabled: 'telegram_enabled',
   chatId: 'telegram_chat_id',
   adminRecipientIds: 'telegram_admin_recipient_ids',
+  adminUsernames: 'telegram_admin_usernames',
+  messageTemplate: 'telegram_ticket_created_template',
 } as const;
+
+export const defaultSpdServiceTelegramMessageTemplate = [
+  '<b>SPD Service: มีคำขอใหม่</b>',
+  'เลขคำขอ: <code>{{ticket_no}}</code>',
+  'หัวข้อ: {{subject}}',
+  'ประเภท: {{category_name}}',
+  'ความเร่งด่วน: {{urgency}}',
+  'ผู้แจ้ง: {{requester_name}}',
+  'หน่วยงาน: {{requester_department}}',
+  'โทร: {{requester_phone}}',
+  'สถานะ: {{status}}',
+  'เวลาแจ้ง: {{created_at}}',
+  'Mention Admin: {{admin_mentions}}',
+  '',
+  '<b>รายละเอียด</b>',
+  '{{description}}',
+].join('\n');
 
 function parseAdminRecipientIds(value: string | null | undefined) {
   if (!value) {
@@ -91,6 +118,28 @@ function parseAdminRecipientIds(value: string | null | undefined) {
     return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === 'string') : [];
   } catch {
     return [];
+  }
+}
+
+function parseAdminUsernames(value: string | null | undefined) {
+  if (!value) {
+    return {};
+  }
+
+  try {
+    const parsed = JSON.parse(value);
+
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return {};
+    }
+
+    return Object.fromEntries(
+      Object.entries(parsed)
+        .filter((entry): entry is [string, string] => typeof entry[0] === 'string' && typeof entry[1] === 'string')
+        .map(([adminId, username]) => [adminId, username.trim()]),
+    );
+  } catch {
+    return {};
   }
 }
 
@@ -235,7 +284,7 @@ export async function createSpdServiceTicket(values: CreateSpdServiceTicketValue
     actor_id: values.requesterId,
     action: 'CREATE_TICKET',
     to_status: 'NEW',
-    note: 'ผู้ใช้งานสร้าง Ticket ใหม่',
+    note: 'ผู้ใช้งานสร้างคำขอใหม่',
     metadata: {
       ticket_no: ticket.ticket_no,
       category_name: ticket.category_name,
@@ -248,6 +297,21 @@ export async function createSpdServiceTicket(values: CreateSpdServiceTicketValue
   }
 
   return ticket;
+}
+
+export async function notifySpdServiceTicketCreated(ticketId: string): Promise<SpdServiceTelegramNotifyResult> {
+  const { data, error } = await supabase.functions.invoke('spd-service-telegram-notify', {
+    body: {
+      event: 'ticket_created',
+      ticketId,
+    },
+  });
+
+  if (error) {
+    throw error;
+  }
+
+  return (data || { sent: false, skipped: true, reason: 'empty_response' }) as SpdServiceTelegramNotifyResult;
 }
 
 export async function updateSpdServiceTicketWorkflow(values: UpdateSpdServiceTicketWorkflowValues): Promise<SpdServiceTicket> {
@@ -285,6 +349,17 @@ export async function updateSpdServiceTicketWorkflow(values: UpdateSpdServiceTic
   }
 
   return updatedTicket;
+}
+
+export async function deleteSpdServiceTicket(ticketId: string): Promise<void> {
+  const { error } = await supabase
+    .from('spd_service_tickets')
+    .delete()
+    .eq('id', ticketId);
+
+  if (error) {
+    throw error;
+  }
 }
 
 export async function createSpdServiceSatisfactionSurvey(
@@ -342,6 +417,8 @@ export async function getSpdServiceTelegramSettings(): Promise<SpdServiceTelegra
     enabled: settingsByKey.get(telegramSettingKeys.enabled)?.setting_value === 'true',
     chatId: settingsByKey.get(telegramSettingKeys.chatId)?.setting_value || '',
     adminRecipientIds: parseAdminRecipientIds(settingsByKey.get(telegramSettingKeys.adminRecipientIds)?.setting_value),
+    adminUsernames: parseAdminUsernames(settingsByKey.get(telegramSettingKeys.adminUsernames)?.setting_value),
+    messageTemplate: settingsByKey.get(telegramSettingKeys.messageTemplate)?.setting_value || defaultSpdServiceTelegramMessageTemplate,
   };
 }
 
@@ -364,6 +441,20 @@ export async function saveSpdServiceTelegramSettings(values: SaveSpdServiceTeleg
     {
       setting_key: telegramSettingKeys.adminRecipientIds,
       setting_value: JSON.stringify(values.adminRecipientIds),
+      is_secret: false,
+      is_active: values.enabled,
+      updated_by: values.updatedBy,
+    },
+    {
+      setting_key: telegramSettingKeys.adminUsernames,
+      setting_value: JSON.stringify(values.adminUsernames),
+      is_secret: false,
+      is_active: values.enabled,
+      updated_by: values.updatedBy,
+    },
+    {
+      setting_key: telegramSettingKeys.messageTemplate,
+      setting_value: values.messageTemplate.trim() || defaultSpdServiceTelegramMessageTemplate,
       is_secret: false,
       is_active: values.enabled,
       updated_by: values.updatedBy,

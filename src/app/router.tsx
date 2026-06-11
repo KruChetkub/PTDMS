@@ -163,6 +163,10 @@ export const router = createBrowserRouter([
         path: '/spd-service/tickets',
         element: <SpdServiceTicketListPage />,
       },
+      {
+        path: '/spd-service/settings/telegram',
+        element: <SpdServiceTelegramSettingsPage />,
+      },
     ],
   },
   {
@@ -191,10 +195,6 @@ export const router = createBrowserRouter([
   {
     element: <ProtectedRoute allowedRoles={['super_admin']} />,
     children: [
-      {
-        path: '/spd-service/settings/telegram',
-        element: <SpdServiceTelegramSettingsPage />,
-      },
       {
         element: <AppLayout />,
         children: [

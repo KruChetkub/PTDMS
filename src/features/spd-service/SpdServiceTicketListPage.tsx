@@ -69,7 +69,7 @@ export function SpdServiceTicketListPage() {
       setTickets(data);
     } catch (loadError) {
       console.error('Failed to load SPD Service tickets:', loadError);
-      setError('ไม่สามารถโหลดรายการ Ticket ได้');
+      setError('ไม่สามารถโหลดรายการคำขอได้');
     } finally {
       setIsLoading(false);
     }
@@ -109,7 +109,7 @@ export function SpdServiceTicketListPage() {
               <ArrowLeft className="h-4 w-4" aria-hidden="true" />
               กลับ Dashboard
             </Link>
-            <h1 className="truncate text-2xl font-semibold text-slate-950">รายการ Ticket ทั้งหมด</h1>
+            <h1 className="truncate text-2xl font-semibold text-slate-950">รายการคำขอทั้งหมด</h1>
             <p className="mt-1 text-sm text-slate-500">ค้นหาและกรองสถานะคำขอรับบริการ SPD Service</p>
           </div>
           <button
@@ -142,7 +142,7 @@ export function SpdServiceTicketListPage() {
                   type="search"
                   value={searchTerm}
                   onChange={(event) => setSearchTerm(event.target.value)}
-                  placeholder="Ticket No, หัวข้อ, ผู้แจ้ง, เบอร์โทร"
+                  placeholder="เลขคำขอ, หัวข้อ, ผู้แจ้ง, เบอร์โทร"
                   className="w-full rounded-md border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
                 />
               </div>
@@ -216,7 +216,7 @@ export function SpdServiceTicketListPage() {
             <table className="w-full min-w-[1120px] border-collapse text-left text-sm">
               <thead>
                 <tr className="border-b border-slate-200 text-xs font-semibold uppercase text-slate-500">
-                  <th className="px-2 pb-3">Ticket No</th>
+                  <th className="px-2 pb-3">เลขคำขอ</th>
                   <th className="px-2 pb-3">หัวข้อ</th>
                   <th className="px-2 pb-3">ประเภท</th>
                   <th className="px-2 pb-3">ผู้แจ้ง</th>
@@ -258,7 +258,7 @@ export function SpdServiceTicketListPage() {
                 {filteredTickets.length === 0 ? (
                   <tr>
                     <td colSpan={9} className="px-2 py-12 text-center text-slate-400">
-                      ไม่พบ Ticket ที่ตรงกับเงื่อนไข
+                      ไม่พบคำขอที่ตรงกับเงื่อนไข
                     </td>
                   </tr>
                 ) : null}

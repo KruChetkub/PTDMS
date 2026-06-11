@@ -106,7 +106,7 @@ function TicketDetailModal({
                     <dd className="text-right font-medium text-slate-800">{formatDateTime(ticket.created_at)}</dd>
                   </div>
                   <div className="flex justify-between gap-3">
-                    <dt className="text-slate-500">รับงาน</dt>
+                    <dt className="text-slate-500">รับคำขอ</dt>
                     <dd className="text-right font-medium text-slate-800">{formatDateTime(ticket.assigned_at)}</dd>
                   </div>
                   <div className="flex justify-between gap-3">
@@ -311,7 +311,7 @@ export function SpdServiceMyRequestsPage() {
       setTickets(ticketData);
       setSurveys(surveyData);
     } catch (loadError) {
-      console.error('Failed to load my SPD Service tickets:', loadError);
+      console.error('Failed to load my SPD Service requests:', loadError);
       setError('ไม่สามารถโหลดคำขอของฉันได้');
     } finally {
       setIsLoading(false);
@@ -340,7 +340,7 @@ export function SpdServiceMyRequestsPage() {
       const detail = await getSpdServiceTicketDetail(ticketId);
       setTicketDetail(detail);
     } catch (detailError) {
-      console.error('Failed to load my SPD Service ticket detail:', detailError);
+      console.error('Failed to load my SPD Service request detail:', detailError);
       setError('ไม่สามารถโหลดรายละเอียดคำขอได้');
     } finally {
       setIsDetailLoading(false);
@@ -425,7 +425,7 @@ export function SpdServiceMyRequestsPage() {
                   type="search"
                   value={searchTerm}
                   onChange={(event) => setSearchTerm(event.target.value)}
-                  placeholder="Ticket No, หัวข้อ, รายละเอียด"
+                  placeholder="เลขคำขอ, หัวข้อ, รายละเอียด"
                   className="w-full rounded-md border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
                 />
               </div>
@@ -457,7 +457,7 @@ export function SpdServiceMyRequestsPage() {
             <table className="w-full min-w-[880px] border-collapse text-left text-sm">
               <thead>
                 <tr className="border-b border-slate-200 text-xs font-semibold uppercase text-slate-500">
-                  <th className="px-2 pb-3">Ticket No</th>
+                  <th className="px-2 pb-3">เลขคำขอ</th>
                   <th className="px-2 pb-3">หัวข้อ</th>
                   <th className="px-2 pb-3">ประเภท</th>
                   <th className="px-2 pb-3">ความเร่งด่วน</th>

@@ -1,7 +1,7 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { AlertCircle, ArrowLeft, CheckCircle2, Headphones, Loader2, Send } from 'lucide-react';
-import { createSpdServiceTicket, getSpdServiceCategories } from '../../services/spd-service.service';
+import { createSpdServiceTicket, getSpdServiceCategories, notifySpdServiceTicketCreated } from '../../services/spd-service.service';
 import { useAuthStore } from '../../stores/auth.store';
 import type { SpdServiceCategory, SpdServiceTicket, SpdServiceUrgency } from '../../types/database.types';
 
@@ -38,6 +38,7 @@ export function SpdServiceRequestPage() {
   const [isLoadingCategories, setIsLoadingCategories] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notificationWarning, setNotificationWarning] = useState<string | null>(null);
   const [createdTicket, setCreatedTicket] = useState<SpdServiceTicket | null>(null);
 
   useEffect(() => {
@@ -83,6 +84,7 @@ export function SpdServiceRequestPage() {
     try {
       setIsSubmitting(true);
       setError(null);
+      setNotificationWarning(null);
       setCreatedTicket(null);
       const ticket = await createSpdServiceTicket({
         requesterId: profile.user_id,
@@ -96,11 +98,22 @@ export function SpdServiceRequestPage() {
         description: description.trim(),
       });
 
+      try {
+        const notificationResult = await notifySpdServiceTicketCreated(ticket.id);
+
+        if (!notificationResult.sent && !notificationResult.skipped) {
+          setNotificationWarning('สร้างคำขอสำเร็จ แต่ยังส่ง Telegram ไม่สำเร็จ กรุณาตรวจสอบการตั้งค่า');
+        }
+      } catch (notificationError) {
+        console.error('Failed to notify SPD Service Telegram:', notificationError);
+        setNotificationWarning('สร้างคำขอสำเร็จ แต่ยังส่ง Telegram ไม่สำเร็จ กรุณาตรวจสอบ Edge Function และ Bot Token');
+      }
+
       setCreatedTicket(ticket);
       resetIssueFields();
     } catch (submitError) {
       console.error('Failed to create SPD Service ticket:', submitError);
-      setError('ไม่สามารถสร้าง Ticket ได้ กรุณาตรวจสอบข้อมูลแล้วลองใหม่');
+      setError('ไม่สามารถสร้างคำขอได้ กรุณาตรวจสอบข้อมูลแล้วลองใหม่');
     } finally {
       setIsSubmitting(false);
     }
@@ -127,10 +140,17 @@ export function SpdServiceRequestPage() {
         {createdTicket ? (
           <div className="mb-5 rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
             <CheckCircle2 className="mr-2 inline h-4 w-4" aria-hidden="true" />
-            สร้าง Ticket สำเร็จ เลขที่ <span className="font-mono font-semibold">{createdTicket.ticket_no}</span>
+            สร้างคำขอสำเร็จ เลขคำขอ <span className="font-mono font-semibold">{createdTicket.ticket_no}</span>
             <Link to="/spd-service/my-requests" className="ml-3 font-semibold underline underline-offset-2">
               ดูคำขอของฉัน
             </Link>
+          </div>
+        ) : null}
+
+        {notificationWarning ? (
+          <div className="mb-5 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            <AlertCircle className="mr-2 inline h-4 w-4" aria-hidden="true" />
+            {notificationWarning}
           </div>
         ) : null}
 
