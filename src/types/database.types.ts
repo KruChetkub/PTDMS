@@ -156,6 +156,80 @@ export type ItAssetEvaluationSettings = {
   updated_at: string;
 };
 
+export type SpdServiceTicketStatus = 'NEW' | 'ASSIGNED' | 'IN_PROGRESS' | 'WAITING' | 'COMPLETED' | 'CANCELLED';
+export type SpdServiceUrgency = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+
+export type SpdServiceCategory = {
+  id: string;
+  name: string;
+  description: string | null;
+  is_active: boolean;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type SpdServiceTicket = {
+  id: string;
+  ticket_no: string;
+  requester_id: string;
+  requester_name: string;
+  requester_department: string | null;
+  requester_phone: string;
+  category_id: string | null;
+  category_name: string;
+  urgency: SpdServiceUrgency;
+  status: SpdServiceTicketStatus;
+  subject: string;
+  description: string;
+  assigned_to: string | null;
+  assigned_at: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  cancelled_at: string | null;
+  problem_cause: string | null;
+  resolution_method: string | null;
+  resolution_result: string | null;
+  resolution_minutes: number | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type SpdServiceTicketTimeline = {
+  id: string;
+  ticket_id: string;
+  actor_id: string | null;
+  action: string;
+  from_status: SpdServiceTicketStatus | null;
+  to_status: SpdServiceTicketStatus | null;
+  note: string | null;
+  metadata: Record<string, unknown> | null;
+  created_at: string;
+};
+
+export type SpdServiceSatisfactionSurvey = {
+  id: string;
+  ticket_id: string;
+  requester_id: string;
+  speed_rating: number;
+  quality_rating: number;
+  courtesy_rating: number;
+  overall_rating: number;
+  comment: string | null;
+  created_at: string;
+};
+
+export type SpdServiceNotificationSettings = {
+  id: string;
+  setting_key: string;
+  setting_value: string | null;
+  is_secret: boolean;
+  is_active: boolean;
+  updated_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type Database = {
   public: {
     Tables: {
@@ -357,6 +431,97 @@ export type Database = {
         Update: Partial<Omit<ItAssetEvaluationSettings, 'id' | 'created_at'>>;
         Relationships: [];
       };
+      spd_service_categories: {
+        Row: SpdServiceCategory;
+        Insert: {
+          id?: string;
+          name: string;
+          description?: string | null;
+          is_active?: boolean;
+          sort_order?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Omit<SpdServiceCategory, 'id' | 'created_at'>>;
+        Relationships: [];
+      };
+      spd_service_tickets: {
+        Row: SpdServiceTicket;
+        Insert: {
+          id?: string;
+          ticket_no: string;
+          requester_id: string;
+          requester_name: string;
+          requester_department?: string | null;
+          requester_phone: string;
+          category_id?: string | null;
+          category_name: string;
+          urgency?: SpdServiceUrgency;
+          status?: SpdServiceTicketStatus;
+          subject: string;
+          description: string;
+          assigned_to?: string | null;
+          assigned_at?: string | null;
+          started_at?: string | null;
+          completed_at?: string | null;
+          cancelled_at?: string | null;
+          problem_cause?: string | null;
+          resolution_method?: string | null;
+          resolution_result?: string | null;
+          resolution_minutes?: number | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Omit<SpdServiceTicket, 'id' | 'created_at'>>;
+        Relationships: [];
+      };
+      spd_service_ticket_timeline: {
+        Row: SpdServiceTicketTimeline;
+        Insert: {
+          id?: string;
+          ticket_id: string;
+          actor_id?: string | null;
+          action: string;
+          from_status?: SpdServiceTicketStatus | null;
+          to_status?: SpdServiceTicketStatus | null;
+          note?: string | null;
+          metadata?: Record<string, unknown> | null;
+          created_at?: string;
+        };
+        Update: Partial<Omit<SpdServiceTicketTimeline, 'id' | 'ticket_id' | 'created_at'>>;
+        Relationships: [];
+      };
+      spd_service_satisfaction_surveys: {
+        Row: SpdServiceSatisfactionSurvey;
+        Insert: {
+          id?: string;
+          ticket_id: string;
+          requester_id: string;
+          speed_rating: number;
+          quality_rating: number;
+          courtesy_rating: number;
+          overall_rating: number;
+          comment?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<Omit<SpdServiceSatisfactionSurvey, 'id' | 'ticket_id' | 'requester_id' | 'created_at'>>;
+        Relationships: [];
+      };
+      spd_service_notification_settings: {
+        Row: SpdServiceNotificationSettings;
+        Insert: {
+          id?: string;
+          setting_key: string;
+          setting_value?: string | null;
+          is_secret?: boolean;
+          is_active?: boolean;
+          updated_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Omit<SpdServiceNotificationSettings, 'id' | 'created_at'>>;
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: {
@@ -374,6 +539,13 @@ export type Database = {
           p_development_area: string | null;
           p_skill_group: string | null;
           p_target_direction: string | null;
+        };
+        Returns: string;
+      };
+      generate_spd_service_ticket_no: {
+        Args: {
+          category_label: string;
+          created_on?: string;
         };
         Returns: string;
       };
@@ -401,6 +573,8 @@ export type Database = {
     Enums: {
       user_role: UserRole;
       profile_status: ProfileStatus;
+      spd_service_ticket_status: SpdServiceTicketStatus;
+      spd_service_urgency: SpdServiceUrgency;
     };
     CompositeTypes: Record<string, never>;
   };

@@ -25,6 +25,11 @@ import { SecurityPage } from '../features/admin/SecurityPage';
 import { StrategyCalendarPage } from '../features/strategy-calendar/StrategyCalendarPage';
 import { ItAssetsPage } from '../features/it-assets/ItAssetsPage';
 import { ItAssetsManagePage } from '../features/it-assets/ItAssetsManagePage';
+import { SpdServiceDashboardPage } from '../features/spd-service/SpdServiceDashboardPage';
+import { SpdServiceMyRequestsPage } from '../features/spd-service/SpdServiceMyRequestsPage';
+import { SpdServiceRequestPage } from '../features/spd-service/SpdServiceRequestPage';
+import { SpdServiceTelegramSettingsPage } from '../features/spd-service/SpdServiceTelegramSettingsPage';
+import { SpdServiceTicketListPage } from '../features/spd-service/SpdServiceTicketListPage';
 import { ForbiddenPage } from '../features/system/ForbiddenPage';
 import { NotFoundPage } from '../features/system/NotFoundPage';
 
@@ -68,6 +73,14 @@ export const router = createBrowserRouter([
       {
         path: '/it-assets',
         element: <ItAssetsPage />,
+      },
+      {
+        path: '/spd-service/request',
+        element: <SpdServiceRequestPage />,
+      },
+      {
+        path: '/spd-service/my-requests',
+        element: <SpdServiceMyRequestsPage />,
       },
       {
         element: <CalendarLayout />,
@@ -140,6 +153,19 @@ export const router = createBrowserRouter([
     ],
   },
   {
+    element: <ProtectedRoute allowedRoles={['super_admin', 'admin', 'executive']} />,
+    children: [
+      {
+        path: '/spd-service',
+        element: <SpdServiceDashboardPage />,
+      },
+      {
+        path: '/spd-service/tickets',
+        element: <SpdServiceTicketListPage />,
+      },
+    ],
+  },
+  {
     element: <ProtectedRoute allowedRoles={['super_admin', 'admin', 'hr']} />,
     children: [
       {
@@ -165,6 +191,10 @@ export const router = createBrowserRouter([
   {
     element: <ProtectedRoute allowedRoles={['super_admin']} />,
     children: [
+      {
+        path: '/spd-service/settings/telegram',
+        element: <SpdServiceTelegramSettingsPage />,
+      },
       {
         element: <AppLayout />,
         children: [
