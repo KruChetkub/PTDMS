@@ -595,11 +595,11 @@ export function MeetingRoomBookingPage() {
         <div className="hidden sm:block">
           <PageHeader title="ห้องประชุม กองยุทธศาสตร์และแผนงาน"/>
         </div>
-        <div className="sm:hidden">
+        <div className="hidden">
           <h1 className="text-xl font-semibold text-slate-950">ระบบจองห้องประชุม</h1>
           <p className="mt-1 text-sm text-slate-500">กองยุทธศาสตร์และแผนงาน</p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="hidden flex-wrap gap-2 sm:flex">
           <button
             type="button"
             onClick={selectToday}

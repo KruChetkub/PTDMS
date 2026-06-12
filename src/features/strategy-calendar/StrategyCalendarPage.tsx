@@ -858,7 +858,7 @@ export function StrategyCalendarPage() {
             description="แจ้งกิจกรรมภายในกองฯ และติดตามกำหนดการ"
           />
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="hidden flex-wrap gap-2 sm:flex">
           <button
             type="button"
             onClick={selectToday}
@@ -890,7 +890,7 @@ export function StrategyCalendarPage() {
       <section className="mb-6 rounded-md border border-slate-200 bg-white shadow-sm">
         {/* Tabs: Dashboard / List */}
         <div className="flex flex-col gap-3 border-b border-slate-100 p-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="inline-flex rounded-lg bg-slate-100 p-1">
+          <div className="hidden rounded-lg bg-slate-100 p-1 sm:inline-flex">
             <button
               type="button"
               onClick={() => setActiveTab('dashboard')}
