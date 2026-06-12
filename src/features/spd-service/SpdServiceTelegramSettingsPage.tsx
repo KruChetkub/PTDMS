@@ -11,6 +11,27 @@ import { useAuthStore } from '../../stores/auth.store';
 import type { Profile } from '../../types/database.types';
 import { cn } from '../../utils/cn';
 
+const sampleTelegramTemplateValues: Record<string, string> = {
+  ticket_no: 'SPD-2569-0001',
+  subject: 'ขอรับบริการระบบคอมพิวเตอร์',
+  category_name: 'แจ้งปัญหาระบบ',
+  urgency: 'ปกติ',
+  requester_name: 'สมชาย ทดสอบ',
+  requester_department: 'กองยุทธศาสตร์และแผนงาน',
+  requester_phone: '081-234-5678',
+  status: 'new',
+  created_at: '12 มิ.ย. 2569 09:30',
+  admin_mentions: '@admin',
+  description: 'รายละเอียดตัวอย่างสำหรับตรวจสอบข้อความที่ส่งเข้า Telegram',
+};
+
+function renderTelegramTemplatePreview(template: string) {
+  return Object.entries(sampleTelegramTemplateValues).reduce(
+    (message, [key, value]) => message.split(`{{${key}}}`).join(value),
+    template,
+  );
+}
+
 export function SpdServiceTelegramSettingsPage() {
   const { profile } = useAuthStore();
   const canEditSettings = profile?.role === 'super_admin';
@@ -30,6 +51,7 @@ export function SpdServiceTelegramSettingsPage() {
     () => admins.filter((admin) => adminRecipientIds.includes(admin.user_id)).length,
     [adminRecipientIds, admins],
   );
+  const messagePreview = useMemo(() => renderTelegramTemplatePreview(messageTemplate), [messageTemplate]);
 
   const loadSettings = async () => {
     try {
@@ -303,7 +325,9 @@ export function SpdServiceTelegramSettingsPage() {
               <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                 <div>
                   <h2 className="text-lg font-semibold text-slate-950">Template ข้อความ Telegram</h2>
-                  <p className="mt-1 text-sm text-slate-500">แก้ไขข้อความที่ bot ส่งเข้ากลุ่มเมื่อมีคำขอใหม่</p>
+                  <p className="mt-1 text-sm text-slate-500">
+                    แก้ไขข้อความที่ bot ส่งเข้ากลุ่มเมื่อมีคำขอใหม่ สามารถพิมพ์ข้อความธรรมดาเพิ่มได้ โดยไม่จำเป็นต้องเป็นตัวแปรเท่านั้น
+                  </p>
                 </div>
                 <button
                   type="button"
@@ -323,7 +347,17 @@ export function SpdServiceTelegramSettingsPage() {
                   readOnly={!canEditSettings}
                   className="mt-1 min-h-96 w-full rounded-md border border-slate-300 px-3 py-2 font-mono text-sm outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
                 />
+                <span className="mt-1 block text-xs text-slate-500">
+                  ข้อความที่พิมพ์เองจะถูกส่งไปพร้อมกัน ส่วนรูปแบบ <code className="font-mono text-teal-700">{'{{ticket_no}}'}</code> จะถูกแทนค่าด้วยข้อมูลคำขอจริง
+                </span>
               </label>
+
+              <div className="mt-4 rounded-md border border-teal-100 bg-teal-50/60 p-4">
+                <h3 className="text-sm font-semibold text-slate-900">ตัวอย่างข้อความหลังแทนค่าตัวแปร</h3>
+                <pre className="mt-3 max-h-80 overflow-auto whitespace-pre-wrap rounded-md border border-teal-100 bg-white p-3 text-sm leading-6 text-slate-700">
+                  {messagePreview}
+                </pre>
+              </div>
 
               <div className="mt-4 rounded-md border border-slate-200 bg-slate-50 p-4">
                 <h3 className="text-sm font-semibold text-slate-900">ตัวแปรที่ใช้ได้</h3>
