@@ -1,5 +1,22 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
-import { BarChart3, CalendarDays, ChevronLeft, ChevronRight, Clock, Edit3, Filter, LayoutDashboard, List, MapPin, Plus, RefreshCw, RotateCcw, X, XCircle } from 'lucide-react';
+import { BarChart3, Bell, CalendarCheck2, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, ClipboardList, Clock, Edit3, Filter, Hourglass, LayoutDashboard, List, MapPin, Plus, RefreshCw, RotateCcw, UserRound, X, XCircle } from 'lucide-react';
+import {
+  Area,
+  AreaChart,
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  ComposedChart,
+  Legend,
+  Line,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
 import { PageHeader } from '../../components/ui/PageHeader';
 import {
   cancelStrategyEvent,
@@ -28,8 +45,18 @@ const thaiMonths = [
 ];
 
 const weekdays = ['จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส', 'อา'];
+const thaiShortMonths = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
 const hours24 = Array.from({ length: 24 }, (_, index) => `${index}`.padStart(2, '0'));
 const minuteSteps = Array.from({ length: 12 }, (_, index) => `${index * 5}`.padStart(2, '0'));
+
+const dashboardColors = {
+  total: '#0F172A',
+  completed: '#10B981',
+  inProgress: '#3B82F6',
+  cancelled: '#EF4444',
+  pending: '#F59E0B',
+  purple: '#8B5CF6',
+};
 
 function toDateKey(date: Date) {
   const year = date.getFullYear();
@@ -41,6 +68,20 @@ function toDateKey(date: Date) {
 function parseDateKey(dateKey: string) {
   const [year, month, day] = dateKey.split('-').map(Number);
   return new Date(year, month - 1, day);
+}
+
+function addDays(date: Date, amount: number) {
+  const next = new Date(date);
+  next.setDate(next.getDate() + amount);
+  return next;
+}
+
+function monthKey(year: number, monthIndex: number) {
+  return `${year}-${String(monthIndex + 1).padStart(2, '0')}`;
+}
+
+function getEventEndKey(event: StrategyEventRow) {
+  return event.end_date || event.event_date;
 }
 
 function getCalendarDays(monthDate: Date) {
@@ -116,24 +157,6 @@ const eventColorDotClasses: Record<string, string> = {
   amber: 'bg-amber-500',
   red: 'bg-red-500',
   purple: 'bg-purple-500',
-};
-
-const eventColorBgClasses: Record<string, string> = {
-  slate: 'bg-slate-50 ring-slate-200',
-  blue: 'bg-blue-50 ring-blue-200',
-  emerald: 'bg-emerald-50 ring-emerald-200',
-  amber: 'bg-amber-50 ring-amber-200',
-  red: 'bg-red-50 ring-red-200',
-  purple: 'bg-purple-50 ring-purple-200',
-};
-
-const eventColorTextClasses: Record<string, string> = {
-  slate: 'text-slate-700',
-  blue: 'text-blue-700',
-  emerald: 'text-emerald-700',
-  amber: 'text-amber-700',
-  red: 'text-red-700',
-  purple: 'text-purple-700',
 };
 
 function formatDateRange(event: StrategyEventRow) {
@@ -487,18 +510,134 @@ export function StrategyCalendarPage() {
   );
   const visibleEvents = canFilterDashboard ? dashboardSourceEvents : events;
   const upcomingCount = publishedEvents.filter((event) => event.event_date >= todayKey).length;
-  const dashboardUpcomingCount = dashboardPublishedEvents.filter((event) => event.event_date >= todayKey).length;
   const dashboardCancelledCount = dashboardSourceEvents.filter((event) => event.status === 'cancelled').length;
+  const dashboardCompletedCount = dashboardPublishedEvents.filter((event) => getEventEndKey(event) < todayKey).length;
+  const dashboardInProgressCount = dashboardPublishedEvents.filter((event) => getEventEndKey(event) >= todayKey).length;
+  const dashboardPendingCount = dashboardSourceEvents.filter((event) => event.status === 'draft').length;
+  const dashboardChartYear = canFilterDashboard && dashboardFilterMode !== 'all' ? dashboardYear : monthDate.getFullYear();
 
-  // Dashboard stats by color
-  const statsByColor = useMemo(() => {
-    const colorKeys = ['blue', 'emerald', 'amber', 'red', 'purple', 'slate'];
-    return colorKeys.map(color => ({
-      color,
-      label: eventColorLabels[color] || color,
-      count: dashboardPublishedEvents.filter(e => (e.color || 'slate') === color).length,
-    }));
-  }, [dashboardPublishedEvents]);
+  const dashboardAnalytics = useMemo(() => {
+    const typeColors = ['blue', 'emerald', 'amber', 'red', 'purple', 'slate'];
+    const activeEvents = dashboardSourceEvents.filter((event) => event.status !== 'cancelled');
+    const published = dashboardSourceEvents.filter((event) => event.status === 'published');
+
+    const monthlyActivityData = Array.from({ length: 12 }, (_, index) => {
+      const monthEvents = activeEvents.filter((event) => {
+        const date = parseDateKey(event.event_date);
+        return date.getFullYear() === dashboardChartYear && date.getMonth() === index;
+      });
+      const completed = monthEvents.filter((event) => event.status === 'published' && getEventEndKey(event) < todayKey).length;
+
+      return {
+        month: thaiShortMonths[index],
+        total: monthEvents.length,
+        completed,
+      };
+    });
+
+    const activityTypeData = typeColors
+      .map((color) => ({
+        color,
+        name: eventColorLabels[color] || color,
+        count: published.filter((event) => (event.color || 'slate') === color).length,
+        fill: color === 'slate' ? '#64748B' : color === 'blue' ? '#3B82F6' : color === 'emerald' ? '#10B981' : color === 'amber' ? '#F59E0B' : color === 'red' ? '#EF4444' : '#8B5CF6',
+      }))
+      .sort((a, b) => b.count - a.count);
+
+    const trendEnd =
+      canFilterDashboard && dashboardFilterMode === 'year'
+        ? new Date(dashboardYear, 11, 1)
+        : canFilterDashboard && dashboardFilterMode === 'month'
+          ? new Date(dashboardYear, dashboardMonth - 1, 1)
+          : parseDateKey(todayKey);
+
+    const activityTrendData = Array.from({ length: 12 }, (_, offset) => {
+      const date = new Date(trendEnd.getFullYear(), trendEnd.getMonth() - (11 - offset), 1);
+      const key = monthKey(date.getFullYear(), date.getMonth());
+      return {
+        month: `${thaiShortMonths[date.getMonth()]} ${String(date.getFullYear() + 543).slice(2)}`,
+        count: published.filter((event) => event.event_date.startsWith(key)).length,
+      };
+    });
+
+    const heatmapStart = new Date(dashboardChartYear, 0, 1);
+    const heatmapEnd = new Date(dashboardChartYear, 11, 31);
+    const heatmapCounts = new Map<string, number>();
+
+    published.forEach((event) => {
+      let cursor = parseDateKey(event.event_date);
+      const end = parseDateKey(getEventEndKey(event));
+
+      while (cursor <= end) {
+        if (cursor >= heatmapStart && cursor <= heatmapEnd) {
+          const key = toDateKey(cursor);
+          heatmapCounts.set(key, (heatmapCounts.get(key) || 0) + 1);
+        }
+        cursor = addDays(cursor, 1);
+      }
+    });
+
+    const heatmapLeadingDays = (heatmapStart.getDay() + 6) % 7;
+    const heatmapDays = [
+      ...Array.from({ length: heatmapLeadingDays }, (_, index) => ({
+        key: `empty-start-${index}`,
+        dateKey: '',
+        day: null as number | null,
+        count: 0,
+      })),
+      ...Array.from({ length: Math.round((heatmapEnd.getTime() - heatmapStart.getTime()) / 86400000) + 1 }, (_, index) => {
+        const date = addDays(heatmapStart, index);
+        const dateKey = toDateKey(date);
+        return {
+          key: dateKey,
+          dateKey,
+          day: date.getDate(),
+          count: heatmapCounts.get(dateKey) || 0,
+        };
+      }),
+    ];
+    const heatmapMax = Math.max(1, ...heatmapDays.map((day) => day.count));
+    const heatmapWeeks = Array.from({ length: Math.ceil(heatmapDays.length / 7) }, (_, index) =>
+      heatmapDays.slice(index * 7, index * 7 + 7),
+    );
+    const heatmapMonthLabels = heatmapWeeks.map((week, index) => {
+      const firstDate = week.find((day) => day.dateKey);
+      if (!firstDate) {
+        return '';
+      }
+
+      const date = parseDateKey(firstDate.dateKey);
+      const previousWeek = heatmapWeeks[index - 1];
+      const previousDate = previousWeek?.find((day) => day.dateKey);
+      const isFirstWeek = index === 0 || !previousDate;
+      const isNewMonth = previousDate ? parseDateKey(previousDate.dateKey).getMonth() !== date.getMonth() : false;
+      return isFirstWeek || isNewMonth ? thaiShortMonths[date.getMonth()] : '';
+    });
+    const bestMonth = monthlyActivityData.reduce((best, item) => (item.total > best.total ? item : best), monthlyActivityData[0]);
+    const topType = activityTypeData.reduce((best, item) => (item.count > best.count ? item : best), activityTypeData[0]);
+
+    return {
+      monthlyActivityData,
+      activityTypeData,
+      activityTrendData,
+      heatmapDays,
+      heatmapWeeks,
+      heatmapMonthLabels,
+      heatmapMax,
+      bestMonth,
+      topType,
+    };
+  }, [canFilterDashboard, dashboardChartYear, dashboardFilterMode, dashboardMonth, dashboardSourceEvents, dashboardYear, todayKey]);
+
+  const statusDistributionData = useMemo(
+    () => [
+      { name: 'เสร็จสิ้น', value: dashboardCompletedCount, color: dashboardColors.completed },
+      { name: 'กำลังดำเนินการ', value: dashboardInProgressCount, color: dashboardColors.inProgress },
+      { name: 'รออนุมัติ', value: dashboardPendingCount, color: dashboardColors.pending },
+      { name: 'ยกเลิก', value: dashboardCancelledCount, color: dashboardColors.cancelled },
+    ],
+    [dashboardCancelledCount, dashboardCompletedCount, dashboardInProgressCount, dashboardPendingCount],
+  );
 
   const dashboardFilterLabel = useMemo(() => {
     if (!canFilterDashboard) {
@@ -713,10 +852,12 @@ export function StrategyCalendarPage() {
   return (
     <div className="mx-auto max-w-7xl">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <PageHeader
-          title="ปฏิทินกิจกรรมกองยุทธศาสตร์และแผนงาน"
-          description="แจ้งกิจกรรมภายในกองฯ และติดตามกำหนดการ"
-        />
+        <div className="hidden sm:block">
+          <PageHeader
+            title="ปฏิทินกิจกรรมกองยุทธศาสตร์และแผนงาน"
+            description="แจ้งกิจกรรมภายในกองฯ และติดตามกำหนดการ"
+          />
+        </div>
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
@@ -864,104 +1005,308 @@ export function StrategyCalendarPage() {
 
         {/* Dashboard Tab */}
         {activeTab === 'dashboard' ? (
-          <div className="p-4 sm:p-6">
-            {/* Top Summary Cards */}
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <div className="rounded-xl bg-gradient-to-br from-slate-800 to-slate-950 p-4 text-white shadow">
-                <p className="text-xs font-medium text-slate-300">กิจกรรมทั้งหมด</p>
-                <p className="mt-2 text-3xl font-bold">{dashboardLoading ? '...' : dashboardSourceEvents.length}</p>
-                <p className="mt-1 text-[11px] text-slate-400">{dashboardFilterLabel}</p>
+          <div className="space-y-4 bg-[#F5F8FC] p-3 sm:p-6">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <h2 className="text-lg font-bold tracking-normal text-slate-950 sm:text-xl">ภาพรวมกิจกรรม</h2>
+                <p className="mt-1 text-xs text-slate-500 sm:text-sm">สรุปภาพรวมการดำเนินงานทั้งหมด</p>
               </div>
-              <div className="rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-700 p-4 text-white shadow">
-                <p className="text-xs font-medium text-emerald-100">เผยแพร่แล้ว</p>
-                <p className="mt-2 text-3xl font-bold">{dashboardLoading ? '...' : dashboardPublishedEvents.length}</p>
-                <p className="mt-1 text-[11px] text-emerald-200">กิจกรรมที่ดำเนินการ</p>
-              </div>
-              <div className="rounded-xl bg-gradient-to-br from-blue-500 to-blue-700 p-4 text-white shadow">
-                <p className="text-xs font-medium text-blue-100">กำลังจะมาถึง</p>
-                <p className="mt-2 text-3xl font-bold">{dashboardLoading ? '...' : dashboardUpcomingCount}</p>
-                <p className="mt-1 text-[11px] text-blue-200">กิจกรรมที่ยังไม่ถึง</p>
-              </div>
-              <div className="rounded-xl bg-gradient-to-br from-red-500 to-red-600 p-4 text-white shadow">
-                <p className="text-xs font-medium text-red-100">ยกเลิก</p>
-                <p className="mt-2 text-3xl font-bold">{dashboardLoading ? '...' : dashboardCancelledCount}</p>
-                <p className="mt-1 text-[11px] text-red-200">กิจกรรมที่ยกเลิก</p>
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="inline-flex max-w-full items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 shadow-sm">
+                  <CalendarDays className="h-4 w-4 text-slate-400" aria-hidden="true" />
+                  <span className="truncate">{dashboardFilterLabel}</span>
+                </div>
+                <button type="button" className="relative inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 shadow-sm" aria-label="การแจ้งเตือน">
+                  <Bell className="h-4 w-4" aria-hidden="true" />
+                  <span className="absolute -right-0.5 -top-0.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">{upcomingDashboardEvents.length}</span>
+                </button>
+                <button type="button" className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 shadow-sm" aria-label="ผู้ใช้งาน">
+                  <UserRound className="h-4 w-4" aria-hidden="true" />
+                </button>
               </div>
             </div>
 
-            {/* Breakdown by Category */}
-            <div className="mt-6">
-              <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-                <BarChart3 className="h-4 w-4" aria-hidden="true" />
-                สรุปตามประเภทกิจกรรม
-              </h3>
-              <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
-                {statsByColor.map(stat => (
-                  <div key={stat.color} className={cn('flex items-center gap-3 rounded-lg p-3 ring-1', eventColorBgClasses[stat.color] || 'bg-slate-50 ring-slate-200')}>
-                    <div className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-lg font-bold text-white', eventColorDotClasses[stat.color] || 'bg-slate-500')}>
-                      {stat.count}
+            <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_22rem]">
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+                  {[
+                    {
+                      label: 'กิจกรรมทั้งหมด',
+                      value: dashboardSourceEvents.length,
+                      caption: dashboardFilterLabel,
+                      icon: CalendarCheck2,
+                      className: 'from-slate-950 to-slate-800',
+                      iconClassName: 'bg-white/15 text-white',
+                    },
+                    {
+                      label: 'เสร็จสิ้นแล้ว',
+                      value: dashboardCompletedCount,
+                      caption: `${dashboardSourceEvents.length ? Math.round((dashboardCompletedCount / dashboardSourceEvents.length) * 100) : 0}% จากทั้งหมด`,
+                      icon: CheckCircle2,
+                      className: 'from-emerald-500 to-emerald-700',
+                      iconClassName: 'bg-white/15 text-white',
+                    },
+                    {
+                      label: 'กำลังดำเนินการ',
+                      value: dashboardInProgressCount,
+                      caption: 'ยังไม่ถึงวันสิ้นสุด',
+                      icon: Clock,
+                      className: 'from-blue-500 to-blue-700',
+                      iconClassName: 'bg-white/15 text-white',
+                    },
+                    {
+                      label: 'รออนุมัติ',
+                      value: dashboardPendingCount,
+                      caption: 'รองรับสถานะอนาคต',
+                      icon: Hourglass,
+                      className: 'from-amber-400 to-orange-500',
+                      iconClassName: 'bg-white/20 text-white',
+                    },
+                  ].map((card) => {
+                    const Icon = card.icon;
+                    return (
+                      <div key={card.label} className={cn('overflow-hidden rounded-md bg-gradient-to-br p-3 text-white shadow-sm sm:p-4', card.className)}>
+                        <div className="flex items-start justify-between gap-3">
+                          <p className="text-[11px] font-semibold leading-4 text-white/90 sm:text-xs">{card.label}</p>
+                          <span className={cn('inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full sm:h-10 sm:w-10', card.iconClassName)}>
+                            <Icon className="h-4 w-4 sm:h-5 sm:w-5" aria-hidden="true" />
+                          </span>
+                        </div>
+                        <p className="mt-2 text-2xl font-bold tracking-normal sm:text-3xl">{dashboardLoading ? '...' : card.value}</p>
+                        <p className="text-xs text-white/85">รายการ</p>
+                        <p className="mt-3 border-t border-white/10 pt-2 text-[10px] font-medium leading-4 text-white/85 sm:mt-4 sm:text-[11px]">+ {card.caption}</p>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div className="grid gap-4 xl:grid-cols-[0.78fr_1.22fr]">
+                  <section className="rounded-md border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <h3 className="text-sm font-bold text-slate-950">สถานะกิจกรรม</h3>
+                        <p className="mt-1 text-[11px] text-slate-500">จำนวนและสัดส่วนตามสถานะ</p>
+                      </div>
                     </div>
-                    <div className="min-w-0">
-                      <p className={cn('text-sm font-semibold', eventColorTextClasses[stat.color] || 'text-slate-700')}>{stat.label}</p>
-                      <p className="text-[11px] text-slate-400">รายการ</p>
+                    <div className="mt-3 h-52 sm:h-56">
+                      {dashboardSourceEvents.length === 0 ? (
+                        <div className="flex h-full items-center justify-center rounded-md border border-dashed border-slate-300 text-sm text-slate-500">ยังไม่มีข้อมูลสำหรับแสดงกราฟ</div>
+                      ) : (
+                        <ResponsiveContainer width="100%" height="100%">
+                          <PieChart>
+                            <Pie data={statusDistributionData} dataKey="value" nameKey="name" innerRadius="48%" outerRadius="70%" paddingAngle={2}>
+                              {statusDistributionData.map((entry) => (
+                                <Cell key={entry.name} fill={entry.color} />
+                              ))}
+                            </Pie>
+                            <text x="50%" y="45%" textAnchor="middle" dominantBaseline="middle" className="fill-slate-500 text-[11px]">ทั้งหมด</text>
+                            <text x="50%" y="55%" textAnchor="middle" dominantBaseline="middle" className="fill-slate-950 text-2xl font-bold">{dashboardSourceEvents.length}</text>
+                            <Tooltip />
+                          </PieChart>
+                        </ResponsiveContainer>
+                      )}
+                    </div>
+                    <div className="grid gap-2 text-xs">
+                      {statusDistributionData.map((item) => (
+                        <div key={item.name} className="flex items-center justify-between">
+                          <span className="inline-flex items-center gap-2 text-slate-600">
+                            <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: item.color }} />
+                            {item.name}
+                          </span>
+                          <span className="font-semibold text-slate-950">{item.value}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+
+                  <section className="rounded-md border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <h3 className="text-sm font-bold text-slate-950">จำนวนกิจกรรมรายเดือน</h3>
+                        <p className="mt-1 text-[11px] text-slate-500">Bar = กิจกรรมทั้งหมด, Line = เสร็จสิ้น</p>
+                      </div>
+                      <span className="rounded-md border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-600">ปี {dashboardChartYear + 543}</span>
+                    </div>
+                    <div className="mt-4 h-56 sm:h-64">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <ComposedChart data={dashboardAnalytics.monthlyActivityData} margin={{ top: 8, right: 4, bottom: 0, left: -26 }}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
+                          <XAxis dataKey="month" tickLine={false} axisLine={false} fontSize={10} interval={0} />
+                          <YAxis allowDecimals={false} tickLine={false} axisLine={false} fontSize={10} />
+                          <Tooltip />
+                          <Bar dataKey="total" name="กิจกรรมทั้งหมด" fill={dashboardColors.inProgress} radius={[5, 5, 0, 0]} barSize={16} />
+                          <Line type="monotone" dataKey="completed" name="เสร็จสิ้น" stroke={dashboardColors.completed} strokeWidth={3} dot={{ r: 3 }} />
+                        </ComposedChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </section>
+                </div>
+              </div>
+
+              <section className="rounded-md border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <h3 className="text-sm font-bold text-slate-950">กิจกรรมที่กำลังจะมาถึง</h3>
+                  <button type="button" onClick={() => setActiveTab('list')} className="rounded-md bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">ดูทั้งหมด</button>
+                </div>
+                <div className="mt-4 space-y-3">
+                  {upcomingDashboardEvents.length === 0 ? (
+                    <p className="rounded-md border border-dashed border-slate-300 bg-slate-50 px-3 py-6 text-center text-sm text-slate-500">
+                      ยังไม่มีกิจกรรมที่กำลังจะมาถึง
+                    </p>
+                  ) : (
+                    upcomingDashboardEvents.map((item) => {
+                      const eventDate = parseDateKey(item.event_date);
+                      const content = (
+                        <>
+                          <div className="w-12 shrink-0 rounded-md border border-blue-100 bg-blue-50 px-2 py-2 text-center text-blue-700 sm:w-14">
+                            <p className="text-xl font-bold leading-none">{eventDate.getDate()}</p>
+                            <p className="mt-1 text-[11px] font-semibold">{thaiShortMonths[eventDate.getMonth()]}</p>
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <h4 className="line-clamp-2 text-sm font-semibold leading-5 text-slate-950">{item.title}</h4>
+                            <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-slate-500">
+                              <span className="inline-flex items-center gap-1"><Clock className="h-3 w-3" aria-hidden="true" />{formatTime(item)}</span>
+                              <span className="inline-flex items-center gap-1"><MapPin className="h-3 w-3" aria-hidden="true" />{item.location || '-'}</span>
+                            </div>
+                            <span className={cn('mt-2 inline-flex rounded-md px-2 py-1 text-[11px] font-semibold', item.color === 'emerald' ? 'bg-emerald-50 text-emerald-700' : item.color === 'amber' ? 'bg-amber-50 text-amber-700' : item.color === 'red' ? 'bg-red-50 text-red-700' : item.color === 'purple' ? 'bg-purple-50 text-purple-700' : 'bg-blue-50 text-blue-700')}>
+                              {eventColorLabels[item.color || 'slate'] || 'ทั่วไป'}
+                            </span>
+                          </div>
+                        </>
+                      );
+
+                      if (!canViewUpcomingEventDetails) {
+                        return (
+                          <div key={item.id} className="flex gap-3 rounded-md bg-white p-2">
+                            {content}
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <button key={item.id} type="button" onClick={() => setSelectedUpcomingEvent(item)} className="flex w-full gap-3 rounded-md bg-white p-2 text-left transition hover:bg-slate-50">
+                          {content}
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+              </section>
+            </div>
+
+            <div className="grid gap-4 xl:grid-cols-[13rem_minmax(0,1fr)]">
+              <section className="rounded-md border border-slate-200 bg-white p-4 shadow-sm">
+                <div className="flex items-center gap-2">
+                  <ClipboardList className="h-4 w-4 text-slate-500" aria-hidden="true" />
+                  <h3 className="text-sm font-bold text-slate-950">ประเภทกิจกรรม</h3>
+                </div>
+                <div className="mt-4 h-52">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={dashboardAnalytics.activityTypeData} layout="vertical" margin={{ top: 4, right: 10, bottom: 14, left: -6 }}>
+                      <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#E2E8F0" />
+                      <XAxis type="number" allowDecimals={false} tickLine={false} axisLine={false} fontSize={10} />
+                      <YAxis type="category" dataKey="name" width={82} tickLine={false} axisLine={false} fontSize={10} />
+                      <Tooltip />
+                      <Bar dataKey="count" name="จำนวน" radius={[0, 5, 5, 0]} barSize={10}>
+                        {dashboardAnalytics.activityTypeData.map((entry) => (
+                          <Cell key={entry.name} fill={entry.fill} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </section>
+
+              <section className="rounded-md border border-slate-200 bg-white p-4 shadow-sm">
+                <div>
+                  <h3 className="text-sm font-bold text-slate-950">แนวโน้มกิจกรรม</h3>
+                  <p className="mt-1 text-[11px] text-slate-500">ย้อนหลัง 12 เดือน</p>
+                </div>
+                <div className="mt-4 h-52">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={dashboardAnalytics.activityTrendData} margin={{ top: 8, right: 10, bottom: 0, left: -18 }}>
+                      <defs>
+                        <linearGradient id="strategyTrendFill" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor={dashboardColors.inProgress} stopOpacity={0.24} />
+                          <stop offset="95%" stopColor={dashboardColors.inProgress} stopOpacity={0.02} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
+                      <XAxis dataKey="month" tickLine={false} axisLine={false} fontSize={11} />
+                      <YAxis allowDecimals={false} tickLine={false} axisLine={false} fontSize={11} />
+                      <Tooltip />
+                      <Area type="monotone" dataKey="count" name="จำนวนกิจกรรม" stroke={dashboardColors.inProgress} strokeWidth={3} fill="url(#strategyTrendFill)" />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              </section>
+            </div>
+
+            <section className="rounded-md border border-slate-200 bg-white p-4 shadow-sm">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-bold text-slate-950">ปฏิทินความหนาแน่นกิจกรรม</h3>
+                  <p className="mt-1 text-[11px] text-slate-500">ปี {dashboardChartYear + 543}</p>
+                </div>
+                <div className="hidden items-center gap-1.5 text-[11px] text-slate-500 sm:flex">
+                  น้อย
+                  <span className="h-3 w-3 rounded-sm bg-slate-100" />
+                  <span className="h-3 w-3 rounded-sm bg-emerald-200" />
+                  <span className="h-3 w-3 rounded-sm bg-emerald-400" />
+                  <span className="h-3 w-3 rounded-sm bg-emerald-700" />
+                  มาก
+                </div>
+              </div>
+              <div className="mt-4 pb-2">
+                <div className="w-full">
+                  <div className="ml-8 grid gap-1" style={{ gridTemplateColumns: `repeat(${dashboardAnalytics.heatmapWeeks.length}, minmax(0, 1fr))` }}>
+                    {dashboardAnalytics.heatmapMonthLabels.map((label, index) => (
+                      <div key={`${label || 'blank'}-${index}`} className="h-4 overflow-visible text-[10px] font-medium leading-3 text-slate-500">
+                        {label}
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex gap-2">
+                    <div className="grid w-6 shrink-0 grid-rows-7 gap-1 text-[10px] font-medium leading-3 text-slate-500">
+                      {weekdays.map((day) => (
+                        <div key={day} className="flex aspect-square items-center justify-end">
+                          {day}
+                        </div>
+                      ))}
+                    </div>
+                    <div className="grid min-w-0 flex-1 gap-1" style={{ gridTemplateColumns: `repeat(${dashboardAnalytics.heatmapWeeks.length}, minmax(0, 1fr))` }}>
+                      {dashboardAnalytics.heatmapWeeks.map((week, weekIndex) => (
+                        <div key={`week-${weekIndex}`} className="grid grid-rows-7 gap-1">
+                          {week.map((day) => (
+                            <div
+                              key={day.key}
+                              title={day.dateKey ? `${formatThaiDate(day.dateKey)} · ${day.count} รายการ` : undefined}
+                              className={cn(
+                                'aspect-square min-h-2 rounded-[3px]',
+                                !day.dateKey && 'bg-transparent',
+                                day.dateKey && day.count === 0 && 'bg-slate-100',
+                                day.count > 0 && day.count <= Math.ceil(dashboardAnalytics.heatmapMax / 3) && 'bg-emerald-200',
+                                day.count > Math.ceil(dashboardAnalytics.heatmapMax / 3) && day.count <= Math.ceil((dashboardAnalytics.heatmapMax * 2) / 3) && 'bg-emerald-400',
+                                day.count > Math.ceil((dashboardAnalytics.heatmapMax * 2) / 3) && 'bg-emerald-700',
+                              )}
+                            />
+                          ))}
+                        </div>
+                      ))}
                     </div>
                   </div>
-                ))}
+                </div>
               </div>
-            </div>
-
-            {/* Upcoming Next 5 */}
-            <div className="mt-6">
-              <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-                <CalendarDays className="h-4 w-4" aria-hidden="true" />
-                กิจกรรมที่กำลังจะมาถึง
-              </h3>
-              <div className="mt-3 space-y-2">
-                {upcomingDashboardEvents.length === 0 ? (
-                  <p className="rounded-md border border-dashed border-slate-300 bg-slate-50 px-3 py-6 text-center text-sm text-slate-500">
-                    ยังไม่มีกิจกรรมที่กำลังจะมาถึง
-                  </p>
-                ) : (
-                  upcomingDashboardEvents.map((item) => {
-                    const content = (
-                      <>
-                        <div className={cn('h-2 w-2 shrink-0 rounded-full', eventColorDotClasses[item.color || 'slate'] || 'bg-slate-500')} />
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-semibold text-slate-950">{item.title}</p>
-                          <p className="mt-0.5 text-xs text-slate-500">
-                            {formatThaiDate(item.event_date)}
-                            {item.end_date && item.end_date !== item.event_date ? ` - ${formatThaiDate(item.end_date)}` : ''}
-                            {' • '}{formatTime(item)}
-                          </p>
-                        </div>
-                        <span className={cn('shrink-0 rounded-md px-2 py-1 text-[11px] font-semibold text-white', eventColorDotClasses[item.color || 'slate'] || 'bg-slate-500')}>
-                          {eventColorLabels[item.color || 'slate'] || 'ทั่วไป'}
-                        </span>
-                      </>
-                    );
-
-                    if (!canViewUpcomingEventDetails) {
-                      return (
-                        <div key={item.id} className="flex items-center gap-3 rounded-lg border border-slate-100 bg-white p-3 transition hover:shadow-sm">
-                          {content}
-                        </div>
-                      );
-                    }
-
-                    return (
-                      <button
-                        key={item.id}
-                        type="button"
-                        onClick={() => setSelectedUpcomingEvent(item)}
-                        className="flex w-full items-center gap-3 rounded-lg border border-slate-100 bg-white p-3 text-left transition hover:border-brand-200 hover:bg-brand-50/40 hover:shadow-sm"
-                      >
-                        {content}
-                      </button>
-                    );
-                  })
-                )}
+              <div className="mt-3 flex items-center justify-end gap-1.5 text-[11px] text-slate-500 sm:hidden">
+                น้อย
+                <span className="h-3 w-3 rounded-sm bg-slate-100" />
+                <span className="h-3 w-3 rounded-sm bg-emerald-200" />
+                <span className="h-3 w-3 rounded-sm bg-emerald-400" />
+                <span className="h-3 w-3 rounded-sm bg-emerald-700" />
+                มาก
               </div>
-            </div>
+            </section>
+
           </div>
         ) : null}
 
