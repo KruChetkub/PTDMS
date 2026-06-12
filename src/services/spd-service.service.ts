@@ -300,10 +300,25 @@ export async function createSpdServiceTicket(values: CreateSpdServiceTicketValue
 }
 
 export async function notifySpdServiceTicketCreated(ticketId: string): Promise<SpdServiceTelegramNotifyResult> {
+  const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+
+  if (sessionError) {
+    throw sessionError;
+  }
+
+  const accessToken = sessionData.session?.access_token;
+
+  if (!accessToken) {
+    throw new Error('ไม่พบ session สำหรับส่ง Telegram notification');
+  }
+
   const { data, error } = await supabase.functions.invoke('spd-service-telegram-notify', {
     body: {
       event: 'ticket_created',
       ticketId,
+    },
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
     },
   });
 
