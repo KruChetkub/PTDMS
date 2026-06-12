@@ -110,6 +110,23 @@ export type StrategyEvent = {
   updated_at: string;
 };
 
+export type MeetingRoomReservation = {
+  id: string;
+  legacy_id: string | null;
+  reservation_date: string;
+  room: string;
+  start_time: string;
+  end_time: string;
+  booker_name: string;
+  work_group: string;
+  topic: string;
+  created_by: string | null;
+  cancelled_at: string | null;
+  cancelled_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type ItAsset = {
   id: string;
   source_row_number: number | null;
@@ -375,6 +392,27 @@ export type Database = {
           updated_at?: string;
         };
         Update: Partial<Omit<StrategyEvent, 'id' | 'created_at'>>;
+        Relationships: [];
+      };
+      meeting_room_reservations: {
+        Row: MeetingRoomReservation;
+        Insert: {
+          id?: string;
+          legacy_id?: string | null;
+          reservation_date: string;
+          room: string;
+          start_time: string;
+          end_time: string;
+          booker_name: string;
+          work_group: string;
+          topic: string;
+          created_by?: string | null;
+          cancelled_at?: string | null;
+          cancelled_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Omit<MeetingRoomReservation, 'id' | 'created_at'>>;
         Relationships: [];
       };
       it_assets: {

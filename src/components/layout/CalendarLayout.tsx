@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ArrowLeft, CalendarDays, LockKeyhole, LogOut, Menu, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
+import { ArrowLeft, CalendarDays, DoorOpen, LockKeyhole, LogOut, Menu, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../stores/auth.store';
 import { roleLabels } from '../../types/roles';
@@ -10,7 +10,7 @@ export function CalendarLayout() {
   const navigate = useNavigate();
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const { profile, signOut } = useAuthStore();
   const role = profile?.role;
@@ -58,6 +58,7 @@ export function CalendarLayout() {
               <nav className="space-y-1">
                 <NavLink
                   to="/strategy-calendar"
+                  end
                   className={({ isActive }) =>
                     cn(
                       'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition',
@@ -67,6 +68,18 @@ export function CalendarLayout() {
                 >
                   <CalendarDays className="h-4 w-4" aria-hidden="true" />
                   Activity Calendar
+                </NavLink>
+                <NavLink
+                  to="/strategy-calendar/meeting-room-booking"
+                  className={({ isActive }) =>
+                    cn(
+                      'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition',
+                      isActive ? 'bg-emerald-50 text-emerald-700' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900',
+                    )
+                  }
+                >
+                  <DoorOpen className="h-4 w-4" aria-hidden="true" />
+                  จองห้องประชุม กยผ
                 </NavLink>
               </nav>
             </>
@@ -125,6 +138,7 @@ export function CalendarLayout() {
             <nav className={cn('gap-1 overflow-x-auto border-t border-slate-100 px-3 py-2 lg:hidden', isMobileMenuOpen ? 'flex' : 'hidden')}>
               <NavLink
                 to="/strategy-calendar"
+                end
                 onClick={() => setIsMobileMenuOpen(false)}
                 className={({ isActive }) =>
                   cn(
@@ -135,6 +149,19 @@ export function CalendarLayout() {
               >
                 <CalendarDays className="h-4 w-4" aria-hidden="true" />
                 Activity Calendar
+              </NavLink>
+              <NavLink
+                to="/strategy-calendar/meeting-room-booking"
+                onClick={() => setIsMobileMenuOpen(false)}
+                className={({ isActive }) =>
+                  cn(
+                    'inline-flex shrink-0 items-center gap-2 rounded-md px-3 py-2 text-xs font-medium',
+                    isActive ? 'bg-emerald-50 text-emerald-700' : 'text-slate-600 hover:bg-slate-100',
+                  )
+                }
+              >
+                <DoorOpen className="h-4 w-4" aria-hidden="true" />
+                จองห้องประชุม กยผ
               </NavLink>
             </nav>
           </header>

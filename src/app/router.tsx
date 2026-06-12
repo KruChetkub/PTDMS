@@ -23,6 +23,7 @@ import { ReportsPage } from '../features/reports/ReportsPage';
 import { UserManagementPage } from '../features/admin/UserManagementPage';
 import { SecurityPage } from '../features/admin/SecurityPage';
 import { StrategyCalendarPage } from '../features/strategy-calendar/StrategyCalendarPage';
+import { MeetingRoomBookingPage } from '../features/strategy-calendar/MeetingRoomBookingPage';
 import { ItAssetsPage } from '../features/it-assets/ItAssetsPage';
 import { ItAssetsManagePage } from '../features/it-assets/ItAssetsManagePage';
 import { SpdServiceDashboardPage } from '../features/spd-service/SpdServiceDashboardPage';
@@ -88,6 +89,10 @@ export const router = createBrowserRouter([
           {
             path: '/strategy-calendar',
             element: <StrategyCalendarPage />,
+          },
+          {
+            path: '/strategy-calendar/meeting-room-booking',
+            element: <MeetingRoomBookingPage />,
           },
         ],
       },
