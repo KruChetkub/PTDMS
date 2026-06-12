@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { CalendarDays, ChevronRight, RefreshCw, X } from 'lucide-react';
+import { CalendarDays, ChevronRight, RefreshCw, UsersRound, X } from 'lucide-react';
 import {
   Bar,
   BarChart,
@@ -438,26 +438,45 @@ export function DashboardPage() {
         </div>
 
         <div className="rounded-md border border-slate-200 bg-gradient-to-br from-slate-50 via-white to-blue-50/70 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.75)]">
-          <section className="mb-4 rounded-md border border-amber-100 bg-gradient-to-r from-white via-amber-50/70 to-white p-4 shadow-sm ring-1 ring-amber-900/5">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <p className="text-sm font-medium text-slate-500"></p>
-                <h2 className="mt-1 text-lg font-semibold text-slate-900">อายุเฉลี่ยของบุคลากรภายในกองยุทธศาสตร์และแผนงาน</h2>
-              </div>
-              <div className="flex items-center gap-4">
-               {/* เพิ่ม flex items-baseline gap-1 เพื่อบังคับให้เรียงต่อกันแนวนอน */}
-                  <div className="text-right flex items-baseline justify-end gap-1">
-                        <p className="text-4xl font-bold tracking-tight text-slate-950">
-                        {loading ? '...' : summary.demographics.averageAge !== null ? summary.demographics.averageAge.toLocaleString() : '-'}
-                        </p>
-                         <p className="text-xl font-semibold text-slate-1000">ปี</p>
-                   </div>                
-                   <div className="rounded-md bg-amber-100 p-3 text-amber-700">
-                  <CalendarDays className="h-6 w-6" aria-hidden="true" />
+          <div className="mb-4 grid gap-3 xl:grid-cols-2">
+            <section className="rounded-md border border-blue-100 bg-gradient-to-r from-white via-blue-50/70 to-white p-4 shadow-sm ring-1 ring-blue-900/5">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h2 className="text-lg font-semibold text-slate-900">จำนวนบุคลากรทั้งหมด</h2>
+                </div>
+                <div className="flex items-center gap-4">
+                  <div className="flex items-baseline justify-end gap-1 text-right">
+                    <p className="text-4xl font-bold tracking-tight text-slate-950">
+                      {loading ? '...' : summary.personnelCount.toLocaleString()}
+                    </p>
+                    <p className="text-xl font-semibold text-slate-1000">คน</p>
+                  </div>
+                  <div className="rounded-md bg-blue-100 p-3 text-blue-700">
+                    <UsersRound className="h-6 w-6" aria-hidden="true" />
+                  </div>
                 </div>
               </div>
-            </div>
-          </section>
+            </section>
+
+            <section className="rounded-md border border-amber-100 bg-gradient-to-r from-white via-amber-50/70 to-white p-4 shadow-sm ring-1 ring-amber-900/5">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h2 className="text-lg font-semibold text-slate-900">อายุเฉลี่ยของบุคลากรภายในกองยุทธศาสตร์และแผนงาน</h2>
+                </div>
+                <div className="flex items-center gap-4">
+                  <div className="flex items-baseline justify-end gap-1 text-right">
+                    <p className="text-4xl font-bold tracking-tight text-slate-950">
+                      {loading ? '...' : summary.demographics.averageAge !== null ? summary.demographics.averageAge.toLocaleString() : '-'}
+                    </p>
+                    <p className="text-xl font-semibold text-slate-1000">ปี</p>
+                  </div>
+                  <div className="rounded-md bg-amber-100 p-3 text-amber-700">
+                    <CalendarDays className="h-6 w-6" aria-hidden="true" />
+                  </div>
+                </div>
+              </div>
+            </section>
+          </div>
 
           <div className="grid gap-4 xl:grid-cols-12">
           <section ref={genderChartRef} className={`${demographicCardClass} xl:col-span-3`}>
