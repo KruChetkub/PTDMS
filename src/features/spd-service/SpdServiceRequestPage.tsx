@@ -29,7 +29,6 @@ export function SpdServiceRequestPage() {
   const [categories, setCategories] = useState<SpdServiceCategory[]>([]);
   const [requesterName, setRequesterName] = useState(profile?.full_name || '');
   const [requesterDepartment, setRequesterDepartment] = useState(profile?.work_group || profile?.department || '');
-  const [requesterPhone, setRequesterPhone] = useState('');
   const [categoryId, setCategoryId] = useState('');
   const [urgency, setUrgency] = useState<SpdServiceUrgency>('MEDIUM');
   const [subject, setSubject] = useState('');
@@ -76,7 +75,7 @@ export function SpdServiceRequestPage() {
       return;
     }
 
-    if (!requesterName.trim() || !requesterPhone.trim() || !selectedCategory || !finalSubject || !description.trim()) {
+    if (!requesterName.trim() || !selectedCategory || !finalSubject || !description.trim()) {
       setError('กรุณากรอกข้อมูลที่จำเป็นให้ครบถ้วน');
       return;
     }
@@ -90,7 +89,7 @@ export function SpdServiceRequestPage() {
         requesterId: profile.user_id,
         requesterName: requesterName.trim(),
         requesterDepartment: requesterDepartment.trim() || null,
-        requesterPhone: requesterPhone.trim(),
+        requesterPhone: '-',
         categoryId: selectedCategory.id,
         categoryName: selectedCategory.name,
         urgency,
@@ -180,17 +179,6 @@ export function SpdServiceRequestPage() {
                 onChange={(event) => setRequesterDepartment(event.target.value)}
                 className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
                 placeholder="หน่วยงานหรือกลุ่มงาน"
-              />
-            </label>
-
-            <label className="block">
-              <span className="text-sm font-medium text-slate-700">เบอร์โทรศัพท์</span>
-              <input
-                value={requesterPhone}
-                onChange={(event) => setRequesterPhone(event.target.value)}
-                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
-                placeholder="เบอร์ที่ติดต่อกลับได้"
-                inputMode="tel"
               />
             </label>
 
