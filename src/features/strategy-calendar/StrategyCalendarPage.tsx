@@ -1557,13 +1557,13 @@ export function StrategyCalendarPage() {
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
         <section className="rounded-md border border-slate-200 bg-white shadow-sm">
-          <div className="flex flex-col gap-4 border-b border-slate-100 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center justify-between gap-3 border-b border-slate-100 p-4">
             <div>
-              <div className="inline-flex items-center gap-2 rounded-md bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700">
+              <div className="hidden items-center gap-2 rounded-md bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 sm:inline-flex">
                 <CalendarDays className="h-3.5 w-3.5" aria-hidden="true" />
                 Thailand Calendar
               </div>
-              <h2 className="mt-3 text-xl font-semibold tracking-normal text-slate-950">{monthLabel}</h2>
+              <h2 className="text-xl font-semibold tracking-normal text-slate-950 sm:mt-3">{monthLabel}</h2>
             </div>
             <div className="flex items-center gap-2">
               <button

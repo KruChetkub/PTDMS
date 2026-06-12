@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ArrowLeft, CalendarDays, DoorOpen, LockKeyhole, LogOut, Menu, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
+import { ArrowLeft, CalendarDays, DoorOpen, LockKeyhole, LogOut, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../stores/auth.store';
 import { roleLabels } from '../../types/roles';
@@ -11,7 +11,6 @@ export function CalendarLayout() {
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const { profile, signOut } = useAuthStore();
   const role = profile?.role;
 
@@ -99,15 +98,6 @@ export function CalendarLayout() {
                 >
                   {isSidebarOpen ? <PanelLeftClose className="h-4 w-4" aria-hidden="true" /> : <PanelLeftOpen className="h-4 w-4" aria-hidden="true" />}
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setIsMobileMenuOpen((current) => !current)}
-                  className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 lg:hidden"
-                  aria-label={isMobileMenuOpen ? 'ปิดเมนู' : 'เปิดเมนู'}
-                  aria-expanded={isMobileMenuOpen}
-                >
-                  <Menu className="h-4 w-4" aria-hidden="true" />
-                </button>
                 <div className="min-w-0">
                 <button
                   type="button"
@@ -135,11 +125,10 @@ export function CalendarLayout() {
               </button>
             </div>
 
-            <nav className={cn('gap-1 overflow-x-auto border-t border-slate-100 px-3 py-2 lg:hidden', isMobileMenuOpen ? 'flex' : 'hidden')}>
+            <nav className="flex gap-1 overflow-x-auto border-t border-slate-100 px-3 py-2 lg:hidden">
               <NavLink
                 to="/strategy-calendar"
                 end
-                onClick={() => setIsMobileMenuOpen(false)}
                 className={({ isActive }) =>
                   cn(
                     'inline-flex shrink-0 items-center gap-2 rounded-md px-3 py-2 text-xs font-medium',
@@ -152,7 +141,6 @@ export function CalendarLayout() {
               </NavLink>
               <NavLink
                 to="/strategy-calendar/meeting-room-booking"
-                onClick={() => setIsMobileMenuOpen(false)}
                 className={({ isActive }) =>
                   cn(
                     'inline-flex shrink-0 items-center gap-2 rounded-md px-3 py-2 text-xs font-medium',
