@@ -16,7 +16,7 @@ export const defaultSiteContent: SiteContentState = {
     primaryActionLabel: 'เข้าสู่ระบบ PTDMS',
     primaryActionHref: '/login',
     secondaryActionLabel: 'ดูแผนระดับต่าง ๆ',
-    secondaryActionHref: '#plan-levels',
+    secondaryActionHref: 'plan-levels',
     publishWindow: '15 มิ.ย. 2569 - 30 มิ.ย. 2569',
     status: 'published',
   },

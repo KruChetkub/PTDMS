@@ -23,7 +23,7 @@ export const homeHeroBanner: HomeHeroBanner = {
   imageOverlayOpacity: 58,
   actions: [
     { label: 'เข้าสู่ระบบ PTDMS', href: '/login', variant: 'primary' },
-    { label: 'ดูแผนระดับต่าง ๆ', href: '#plan-levels', variant: 'secondary' },
+    { label: 'ดูแผนระดับต่าง ๆ', href: 'plan-levels', variant: 'secondary' },
   ],
 };
 
