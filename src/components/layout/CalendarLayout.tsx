@@ -19,11 +19,11 @@ export function CalendarLayout() {
       setIsLoggingOut(true);
       await signOut();
       setIsLogoutModalOpen(false);
-      navigate('/login', { replace: true });
+      navigate('/', { replace: true });
     } catch (error) {
       console.error('Logout failed:', error);
       setIsLogoutModalOpen(false);
-      navigate('/login', { replace: true });
+      navigate('/', { replace: true });
     } finally {
       setIsLoggingOut(false);
     }

@@ -1,4 +1,4 @@
-import { createBrowserRouter, Navigate } from 'react-router-dom';
+import { createBrowserRouter } from 'react-router-dom';
 import { ProtectedRoute } from '../components/auth/ProtectedRoute';
 import { AppLayout } from '../components/layout/AppLayout';
 import { CalendarLayout } from '../components/layout/CalendarLayout';
@@ -7,6 +7,7 @@ import { ForgotPasswordPage } from '../features/auth/pages/ForgotPasswordPage';
 import { ResetPasswordPage } from '../features/auth/pages/ResetPasswordPage';
 import { AuthCallbackPage } from '../features/auth/pages/AuthCallbackPage';
 import { PendingApprovalPage } from '../features/auth/pages/PendingApprovalPage';
+import { PublicHomePage } from '../features/public-home/pages/PublicHomePage';
 import { PortalPage } from '../features/portal/PortalPage';
 import { DashboardPage } from '../features/dashboard/DashboardPage';
 import { AnalyticsPage } from '../features/analytics/AnalyticsPage';
@@ -26,6 +27,7 @@ import { StrategyCalendarPage } from '../features/strategy-calendar/StrategyCale
 import { MeetingRoomBookingPage } from '../features/strategy-calendar/MeetingRoomBookingPage';
 import { ItAssetsPage } from '../features/it-assets/ItAssetsPage';
 import { ItAssetsManagePage } from '../features/it-assets/ItAssetsManagePage';
+import { SiteManagerPage } from '../features/site-manager/pages/SiteManagerPage';
 import { SpdServiceDashboardPage } from '../features/spd-service/SpdServiceDashboardPage';
 import { SpdServiceMyRequestsPage } from '../features/spd-service/SpdServiceMyRequestsPage';
 import { SpdServiceRequestPage } from '../features/spd-service/SpdServiceRequestPage';
@@ -37,7 +39,11 @@ import { NotFoundPage } from '../features/system/NotFoundPage';
 export const router = createBrowserRouter([
   {
     path: '/',
-    element: <Navigate to="/portal" replace />,
+    element: <PublicHomePage />,
+  },
+  {
+    path: '/home',
+    element: <PublicHomePage />,
   },
   {
     element: <GuestRoute />,
@@ -194,6 +200,15 @@ export const router = createBrowserRouter([
       {
         path: '/it-assets/manage',
         element: <ItAssetsManagePage />,
+      },
+      {
+        element: <AppLayout />,
+        children: [
+          {
+            path: '/site-manager',
+            element: <SiteManagerPage />,
+          },
+        ],
       },
     ],
   },

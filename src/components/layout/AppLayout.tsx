@@ -9,6 +9,7 @@ import {
   LayoutDashboard,
   LockKeyhole,
   LogOut,
+  Megaphone,
   Shield,
   Sparkles,
   UserCog,
@@ -85,6 +86,12 @@ const navItems: NavItem[] = [
     roles: ['super_admin', 'admin', 'executive', 'hr', 'personnel'],
   },
   {
+    to: '/site-manager',
+    label: 'จัดการหน้าเว็บไซต์',
+    icon: Megaphone,
+    roles: ['super_admin', 'admin'],
+  },
+  {
     to: '/reports',
     label: 'Reports',
     icon: Activity,
@@ -117,12 +124,11 @@ export function AppLayout() {
       setIsLoggingOut(true);
       await signOut();
       setIsLogoutModalOpen(false);
-      navigate('/login', { replace: true });
+      navigate('/', { replace: true });
     } catch (error) {
       console.error('Logout failed:', error);
       setIsLogoutModalOpen(false);
-      // Even if it fails, we should probably force redirect to login
-      navigate('/login', { replace: true });
+      navigate('/', { replace: true });
     } finally {
       setIsLoggingOut(false);
     }

@@ -89,6 +89,32 @@ export type AuditLog = {
   created_at: string;
 };
 
+export type SiteContentStatus = 'published' | 'draft' | 'scheduled';
+
+export type SiteContentDocument = {
+  id: string;
+  content_key: string;
+  title: string;
+  content: Record<string, unknown>;
+  status: SiteContentStatus;
+  published_at: string | null;
+  created_by: string | null;
+  updated_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type SiteContentHistory = {
+  id: string;
+  document_id: string | null;
+  content_key: string;
+  content: Record<string, unknown>;
+  status: SiteContentStatus;
+  action: string;
+  actor_id: string | null;
+  created_at: string;
+};
+
 export type StrategyEventStatus = 'draft' | 'published' | 'cancelled';
 
 export type StrategyEvent = {
@@ -371,6 +397,38 @@ export type Database = {
         Update: Partial<Omit<AuditLog, 'id'>>;
         Relationships: [];
       };
+      site_content_documents: {
+        Row: SiteContentDocument;
+        Insert: {
+          id?: string;
+          content_key: string;
+          title?: string;
+          content?: Record<string, unknown>;
+          status?: SiteContentStatus;
+          published_at?: string | null;
+          created_by?: string | null;
+          updated_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Omit<SiteContentDocument, 'id' | 'created_at'>>;
+        Relationships: [];
+      };
+      site_content_history: {
+        Row: SiteContentHistory;
+        Insert: {
+          id?: string;
+          document_id?: string | null;
+          content_key: string;
+          content?: Record<string, unknown>;
+          status: SiteContentStatus;
+          action: string;
+          actor_id?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<Omit<SiteContentHistory, 'id' | 'created_at'>>;
+        Relationships: [];
+      };
       strategy_events: {
         Row: StrategyEvent;
         Insert: {
@@ -611,6 +669,7 @@ export type Database = {
     Enums: {
       user_role: UserRole;
       profile_status: ProfileStatus;
+      site_content_status: SiteContentStatus;
       spd_service_ticket_status: SpdServiceTicketStatus;
       spd_service_urgency: SpdServiceUrgency;
     };

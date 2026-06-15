@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ArrowRight, CalendarDays, GraduationCap, Headphones, LogOut, Monitor, ShieldCheck, Sparkles } from 'lucide-react';
+import { ArrowRight, CalendarDays, GraduationCap, Headphones, LogOut, Megaphone, Monitor, ShieldCheck, Sparkles } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ConfirmModal } from '../../components/ui/ConfirmModal';
 import { useAuthStore } from '../../stores/auth.store';
@@ -66,12 +66,25 @@ const serviceSystems: PortalCard[] = [
   },
 ];
 
+const adminSystems: PortalCard[] = [
+  {
+    title: 'PTDMS Site Manager',
+    shortTitle: 'Site Manager',
+    description: 'จัดการหน้า Home ป้ายประชาสัมพันธ์ ข่าวสาร และหมวดเอกสารสำหรับเว็บไซต์',
+    to: '/site-manager',
+    icon: Megaphone,
+    roles: ['super_admin', 'admin'],
+    accent: 'from-cyan-700 to-emerald-500',
+    meta: 'Public Content',
+  },
+];
+
 export function PortalPage() {
   const navigate = useNavigate();
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const { profile, signOut } = useAuthStore();
-  const visibleSystems = [...coreSystems, ...assetSystems, ...serviceSystems].filter((system) => canAccess(profile?.role, system.roles));
+  const visibleSystems = [...coreSystems, ...assetSystems, ...serviceSystems, ...adminSystems].filter((system) => canAccess(profile?.role, system.roles));
   const getSystemPath = (system: PortalCard) => {
     if (system.to === '/dashboard' && profile?.role === 'personnel') {
       return '/profile';
@@ -89,11 +102,11 @@ export function PortalPage() {
       setIsLoggingOut(true);
       await signOut();
       setIsLogoutModalOpen(false);
-      navigate('/login', { replace: true });
+      navigate('/', { replace: true });
     } catch (error) {
       console.error('Logout failed:', error);
       setIsLogoutModalOpen(false);
-      navigate('/login', { replace: true });
+      navigate('/', { replace: true });
     } finally {
       setIsLoggingOut(false);
     }
