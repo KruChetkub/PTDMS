@@ -29,15 +29,6 @@ export function HomeHeroBanner({ banner }: HomeHeroBannerProps) {
         </div>
       </div>
 
-      <div className="relative mx-auto flex max-w-7xl flex-col justify-end px-4 pb-6 pt-8 sm:hidden">
-        <div className="max-w-4xl">
-          <h1 className="max-w-4xl text-3xl font-semibold leading-tight tracking-normal">
-            {banner.title}
-          </h1>
-          <p className="mt-4 max-w-2xl text-sm leading-6 text-slate-100">{banner.description}</p>
-
-        </div>
-      </div>
     </section>
   );
 }

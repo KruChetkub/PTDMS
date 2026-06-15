@@ -58,17 +58,9 @@ export function SiteManagerPage() {
         description="พื้นที่สำหรับ SuperAdmin และ Admin จัดการ Home banner ข่าวประชาสัมพันธ์ ปุ่มนำทาง และหมวดเอกสารของหน้า public"
       />
 
-      <SiteManagerSummaryGrid items={siteManagerSummaryItems} />
-
       {draftMessage ? (
         <div className="rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">
           {draftMessage}
-        </div>
-      ) : null}
-
-      {loadingSource ? (
-        <div className="rounded-md border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600">
-          แหล่งข้อมูลปัจจุบัน: {loadingSource === 'supabase' ? 'Supabase' : 'localStorage fallback'}
         </div>
       ) : null}
 
@@ -188,6 +180,13 @@ export function SiteManagerPage() {
 
         <SiteManagerEditableAreas areas={siteManagerEditableAreas} />
         <SiteManagerWorkflowPanel />
+        <SiteManagerSummaryGrid items={siteManagerSummaryItems} />
+
+        {loadingSource ? (
+          <div className="rounded-md border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600">
+            แหล่งข้อมูลปัจจุบัน: {loadingSource === 'supabase' ? 'Supabase' : 'localStorage fallback'}
+          </div>
+        ) : null}
       </div>
     </div>
   );
