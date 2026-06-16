@@ -16,7 +16,7 @@ const quickNavToneClass: Record<string, string> = {
 
 export function HomeQuickNav({ items }: HomeQuickNavProps) {
   return (
-    <section className="border-b border-slate-200 bg-white">
+    <section className="border-b border-slate-200 bg-white lg:hidden">
       <div className="mx-auto max-w-7xl px-4 py-4 sm:px-6 lg:px-8">
         <div className="flex gap-3 overflow-x-auto pb-1">
           {items.map((item) => {
