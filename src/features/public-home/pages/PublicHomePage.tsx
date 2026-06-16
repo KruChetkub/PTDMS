@@ -2,16 +2,16 @@ import { Activity, FileText, HeartPulse, Landmark, Puzzle, ShieldCheck, Target, 
 import { HomeFaqSection } from '../components/HomeFaqSection';
 import { HomeFooter } from '../components/HomeFooter';
 import { HomeHeroBanner } from '../components/HomeHeroBanner';
+import { HomeMobileSectionLauncher } from '../components/HomeMobileSectionLauncher';
+import { HomePlanLevelsBanner } from '../components/HomePlanLevelsBanner';
 import { HomeNewsSection } from '../components/HomeNewsSection';
 import { HomePlanSections } from '../components/HomePlanSections';
-import { HomeQuickNav } from '../components/HomeQuickNav';
 import { PublicHomeHeader } from '../components/PublicHomeHeader';
 import { usePublishedSiteContent } from '../../site-content/hooks/useSiteContent';
 import {
   homeFaqItems,
   homeHeroBanner,
   homePlanSections,
-  homeQuickNavItems,
 } from '../data/publicHome.mock';
 import type {
   SiteContentPlanCard,
@@ -90,10 +90,15 @@ export function PublicHomePage() {
       <PublicHomeHeader logoUrl={siteContent.brandSettings.logoUrl} siteName={siteContent.brandSettings.siteName} />
       <main>
         <HomeHeroBanner banner={heroBanner} />
-        <HomeQuickNav items={homeQuickNavItems} />
-        <HomePlanSections sections={planSections} logoUrl={siteContent.brandSettings.logoUrl} />
-        <HomeNewsSection news={visibleNews} />
-        <HomeFaqSection faqs={homeFaqItems} />
+        <div className="bg-slate-50 px-4 pt-6 lg:hidden">
+          <HomePlanLevelsBanner logoUrl={siteContent.brandSettings.logoUrl} />
+        </div>
+        <HomeMobileSectionLauncher planSections={planSections} news={visibleNews} faqs={homeFaqItems} />
+        <div className="hidden lg:block">
+          <HomePlanSections sections={planSections} logoUrl={siteContent.brandSettings.logoUrl} />
+          <HomeNewsSection news={visibleNews} />
+          <HomeFaqSection faqs={homeFaqItems} />
+        </div>
       </main>
       <HomeFooter />
     </div>
