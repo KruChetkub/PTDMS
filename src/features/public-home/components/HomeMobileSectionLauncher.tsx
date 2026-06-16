@@ -43,12 +43,30 @@ const mobileSectionToneClass: Record<string, { icon: string; panel: string; text
   },
 };
 
+const mobileSectionShortLabels: Record<string, string> = {
+  'plan-levels': 'แผนระดับ',
+  'disease-control-plan': 'แผนควบคุมโรค',
+  'annual-guidelines': 'แนวทางประจำปี',
+  'risk-management': 'บริหารความเสี่ยง',
+  'executive-policy': 'นโยบายผู้บริหาร',
+  'public-news': 'ข่าวล่าสุด',
+  'public-faq': 'คำถามที่พบบ่อย',
+};
+
+const twoLineClampStyle = {
+  display: '-webkit-box',
+  WebkitLineClamp: 2,
+  WebkitBoxOrient: 'vertical',
+  overflow: 'hidden',
+} as const;
+
 export function HomeMobileSectionLauncher({ planSections, news, faqs }: HomeMobileSectionLauncherProps) {
   const [activeSectionId, setActiveSectionId] = useState<MobileSectionId | null>(null);
   const sectionItems = [
     ...planSections.map((section) => ({
       id: section.id,
       label: section.title,
+      shortLabel: mobileSectionShortLabels[section.id] || section.title,
       tone: section.tone,
       icon: section.cards[0]?.icon,
       type: 'plan' as const,
@@ -57,6 +75,7 @@ export function HomeMobileSectionLauncher({ planSections, news, faqs }: HomeMobi
     {
       id: 'public-news',
       label: 'ข่าวประชาสัมพันธ์ล่าสุด',
+      shortLabel: mobileSectionShortLabels['public-news'],
       tone: 'slate',
       icon: Newspaper,
       type: 'news' as const,
@@ -65,6 +84,7 @@ export function HomeMobileSectionLauncher({ planSections, news, faqs }: HomeMobi
     {
       id: 'public-faq',
       label: 'คำถามที่พบบ่อย',
+      shortLabel: mobileSectionShortLabels['public-faq'],
       tone: 'slate',
       icon: CircleHelp,
       type: 'faq' as const,
@@ -95,7 +115,9 @@ export function HomeMobileSectionLauncher({ planSections, news, faqs }: HomeMobi
                 <span className={`flex h-11 w-11 items-center justify-center rounded-2xl ${tone.icon}`}>
                   <Icon className="h-5 w-5" aria-hidden="true" />
                 </span>
-                <span className="text-[11px] font-semibold leading-4 text-slate-800">{item.label}</span>
+                <span className="text-[11px] font-semibold leading-4 text-slate-800" style={twoLineClampStyle} title={item.label}>
+                  {item.shortLabel}
+                </span>
               </button>
             );
           })}
@@ -104,7 +126,11 @@ export function HomeMobileSectionLauncher({ planSections, news, faqs }: HomeMobi
         {activeSection ? (
           <div className={`mt-4 rounded-md border p-4 ${mobileSectionToneClass[activeSection.tone]?.panel || mobileSectionToneClass.slate.panel}`}>
             <div className="flex items-center justify-between gap-3">
-              <h2 className={`text-base font-semibold tracking-normal ${mobileSectionToneClass[activeSection.tone]?.text || 'text-slate-800'}`}>
+              <h2
+                className={`text-base font-semibold tracking-normal ${mobileSectionToneClass[activeSection.tone]?.text || 'text-slate-800'}`}
+                style={twoLineClampStyle}
+                title={activeSection.label}
+              >
                 {activeSection.label}
               </h2>
               <ChevronDown className="h-5 w-5 rotate-180 text-slate-500" aria-hidden="true" />
