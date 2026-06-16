@@ -73,8 +73,8 @@ export function SiteManagerContentEditor({
         </div>
       </div>
 
-      <div className="grid gap-6 p-5 xl:grid-cols-2">
-        <div className="space-y-4">
+      <div className="space-y-6 p-5">
+        <div className="space-y-4 rounded-md border border-slate-200 bg-slate-50 p-4 sm:p-5">
           <div>
             <h3 className="text-base font-semibold tracking-normal text-slate-950">ป้ายประชาสัมพันธ์หน้าแรก</h3>
             <p className="mt-1 text-sm text-slate-500">ข้อมูลนี้ใช้กับ hero banner เต็มจอของหน้า Home</p>
@@ -162,8 +162,8 @@ export function SiteManagerContentEditor({
           </div>
         </div>
 
-        <div className="space-y-4">
-          <div className="flex items-start justify-between gap-3">
+        <div className="space-y-4 rounded-md border border-slate-200 bg-slate-50 p-4 sm:p-5">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <h3 className="text-base font-semibold tracking-normal text-slate-950">ข่าวประชาสัมพันธ์</h3>
               <p className="mt-1 text-sm text-slate-500">เตรียมโครงสำหรับเพิ่มประกาศและหนังสือประชาสัมพันธ์</p>
@@ -171,7 +171,7 @@ export function SiteManagerContentEditor({
             <button
               type="button"
               onClick={addNewsDraft}
-              className="rounded-md border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+              className="inline-flex w-full items-center justify-center rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 sm:w-fit"
             >
               เพิ่มข่าว
             </button>

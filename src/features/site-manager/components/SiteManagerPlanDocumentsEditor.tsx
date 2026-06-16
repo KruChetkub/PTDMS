@@ -1,5 +1,9 @@
-import { FilePlus, Upload } from 'lucide-react';
-import type { SiteContentPlanCard, SiteContentStatus } from '../../site-content/types/siteContent.types';
+import { ArrowDown, ArrowUp, FilePlus, Trash2, Upload } from 'lucide-react';
+import type {
+  SiteContentPlanCard,
+  SiteContentPlanIconKey,
+  SiteContentStatus,
+} from '../../site-content/types/siteContent.types';
 
 type SiteManagerPlanDocumentsEditorProps = {
   title: string;
@@ -12,6 +16,27 @@ type SiteManagerPlanDocumentsEditorProps = {
 };
 
 const statusOptions: SiteContentStatus[] = ['published', 'draft', 'scheduled'];
+const iconOptions: Array<{ value: SiteContentPlanIconKey; label: string }> = [
+  { value: 'landmark', label: 'อาคาร/ยุทธศาสตร์' },
+  { value: 'goal', label: 'เป้าหมาย' },
+  { value: 'puzzle', label: 'แผนบูรณาการ' },
+  { value: 'growth', label: 'การเติบโต' },
+  { value: 'heart', label: 'สุขภาพ' },
+  { value: 'health', label: 'สาธารณสุข' },
+  { value: 'shield-users', label: 'นโยบาย/ผู้บริหาร' },
+  { value: 'file', label: 'เอกสาร' },
+];
+const colorOptions = [
+  { value: 'bg-blue-600', label: 'น้ำเงิน' },
+  { value: 'bg-teal-600', label: 'เขียวอมฟ้า' },
+  { value: 'bg-emerald-600', label: 'เขียว' },
+  { value: 'bg-rose-500', label: 'ชมพู' },
+  { value: 'bg-sky-600', label: 'ฟ้า' },
+  { value: 'bg-violet-600', label: 'ม่วง' },
+  { value: 'bg-orange-500', label: 'ส้ม' },
+  { value: 'bg-red-500', label: 'แดง' },
+  { value: 'bg-amber-500', label: 'เหลือง' },
+];
 
 export function SiteManagerPlanDocumentsEditor({
   title,
@@ -26,6 +51,19 @@ export function SiteManagerPlanDocumentsEditor({
     onPlanCardsChange(planCards.map((card, cardIndex) => (cardIndex === index ? { ...card, [field]: value } : card)));
   };
 
+  const movePlanCard = (index: number, direction: -1 | 1) => {
+    const targetIndex = index + direction;
+    if (targetIndex < 0 || targetIndex >= planCards.length) return;
+
+    const nextPlanCards = [...planCards];
+    [nextPlanCards[index], nextPlanCards[targetIndex]] = [nextPlanCards[targetIndex], nextPlanCards[index]];
+    onPlanCardsChange(nextPlanCards);
+  };
+
+  const removePlanCard = (index: number) => {
+    onPlanCardsChange(planCards.filter((_, cardIndex) => cardIndex !== index));
+  };
+
   const addPlanCard = () => {
     onPlanCardsChange([
       ...planCards,
@@ -38,7 +76,7 @@ export function SiteManagerPlanDocumentsEditor({
         actionLabel: 'รายละเอียด',
         pdfUrl: '',
         uploadedFileName: '',
-        status: 'draft',
+        status: 'published',
       },
     ]);
   };
@@ -85,6 +123,37 @@ export function SiteManagerPlanDocumentsEditor({
       <div className="grid gap-4 p-5">
         {planCards.map((card, index) => (
           <article key={`${card.title}-${index}`} className="rounded-md border border-slate-200 bg-slate-50 p-4">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+              <span className="text-sm font-semibold text-slate-700">รายการที่ {index + 1}</span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => movePlanCard(index, -1)}
+                  disabled={index === 0}
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                  title="เลื่อนขึ้น"
+                >
+                  <ArrowUp className="h-4 w-4" aria-hidden="true" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => movePlanCard(index, 1)}
+                  disabled={index === planCards.length - 1}
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                  title="เลื่อนลง"
+                >
+                  <ArrowDown className="h-4 w-4" aria-hidden="true" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => removePlanCard(index)}
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-red-200 bg-white text-red-600 transition hover:bg-red-50"
+                  title="ลบรายการ"
+                >
+                  <Trash2 className="h-4 w-4" aria-hidden="true" />
+                </button>
+              </div>
+            </div>
             <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
               <div className="grid gap-3">
                 <label className="block">
@@ -128,6 +197,34 @@ export function SiteManagerPlanDocumentsEditor({
 
               <div className="grid gap-3">
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
+                  <label className="block">
+                    <span className="text-sm font-medium text-slate-700">ไอคอน</span>
+                    <select
+                      className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"
+                      value={card.iconKey}
+                      onChange={(event) => updatePlanCard(index, 'iconKey', event.target.value as SiteContentPlanIconKey)}
+                    >
+                      {iconOptions.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="block">
+                    <span className="text-sm font-medium text-slate-700">สีการ์ด</span>
+                    <select
+                      className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"
+                      value={card.color}
+                      onChange={(event) => updatePlanCard(index, 'color', event.target.value)}
+                    >
+                      {colorOptions.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
                   <label className="block">
                     <span className="text-sm font-medium text-slate-700">ข้อความปุ่ม</span>
                     <input

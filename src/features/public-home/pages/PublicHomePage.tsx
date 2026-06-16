@@ -13,7 +13,11 @@ import {
   homePlanSections,
   homeQuickNavItems,
 } from '../data/publicHome.mock';
-import type { SiteContentPlanIconKey } from '../../site-content/types/siteContent.types';
+import type {
+  SiteContentPlanCard,
+  SiteContentPlanIconKey,
+  SiteContentState,
+} from '../../site-content/types/siteContent.types';
 
 const planIconMap = {
   landmark: Landmark,
@@ -25,6 +29,28 @@ const planIconMap = {
   'shield-users': ShieldCheck,
   file: FileText,
 } satisfies Record<SiteContentPlanIconKey, typeof Landmark>;
+
+const planSectionCardSelectors: Record<string, (content: SiteContentState) => SiteContentPlanCard[]> = {
+  'plan-levels': (content) => content.planLevelCards,
+  'disease-control-plan': (content) => content.diseaseControlPlanCards,
+  'annual-guidelines': (content) => content.annualGuidelineCards,
+  'risk-management': (content) => content.riskManagementPlanCards,
+  'executive-policy': (content) => content.executivePolicyCards,
+};
+
+function mapVisiblePlanCards(cards: SiteContentPlanCard[]) {
+  return cards
+    .filter((card) => card.status !== 'scheduled')
+    .map((card) => ({
+      title: card.title,
+      subtitle: card.subtitle,
+      description: card.description,
+      icon: planIconMap[card.iconKey] || UsersRound,
+      color: card.color,
+      actionLabel: card.actionLabel,
+      pdfUrl: card.pdfUrl,
+    }));
+}
 
 export function PublicHomePage() {
   const siteContent = usePublishedSiteContent();
@@ -49,84 +75,15 @@ export function PublicHomePage() {
     ],
   };
   const visibleNews = siteContent.newsItems.filter((item) => item.status === 'published');
-  const planSections = homePlanSections.map((section) =>
-    section.id === 'plan-levels'
-      ? {
-          ...section,
-          cards: siteContent.planLevelCards
-            .filter((card) => card.status === 'published')
-            .map((card) => ({
-              title: card.title,
-              subtitle: card.subtitle,
-              description: card.description,
-              icon: planIconMap[card.iconKey] || UsersRound,
-              color: card.color,
-              actionLabel: card.actionLabel,
-              pdfUrl: card.pdfUrl,
-            })),
-        }
-      : section.id === 'disease-control-plan'
-        ? {
-            ...section,
-            cards: siteContent.diseaseControlPlanCards
-              .filter((card) => card.status === 'published')
-              .map((card) => ({
-                title: card.title,
-                subtitle: card.subtitle,
-                description: card.description,
-                icon: planIconMap[card.iconKey] || UsersRound,
-                color: card.color,
-                actionLabel: card.actionLabel,
-                pdfUrl: card.pdfUrl,
-              })),
-          }
-        : section.id === 'annual-guidelines'
-          ? {
-              ...section,
-              cards: siteContent.annualGuidelineCards
-                .filter((card) => card.status === 'published')
-                .map((card) => ({
-                  title: card.title,
-                  subtitle: card.subtitle,
-                  description: card.description,
-                  icon: planIconMap[card.iconKey] || UsersRound,
-                  color: card.color,
-                  actionLabel: card.actionLabel,
-                  pdfUrl: card.pdfUrl,
-                })),
-            }
-          : section.id === 'risk-management'
-            ? {
-                ...section,
-                cards: siteContent.riskManagementPlanCards
-                  .filter((card) => card.status === 'published')
-                  .map((card) => ({
-                    title: card.title,
-                    subtitle: card.subtitle,
-                    description: card.description,
-                    icon: planIconMap[card.iconKey] || UsersRound,
-                    color: card.color,
-                    actionLabel: card.actionLabel,
-                    pdfUrl: card.pdfUrl,
-                  })),
-              }
-            : section.id === 'executive-policy'
-              ? {
-                  ...section,
-                  cards: siteContent.executivePolicyCards
-                    .filter((card) => card.status === 'published')
-                    .map((card) => ({
-                      title: card.title,
-                      subtitle: card.subtitle,
-                      description: card.description,
-                      icon: planIconMap[card.iconKey] || UsersRound,
-                      color: card.color,
-                      actionLabel: card.actionLabel,
-                      pdfUrl: card.pdfUrl,
-                    })),
-                }
-      : section,
-  );
+  const planSections = homePlanSections.map((section) => {
+    const selectCards = planSectionCardSelectors[section.id];
+    if (!selectCards) return section;
+
+    return {
+      ...section,
+      cards: mapVisiblePlanCards(selectCards(siteContent)),
+    };
+  });
 
   return (
     <div className="min-h-screen bg-white text-slate-900">

@@ -1,11 +1,33 @@
 import { defaultSiteContent } from '../data/siteContent.defaults';
-import type { SiteContentState } from '../types/siteContent.types';
+import type { SiteContentPlanCard, SiteContentState } from '../types/siteContent.types';
 
 const SITE_CONTENT_STORAGE_KEY = 'ptdms.siteContent.v1';
 export const SITE_CONTENT_UPDATED_EVENT = 'ptdms-site-content-updated';
 
 function isBrowserStorageAvailable() {
   return typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';
+}
+
+function normalizePlanCards(cards: SiteContentPlanCard[] | undefined, fallbackCards: SiteContentPlanCard[]) {
+  if (!Array.isArray(cards)) {
+    return fallbackCards;
+  }
+
+  return cards.map((card, index) => {
+    const fallbackCard = fallbackCards[index] || fallbackCards[0];
+
+    return {
+      ...fallbackCard,
+      ...card,
+      title: card.title || fallbackCard.title,
+      subtitle: card.subtitle ?? fallbackCard.subtitle,
+      iconKey: card.iconKey || fallbackCard.iconKey,
+      color: card.color || fallbackCard.color,
+      actionLabel: card.actionLabel || fallbackCard.actionLabel,
+      pdfUrl: card.pdfUrl ?? '',
+      status: card.status || fallbackCard.status,
+    };
+  });
 }
 
 export function normalizeSiteContent(content: Partial<SiteContentState> | null | undefined): SiteContentState {
@@ -25,26 +47,11 @@ export function normalizeSiteContent(content: Partial<SiteContentState> | null |
       imageOverlayOpacity,
     },
     newsItems: Array.isArray(content?.newsItems) && content.newsItems.length > 0 ? content.newsItems : defaultSiteContent.newsItems,
-    planLevelCards:
-      Array.isArray(content?.planLevelCards) && content.planLevelCards.length > 0
-        ? content.planLevelCards
-        : defaultSiteContent.planLevelCards,
-    diseaseControlPlanCards:
-      Array.isArray(content?.diseaseControlPlanCards) && content.diseaseControlPlanCards.length > 0
-        ? content.diseaseControlPlanCards
-        : defaultSiteContent.diseaseControlPlanCards,
-    annualGuidelineCards:
-      Array.isArray(content?.annualGuidelineCards) && content.annualGuidelineCards.length > 0
-        ? content.annualGuidelineCards
-        : defaultSiteContent.annualGuidelineCards,
-    riskManagementPlanCards:
-      Array.isArray(content?.riskManagementPlanCards) && content.riskManagementPlanCards.length > 0
-        ? content.riskManagementPlanCards
-        : defaultSiteContent.riskManagementPlanCards,
-    executivePolicyCards:
-      Array.isArray(content?.executivePolicyCards) && content.executivePolicyCards.length > 0
-        ? content.executivePolicyCards
-        : defaultSiteContent.executivePolicyCards,
+    planLevelCards: normalizePlanCards(content?.planLevelCards, defaultSiteContent.planLevelCards),
+    diseaseControlPlanCards: normalizePlanCards(content?.diseaseControlPlanCards, defaultSiteContent.diseaseControlPlanCards),
+    annualGuidelineCards: normalizePlanCards(content?.annualGuidelineCards, defaultSiteContent.annualGuidelineCards),
+    riskManagementPlanCards: normalizePlanCards(content?.riskManagementPlanCards, defaultSiteContent.riskManagementPlanCards),
+    executivePolicyCards: normalizePlanCards(content?.executivePolicyCards, defaultSiteContent.executivePolicyCards),
   };
 }
 

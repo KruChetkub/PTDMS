@@ -51,6 +51,16 @@ type HomePlanSectionsProps = {
   logoUrl: string;
 };
 
+function getPlanCardGridClass(cardCount: number) {
+  if (cardCount <= 1) return 'lg:grid-cols-1';
+  if (cardCount === 2) return 'lg:grid-cols-2';
+  if (cardCount === 3) return 'lg:grid-cols-3';
+  if (cardCount === 4) return 'lg:grid-cols-4';
+  if (cardCount === 5) return 'lg:grid-cols-3 xl:grid-cols-5';
+  if (cardCount === 6) return 'lg:grid-cols-3 xl:grid-cols-6';
+  return 'lg:grid-cols-4 xl:grid-cols-7';
+}
+
 export function HomePlanSections({ sections, logoUrl }: HomePlanSectionsProps) {
   return (
     <section className="bg-slate-50 py-12 sm:py-16">
@@ -75,17 +85,13 @@ export function HomePlanSections({ sections, logoUrl }: HomePlanSectionsProps) {
                     <h3 className="text-xl font-semibold tracking-normal">{section.title}</h3>
                   </div>
 
-                  <div
-                    className={`mt-5 grid gap-4 sm:grid-cols-2 ${
-                      section.cards.length >= 7 ? 'lg:grid-cols-4 xl:grid-cols-7' : 'lg:grid-cols-2'
-                    }`}
-                  >
-                    {section.cards.map((card) => {
+                  <div className={`mt-5 grid gap-4 sm:grid-cols-2 ${getPlanCardGridClass(section.cards.length)}`}>
+                    {section.cards.map((card, cardIndex) => {
                       const Icon = card.icon;
                       const ActionElement = card.pdfUrl ? 'a' : 'button';
                       return (
                         <div
-                          key={`${section.id}-${card.title}`}
+                          key={`${section.id}-${card.title}-${card.subtitle}-${cardIndex}`}
                           className={`flex min-h-64 flex-col rounded-md border bg-white p-4 text-center text-slate-900 shadow-sm ${tone.card}`}
                         >
                           <div className={`mx-auto flex h-14 w-14 items-center justify-center rounded-full ${card.color} text-white`}>
