@@ -8,20 +8,24 @@ export function HomePlanLevelsBanner({ logoUrl }: HomePlanLevelsBannerProps) {
       id="plan-levels"
       className="scroll-mt-24 overflow-hidden rounded-md border border-emerald-100 bg-white shadow-sm"
     >
-      <div className="relative grid min-h-32 items-center gap-4 bg-gradient-to-r from-white via-emerald-50/40 to-sky-50 px-4 py-5 sm:px-6 lg:grid-cols-[180px_1fr_260px] lg:px-8">
-        <div className="flex items-center justify-center lg:justify-start">
-          <img src={logoUrl} alt="กรมควบคุมโรค" className="h-20 w-20 rounded-md object-contain sm:h-24 sm:w-24" />
+      <div className="relative grid min-h-24 grid-cols-[76px_1fr] items-center gap-3 bg-gradient-to-r from-white via-emerald-50/40 to-sky-50 px-3 py-3 sm:grid-cols-[96px_1fr] sm:px-5 lg:min-h-32 lg:grid-cols-[180px_1fr_260px] lg:gap-4 lg:px-8 lg:py-5">
+        <div className="flex items-center justify-start">
+          <img src={logoUrl} alt="กรมควบคุมโรค" className="h-16 w-16 rounded-md object-contain sm:h-20 sm:w-20 lg:h-24 lg:w-24" />
         </div>
 
         <div className="text-center">
-          <h2 className="text-3xl font-bold leading-tight tracking-normal text-sky-950 sm:text-4xl lg:text-5xl">
+          <h2 className="text-xl font-bold leading-tight tracking-normal text-sky-950 sm:text-2xl lg:text-5xl">
             ศูนย์รวมแผนระดับต่าง ๆ
           </h2>
-          <p className="mt-2 text-xl font-semibold leading-8 text-emerald-700 sm:text-2xl lg:text-3xl">
-            ด้านการป้องกันควบคุมโรคและภัยสุขภาพของประเทศ
+
+          <p className="text-sm font-semibold text-emerald-700 sm:text-base lg:text-3xl leading-tight">
+            ด้านการป้องกันควบคุมโรค
+          </p>
+
+          <p className="text-sm font-semibold text-emerald-700 sm:text-base lg:text-3xl leading-tight">
+            และภัยสุขภาพของประเทศ
           </p>
         </div>
-
         <div className="relative hidden min-h-28 items-end justify-center lg:flex">
           <div className="absolute bottom-0 h-24 w-40 rounded-t-full bg-sky-100" />
           <div className="relative flex h-24 w-24 items-center justify-center rounded-full bg-emerald-500 text-white shadow-lg shadow-emerald-900/10">
