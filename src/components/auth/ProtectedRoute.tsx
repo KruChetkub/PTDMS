@@ -3,6 +3,7 @@ import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../../stores/auth.store';
 import type { UserRole } from '../../types/roles';
 import { canAccess } from '../../types/roles';
+import { useAutoLogoutTimer } from '../../features/auth/hooks/useAutoLogoutTimer';
 
 type ProtectedRouteProps = {
   allowedRoles?: UserRole[];
@@ -11,6 +12,7 @@ type ProtectedRouteProps = {
 export function ProtectedRoute({ allowedRoles }: ProtectedRouteProps) {
   const location = useLocation();
   const { initialize, initialized, loading, user, profile } = useAuthStore();
+  useAutoLogoutTimer(Boolean(initialized && user && profile?.status === 'active'));
 
   useEffect(() => {
     void initialize();

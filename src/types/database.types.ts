@@ -89,6 +89,15 @@ export type AuditLog = {
   created_at: string;
 };
 
+export type SystemSetting = {
+  setting_key: string;
+  setting_value: Record<string, unknown>;
+  description: string | null;
+  updated_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type SiteContentStatus = 'published' | 'draft' | 'scheduled';
 
 export type SiteContentDocument = {
@@ -395,6 +404,19 @@ export type Database = {
           created_at?: string;
         };
         Update: Partial<Omit<AuditLog, 'id'>>;
+        Relationships: [];
+      };
+      system_settings: {
+        Row: SystemSetting;
+        Insert: {
+          setting_key: string;
+          setting_value?: Record<string, unknown>;
+          description?: string | null;
+          updated_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Omit<SystemSetting, 'setting_key' | 'created_at'>>;
         Relationships: [];
       };
       site_content_documents: {

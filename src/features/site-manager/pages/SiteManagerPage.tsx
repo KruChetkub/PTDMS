@@ -1,10 +1,12 @@
 import { PageHeader } from '../../../components/ui/PageHeader';
+import { useAuthStore } from '../../../stores/auth.store';
 import { useSiteContentDraft } from '../../site-content/hooks/useSiteContent';
 import { SiteManagerBannerPreview } from '../components/SiteManagerBannerPreview';
 import { SiteManagerBrandingEditor } from '../components/SiteManagerBrandingEditor';
 import { SiteManagerContentEditor } from '../components/SiteManagerContentEditor';
 import { SiteManagerEditableAreas } from '../components/SiteManagerEditableAreas';
 import { SiteManagerPlanDocumentsEditor } from '../components/SiteManagerPlanDocumentsEditor';
+import { SiteManagerSecuritySettings } from '../components/SiteManagerSecuritySettings';
 import { SiteManagerSummaryGrid } from '../components/SiteManagerSummaryGrid';
 import { SiteManagerWorkflowPanel } from '../components/SiteManagerWorkflowPanel';
 import { siteManagerEditableAreas, siteManagerSummaryItems } from '../data/siteManager.mock';
@@ -17,9 +19,10 @@ type SiteManagerTab =
   | 'disease-control-plan'
   | 'annual-guidelines'
   | 'risk-management'
-  | 'executive-policy';
+  | 'executive-policy'
+  | 'security';
 
-const siteManagerTabs: Array<{ id: SiteManagerTab; label: string }> = [
+const siteManagerTabs: Array<{ id: SiteManagerTab; label: string; superAdminOnly?: boolean }> = [
   { id: 'branding', label: 'โลโก้/แบรนด์' },
   { id: 'home-content', label: 'ป้าย/ข่าวประชาสัมพันธ์' },
   { id: 'plan-documents', label: 'แผนระดับต่าง ๆ' },
@@ -27,13 +30,17 @@ const siteManagerTabs: Array<{ id: SiteManagerTab; label: string }> = [
   { id: 'annual-guidelines', label: 'แนวทางประจำปี' },
   { id: 'risk-management', label: 'แผนบริหารความเสี่ยง' },
   { id: 'executive-policy', label: 'นโยบายผู้บริหาร' },
+  { id: 'security', label: 'ความปลอดภัย', superAdminOnly: true },
 ];
 
 export function SiteManagerPage() {
   const { contentDraft, setContentDraft, loadingSource, saveDraft, resetDraft } = useSiteContentDraft();
+  const profile = useAuthStore((state) => state.profile);
   const [draftMessage, setDraftMessage] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [activeTab, setActiveTab] = useState<SiteManagerTab>('branding');
+  const canManageSecurity = profile?.role === 'super_admin';
+  const visibleTabs = siteManagerTabs.filter((tab) => !tab.superAdminOnly || canManageSecurity);
 
   const handleSaveDraft = async () => {
     setIsSaving(true);
@@ -69,7 +76,7 @@ export function SiteManagerPage() {
 
         <section className="rounded-md border border-slate-200 bg-white p-2 shadow-sm">
           <div className="flex gap-2 overflow-x-auto pb-1 sm:flex-wrap sm:overflow-visible sm:pb-0">
-            {siteManagerTabs.map((tab) => (
+            {visibleTabs.map((tab) => (
               <button
                 key={tab.id}
                 type="button"
@@ -163,13 +170,26 @@ export function SiteManagerPage() {
             onResetDraft={handleResetDraft}
             isSaving={isSaving}
           />
-        ) : (
+        ) : activeTab === 'executive-policy' ? (
           <SiteManagerPlanDocumentsEditor
             title="จัดการนโยบายผู้บริหาร"
             description="เพิ่ม แก้ไข ใส่ลิงก์ PDF/URL รายละเอียด และเตรียมช่องเลือกไฟล์ไว้ก่อนเชื่อมระบบจัดเก็บไฟล์จริง"
             planCards={contentDraft.executivePolicyCards}
             onPlanCardsChange={(nextPlanCards) => {
               setContentDraft((currentContent) => ({ ...currentContent, executivePolicyCards: nextPlanCards }));
+              setDraftMessage(null);
+            }}
+            onSaveDraft={handleSaveDraft}
+            onResetDraft={handleResetDraft}
+            isSaving={isSaving}
+          />
+        ) : canManageSecurity ? (
+          <SiteManagerSecuritySettings />
+        ) : (
+          <SiteManagerBrandingEditor
+            brandSettings={contentDraft.brandSettings}
+            onBrandSettingsChange={(nextBrandSettings) => {
+              setContentDraft((currentContent) => ({ ...currentContent, brandSettings: nextBrandSettings }));
               setDraftMessage(null);
             }}
             onSaveDraft={handleSaveDraft}
