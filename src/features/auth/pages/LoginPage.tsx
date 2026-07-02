@@ -1,5 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Lock, LogIn, Mail } from 'lucide-react';
+import { Eye, EyeOff, Lock, LogIn, Mail } from 'lucide-react';
+import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { ConfiguredNotice } from '../../../components/auth/ConfiguredNotice';
@@ -9,6 +10,7 @@ import { loginSchema, type LoginFormValues } from '../auth.schemas';
 export function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
+  const [showPassword, setShowPassword] = useState(false);
   const from = (location.state as { from?: Location } | null)?.from?.pathname || '/portal';
   const { signIn, loading, error, clearError } = useAuthStore();
   const {
@@ -72,6 +74,7 @@ export function LoginPage() {
               <input
                 type="email"
                 autoComplete="email"
+                placeholder="smartspd@mail.com"
                 className="w-full bg-transparent px-2 py-2.5 text-sm text-slate-900 outline-none"
                 {...register('email')}
               />
@@ -79,19 +82,32 @@ export function LoginPage() {
             {errors.email ? <span className="mt-1 block text-xs text-red-600">{errors.email.message}</span> : null}
           </label>
 
-          <label className="block">
+          <div>
             <span className="text-sm font-medium text-slate-700">Password</span>
             <div className="mt-1 flex items-center rounded-lg border border-slate-300 bg-white px-3 focus-within:border-pink-500 focus-within:ring-2 focus-within:ring-pink-100">
               <Lock className="h-4 w-4 text-slate-500" aria-hidden="true" />
               <input
-                type="password"
+                type={showPassword ? 'text' : 'password'}
                 autoComplete="current-password"
                 className="w-full bg-transparent px-2 py-2.5 text-sm text-slate-900 outline-none"
                 {...register('password')}
               />
+              <button
+                type="button"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-500 transition hover:bg-slate-100 hover:text-pink-600 focus:outline-none focus:ring-2 focus:ring-pink-200"
+                aria-label={showPassword ? 'ซ่อนรหัสผ่าน' : 'แสดงรหัสผ่าน'}
+                aria-pressed={showPassword}
+                onClick={() => setShowPassword((current) => !current)}
+              >
+                {showPassword ? (
+                  <EyeOff className="h-4 w-4" aria-hidden="true" />
+                ) : (
+                  <Eye className="h-4 w-4" aria-hidden="true" />
+                )}
+              </button>
             </div>
             {errors.password ? <span className="mt-1 block text-xs text-red-600">{errors.password.message}</span> : null}
-          </label>
+          </div>
 
           <button
             type="submit"
