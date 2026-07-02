@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { KeyRound, Save, UserCog } from 'lucide-react';
+import { Eye, EyeOff, KeyRound, Save, UserCog } from 'lucide-react';
 import { PageHeader } from '../../components/ui/PageHeader';
 import { updateOwnProfileDetails } from '../../services/personnel.service';
 import { useAuthStore } from '../../stores/auth.store';
@@ -82,6 +82,8 @@ export function AccountSettingsPage() {
     employment_type: '',
   });
   const [passwordForm, setPasswordForm] = useState({ password: '', confirmPassword: '' });
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
   const [profileMessage, setProfileMessage] = useState<string | null>(null);
   const [profileError, setProfileError] = useState<string | null>(null);
@@ -198,7 +200,7 @@ export function AccountSettingsPage() {
         <section className="rounded-md border border-slate-200 bg-white p-5 shadow-sm">
           <div className="grid gap-4 md:grid-cols-2">
             <label className="block">
-              <span className="text-sm font-medium text-slate-700">รหัสพนักงาน</span>
+              <span className="text-sm font-medium text-slate-700">รหัสบุคลากร</span>
               <input className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm" value={profileForm.employee_code} onChange={(e) => updateProfileField('employee_code', e.target.value)} />
             </label>
             <label className="block">
@@ -261,11 +263,53 @@ export function AccountSettingsPage() {
           <div className="space-y-4">
             <label className="block">
               <span className="text-sm font-medium text-slate-700">รหัสผ่านใหม่</span>
-              <input type="password" autoComplete="new-password" className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm" value={passwordForm.password} onChange={(e) => setPasswordForm((prev) => ({ ...prev, password: e.target.value }))} />
+              <div className="mt-1 flex items-center rounded-md border border-slate-300 bg-white px-3 focus-within:border-brand-500 focus-within:ring-2 focus-within:ring-brand-100">
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  autoComplete="new-password"
+                  className="w-full bg-transparent py-2 text-sm outline-none"
+                  value={passwordForm.password}
+                  onChange={(e) => setPasswordForm((prev) => ({ ...prev, password: e.target.value }))}
+                />
+                <button
+                  type="button"
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-500 transition hover:bg-slate-100 hover:text-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-100"
+                  aria-label={showPassword ? 'ซ่อนรหัสผ่านใหม่' : 'แสดงรหัสผ่านใหม่'}
+                  aria-pressed={showPassword}
+                  onClick={() => setShowPassword((current) => !current)}
+                >
+                  {showPassword ? (
+                    <EyeOff className="h-4 w-4" aria-hidden="true" />
+                  ) : (
+                    <Eye className="h-4 w-4" aria-hidden="true" />
+                  )}
+                </button>
+              </div>
             </label>
             <label className="block">
               <span className="text-sm font-medium text-slate-700">ยืนยันรหัสผ่านใหม่</span>
-              <input type="password" autoComplete="new-password" className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm" value={passwordForm.confirmPassword} onChange={(e) => setPasswordForm((prev) => ({ ...prev, confirmPassword: e.target.value }))} />
+              <div className="mt-1 flex items-center rounded-md border border-slate-300 bg-white px-3 focus-within:border-brand-500 focus-within:ring-2 focus-within:ring-brand-100">
+                <input
+                  type={showConfirmPassword ? 'text' : 'password'}
+                  autoComplete="new-password"
+                  className="w-full bg-transparent py-2 text-sm outline-none"
+                  value={passwordForm.confirmPassword}
+                  onChange={(e) => setPasswordForm((prev) => ({ ...prev, confirmPassword: e.target.value }))}
+                />
+                <button
+                  type="button"
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-500 transition hover:bg-slate-100 hover:text-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-100"
+                  aria-label={showConfirmPassword ? 'ซ่อนรหัสผ่านยืนยัน' : 'แสดงรหัสผ่านยืนยัน'}
+                  aria-pressed={showConfirmPassword}
+                  onClick={() => setShowConfirmPassword((current) => !current)}
+                >
+                  {showConfirmPassword ? (
+                    <EyeOff className="h-4 w-4" aria-hidden="true" />
+                  ) : (
+                    <Eye className="h-4 w-4" aria-hidden="true" />
+                  )}
+                </button>
+              </div>
             </label>
           </div>
 
