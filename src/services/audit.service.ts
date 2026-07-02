@@ -155,8 +155,18 @@ async function getFunctionErrorReason(error: unknown) {
 }
 
 export async function exportAuditLogsToGoogleSheet() {
+  const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+  const accessToken = sessionData.session?.access_token;
+
+  if (sessionError || !accessToken) {
+    throw new Error('missing_authorization');
+  }
+
   const { data, error } = await supabase.functions.invoke('export-audit-logs', {
     body: { trigger: 'manual' },
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
   });
 
   if (error) {
