@@ -1,4 +1,4 @@
-import type { ProfileStatus, UserRole } from './roles';
+﻿import type { ProfileStatus, UserRole } from './roles';
 
 export type Profile = {
   user_id: string;
@@ -81,12 +81,31 @@ export type LoginHistory = {
 export type AuditLog = {
   id: string;
   actor_id: string | null;
+  actor_user_id: string | null;
+  actor_email: string | null;
+  actor_name: string | null;
+  actor_role: string | null;
+  module: string | null;
   action: string;
+  route: string | null;
   resource_type: string;
   resource_id: string | null;
+  target_type: string | null;
+  target_id: string | null;
+  status: string;
+  error_message: string | null;
   metadata: Record<string, unknown> | null;
+  before_data: Record<string, unknown> | null;
+  after_data: Record<string, unknown> | null;
   ip_address: string | null;
   user_agent: string | null;
+  request_id: string | null;
+  session_id: string | null;
+  exported_at: string | null;
+  export_status: string;
+  export_batch_id: string | null;
+  retry_count: number;
+  last_export_error: string | null;
   created_at: string;
 };
 
@@ -400,12 +419,31 @@ export type Database = {
         Insert: {
           id?: string;
           actor_id?: string | null;
+          actor_user_id?: string | null;
+          actor_email?: string | null;
+          actor_name?: string | null;
+          actor_role?: string | null;
+          module?: string | null;
           action: string;
+          route?: string | null;
           resource_type: string;
           resource_id?: string | null;
+          target_type?: string | null;
+          target_id?: string | null;
+          status?: string;
+          error_message?: string | null;
           metadata?: Record<string, unknown> | null;
+          before_data?: Record<string, unknown> | null;
+          after_data?: Record<string, unknown> | null;
           ip_address?: string | null;
           user_agent?: string | null;
+          request_id?: string | null;
+          session_id?: string | null;
+          exported_at?: string | null;
+          export_status?: string;
+          export_batch_id?: string | null;
+          retry_count?: number;
+          last_export_error?: string | null;
           created_at?: string;
         };
         Update: Partial<Omit<AuditLog, 'id'>>;

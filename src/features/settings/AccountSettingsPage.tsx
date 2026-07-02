@@ -1,7 +1,9 @@
-import { useEffect, useState } from 'react';
+﻿import { useEffect, useState } from 'react';
 import { Eye, EyeOff, KeyRound, Save, UserCog } from 'lucide-react';
 import { PageHeader } from '../../components/ui/PageHeader';
+import { useAuditPageAccess } from '../../hooks/useAuditPageAccess';
 import { updateOwnProfileDetails } from '../../services/personnel.service';
+import { recordAuditLog } from '../../services/audit.service';
 import { useAuthStore } from '../../stores/auth.store';
 
 type SettingsTab = 'profile' | 'password';
@@ -63,6 +65,7 @@ function parseThaiDateToISO(value: string) {
 }
 
 export function AccountSettingsPage() {
+  useAuditPageAccess({ module: 'settings', action: 'settings_page_access', route: '/settings' });
   const profile = useAuthStore((state) => state.profile);
   const refreshProfile = useAuthStore((state) => state.refreshProfile);
   const updatePassword = useAuthStore((state) => state.updatePassword);

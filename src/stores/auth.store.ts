@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { Session, User } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
+import { recordAuditLog } from '../services/audit.service';
 import type { Profile } from '../types/database.types';
 
 type AuthState = {
@@ -188,6 +189,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   signOut: async () => {
     set({ loading: true, error: null });
 
+    const currentUserId = get().user?.id ?? null;
+    await recordAuditLog({
+      module: 'auth',
+      action: 'logout',
+      targetType: 'user',
+      targetId: currentUserId,
+    });
+
     const { error } = await supabase.auth.signOut();
     if (error) {
       set({ error: error.message, loading: false });
@@ -199,3 +208,5 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   clearError: () => set({ error: null }),
 }));
+
+

@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+﻿import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { AlertCircle, ArrowLeft, Eye, Plus, RefreshCw, Search, Star } from 'lucide-react';
 import {
@@ -9,6 +9,7 @@ import {
   type SpdServiceTicketDetail,
 } from '../../services/spd-service.service';
 import { useAuthStore } from '../../stores/auth.store';
+import { useAuditPageAccess } from '../../hooks/useAuditPageAccess';
 import type { SpdServiceSatisfactionSurvey, SpdServiceTicket, SpdServiceTicketStatus } from '../../types/database.types';
 import { cn } from '../../utils/cn';
 
@@ -282,6 +283,7 @@ function SatisfactionModal({ ticket, isSubmitting, onClose, onSubmit }: Satisfac
 }
 
 export function SpdServiceMyRequestsPage() {
+  useAuditPageAccess({ module: 'spd_service', action: 'spd_service_access', route: '/spd-service/my-requests' });
   const { profile } = useAuthStore();
   const [tickets, setTickets] = useState<SpdServiceTicket[]>([]);
   const [surveys, setSurveys] = useState<SpdServiceSatisfactionSurvey[]>([]);

@@ -1,7 +1,8 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+﻿import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { AlertCircle, ArrowLeft, CheckCircle2, Headphones, Loader2, Send } from 'lucide-react';
 import { createSpdServiceTicket, getSpdServiceCategories, notifySpdServiceTicketCreated } from '../../services/spd-service.service';
+import { useAuditPageAccess } from '../../hooks/useAuditPageAccess';
 import { useAuthStore } from '../../stores/auth.store';
 import type { SpdServiceCategory, SpdServiceTicket, SpdServiceUrgency } from '../../types/database.types';
 
@@ -23,6 +24,7 @@ const subjectOptionsByCategory: Record<string, string[]> = {
 };
 
 export function SpdServiceRequestPage() {
+  useAuditPageAccess({ module: 'spd_service', action: 'spd_service_access', route: '/spd-service/request' });
   const { profile, user } = useAuthStore();
   const [categories, setCategories] = useState<SpdServiceCategory[]>([]);
   const [requesterName, setRequesterName] = useState(profile?.full_name || '');

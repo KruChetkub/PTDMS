@@ -1,5 +1,6 @@
-import { supabase } from '../lib/supabase';
+﻿import { supabase } from '../lib/supabase';
 import type { MeetingRoomReservation } from '../types/database.types';
+import { recordAuditLog } from './audit.service';
 
 const meetingRoomReservationSelect =
   'id, legacy_id, reservation_date, room, meeting_type, online_meeting_url, details, start_time, end_time, booker_name, work_group, topic, created_by, cancelled_at, cancelled_by, created_at, updated_at';
@@ -30,6 +31,29 @@ function toReservationPayload(input: MeetingRoomReservationForm) {
     work_group: input.workGroup.trim(),
     topic: input.topic.trim(),
   };
+}
+
+function toReservationMetadata(reservation: MeetingRoomReservation) {
+  return {
+    room_name: reservation.room,
+    reservation_date: reservation.reservation_date,
+    start_time: reservation.start_time,
+    end_time: reservation.end_time,
+    title: reservation.topic,
+    booker_name: reservation.booker_name,
+    work_group: reservation.work_group,
+    meeting_type: reservation.meeting_type,
+  };
+}
+
+async function getReservationSnapshot(reservationId: string) {
+  const { data } = await supabase
+    .from('meeting_room_reservations')
+    .select(meetingRoomReservationSelect)
+    .eq('id', reservationId)
+    .maybeSingle();
+
+  return data ?? null;
 }
 
 export async function listMeetingRoomReservations(startDate: string, endDate: string) {
@@ -113,10 +137,20 @@ export async function createMeetingRoomReservation(input: MeetingRoomReservation
     throw new Error(error.message);
   }
 
+  void recordAuditLog({
+    module: 'meeting_room',
+    action: 'meeting_room_reservation_create',
+    route: '/strategy-calendar/meeting-room-booking',
+    targetType: 'meeting_room_reservation',
+    targetId: data.id,
+    metadata: toReservationMetadata(data),
+  });
+
   return data;
 }
 
 export async function updateMeetingRoomReservation(reservationId: string, input: MeetingRoomReservationForm) {
+  const beforeReservation = await getReservationSnapshot(reservationId);
   const { data, error } = await supabase
     .from('meeting_room_reservations')
     .update({
@@ -132,6 +166,17 @@ export async function updateMeetingRoomReservation(reservationId: string, input:
     throw new Error(error.message);
   }
 
+  void recordAuditLog({
+    module: 'meeting_room',
+    action: 'meeting_room_reservation_update',
+    route: '/strategy-calendar/meeting-room-booking',
+    targetType: 'meeting_room_reservation',
+    targetId: data.id,
+    beforeData: beforeReservation,
+    afterData: data,
+    metadata: toReservationMetadata(data),
+  });
+
   return data;
 }
 
@@ -141,6 +186,7 @@ export async function cancelMeetingRoomReservation(reservationId: string) {
     throw new Error(userError.message);
   }
 
+  const beforeReservation = await getReservationSnapshot(reservationId);
   const { data, error } = await supabase
     .from('meeting_room_reservations')
     .update({
@@ -154,6 +200,17 @@ export async function cancelMeetingRoomReservation(reservationId: string) {
   if (error) {
     throw new Error(error.message);
   }
+
+  void recordAuditLog({
+    module: 'meeting_room',
+    action: 'meeting_room_reservation_cancel',
+    route: '/strategy-calendar/meeting-room-booking',
+    targetType: 'meeting_room_reservation',
+    targetId: data.id,
+    beforeData: beforeReservation,
+    afterData: data,
+    metadata: toReservationMetadata(data),
+  });
 
   return data;
 }

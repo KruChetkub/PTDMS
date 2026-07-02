@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+﻿import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   AlertCircle,
@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { Bar, BarChart, CartesianGrid, Cell, LabelList, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { ConfirmModal } from '../../components/ui/ConfirmModal';
+import { useAuditPageAccess } from '../../hooks/useAuditPageAccess';
 import {
   deleteSpdServiceTicket,
   getSpdServiceDashboardData,
@@ -454,6 +455,7 @@ function CompleteTicketModal({ ticket, isSubmitting, onClose, onSubmit }: Comple
 }
 
 export function SpdServiceDashboardPage() {
+  useAuditPageAccess({ module: 'spd_service', action: 'spd_service_access', route: '/spd-service' });
   const { profile } = useAuthStore();
   const [tickets, setTickets] = useState<SpdServiceTicket[]>([]);
   const [categories, setCategories] = useState<SpdServiceCategory[]>([]);

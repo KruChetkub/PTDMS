@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+﻿import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { BarChart3, Bell, CalendarCheck2, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, ClipboardList, Clock, Edit3, Filter, Hourglass, LayoutDashboard, List, MapPin, Plus, RefreshCw, RotateCcw, UserRound, X, XCircle } from 'lucide-react';
 import {
   Area,
@@ -18,6 +18,7 @@ import {
   YAxis,
 } from 'recharts';
 import { PageHeader } from '../../components/ui/PageHeader';
+import { useAuditPageAccess } from '../../hooks/useAuditPageAccess';
 import {
   cancelStrategyEvent,
   createStrategyEvent,
@@ -387,6 +388,7 @@ function StrategyEventDetailModal({
 }
 
 export function StrategyCalendarPage() {
+  useAuditPageAccess({ module: 'strategy_calendar', action: 'strategy_calendar_access', route: '/strategy-calendar' });
   const { profile } = useAuthStore();
   const selectedDateEventsRef = useRef<HTMLDivElement | null>(null);
   const [monthDate, setMonthDate] = useState(() => new Date());

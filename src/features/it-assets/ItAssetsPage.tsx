@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
+﻿import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Activity, AlertCircle, ArrowLeft, CheckCircle2, HardDrive, Monitor, PencilLine, RefreshCw, Search, Server, X } from 'lucide-react';
 import { Bar, BarChart, CartesianGrid, Cell, LabelList, Legend, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { getItAssetEvaluationCriteria } from '../../services/it-asset-evaluation.service';
+import { useAuditPageAccess } from '../../hooks/useAuditPageAccess';
 import { getItAssets } from '../../services/it-asset.service';
 import { useAuthStore } from '../../stores/auth.store';
 import { formatThaiDate } from '../../utils/thaiDate';
@@ -34,6 +35,7 @@ function matchesFilter(selected: string[], value: string | number | null | undef
 }
 
 export function ItAssetsPage() {
+  useAuditPageAccess({ module: 'it_assets', action: 'it_assets_access', route: '/it-assets' });
   const { profile } = useAuthStore();
   const [assets, setAssets] = useState<ItAssetViewModel[]>([]);
   const [filters, setFilters] = useState<ItAssetFilters>(emptyFilters);

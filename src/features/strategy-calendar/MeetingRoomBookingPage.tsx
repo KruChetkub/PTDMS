@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+﻿import { FormEvent, useEffect, useMemo, useState } from 'react';
 import {
   BellRing,
   CalendarDays,
@@ -33,6 +33,7 @@ import {
   type MeetingRoomReservationRow,
 } from '../../services/meeting-room-reservation.service';
 import { useAuthStore } from '../../stores/auth.store';
+import { useAuditPageAccess } from '../../hooks/useAuditPageAccess';
 import { cn } from '../../utils/cn';
 
 const thaiMonths = [
@@ -181,6 +182,7 @@ function groupCount<T extends string>(items: T[]) {
 }
 
 export function MeetingRoomBookingPage() {
+  useAuditPageAccess({ module: 'meeting_room', action: 'meeting_room_page_access', route: '/strategy-calendar/meeting-room-booking' });
   const { profile } = useAuthStore();
   const todayKey = toDateKey(new Date());
   const [monthDate, setMonthDate] = useState(() => new Date());

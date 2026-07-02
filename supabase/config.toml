@@ -3,3 +3,7 @@ verify_jwt = false
 
 [functions.meeting-room-telegram-notify]
 verify_jwt = false
+
+[functions.export-audit-logs]
+verify_jwt = false
+

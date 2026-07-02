@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+﻿import { useEffect, useMemo, useState } from 'react';
 import {
   AlertCircle,
   CheckCircle2,
@@ -13,8 +13,10 @@ import {
   UserX,
 } from 'lucide-react';
 import { PageHeader } from '../../components/ui/PageHeader';
+import { useAuditPageAccess } from '../../hooks/useAuditPageAccess';
 import { ConfirmModal } from '../../components/ui/ConfirmModal';
 import { createManagedUser, listAllUsers, updateUserDetails, updateUserRole, updateUserStatus, deleteUser, updateUserEmail } from '../../services/admin.service';
+import { recordAuditLog } from '../../services/audit.service';
 import type { UpdateUserDetailsPayload, UserManagementProfile } from '../../services/admin.service';
 import type { Profile } from '../../types/database.types';
 import { useAuthStore } from '../../stores/auth.store';
@@ -502,6 +504,7 @@ function getCreateUserErrorMessage(err: unknown) {
 }
 
 export function UserManagementPage() {
+  useAuditPageAccess({ module: 'user_management', action: 'user_management_access', route: '/admin/users' });
   const [users, setUsers] = useState<UserManagementProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -574,9 +577,20 @@ export function UserManagementPage() {
 
   const handleRoleChange = async (userId: string, newRole: UserRole) => {
     if (!currentUser || !canManageRoleAndStatus) return;
+    const targetUser = users.find((user) => user.user_id === userId);
     setUpdating(userId);
     try {
       await updateUserRole(userId, newRole);
+      void recordAuditLog({
+        module: 'user_management',
+        action: 'user_role_change',
+        route: '/admin/users',
+        targetType: 'user',
+        targetId: userId,
+        beforeData: { role: targetUser?.role ?? null },
+        afterData: { role: newRole },
+        metadata: { target_email: targetUser?.email ?? null, target_name: targetUser?.full_name ?? null },
+      });
       await loadUsers();
     } catch (err) {
       alert(getErrorMessage(err, 'ไม่สามารถเปลี่ยน Role ได้'));
@@ -587,9 +601,20 @@ export function UserManagementPage() {
 
   const handleStatusChange = async (userId: string, newStatus: ProfileStatus) => {
     if (!currentUser || !canManageRoleAndStatus) return;
+    const targetUser = users.find((user) => user.user_id === userId);
     setUpdating(userId);
     try {
       await updateUserStatus(userId, newStatus);
+      void recordAuditLog({
+        module: 'user_management',
+        action: 'user_status_change',
+        route: '/admin/users',
+        targetType: 'user',
+        targetId: userId,
+        beforeData: { status: targetUser?.status ?? null },
+        afterData: { status: newStatus },
+        metadata: { target_email: targetUser?.email ?? null, target_name: targetUser?.full_name ?? null },
+      });
       await loadUsers();
     } catch (err) {
       alert(getErrorMessage(err, 'ไม่สามารถเปลี่ยนสถานะได้'));
@@ -612,6 +637,14 @@ export function UserManagementPage() {
     setUpdating(deleteModal.userId);
     try {
       await deleteUser(deleteModal.userId);
+      void recordAuditLog({
+        module: 'user_management',
+        action: 'user_delete',
+        route: '/admin/users',
+        targetType: 'user',
+        targetId: deleteModal.userId,
+        metadata: { target_name: deleteModal.fullName },
+      });
       setDeleteModal({ isOpen: false, userId: '', fullName: '' });
       await loadUsers();
     } catch (err) {
@@ -676,6 +709,14 @@ export function UserManagementPage() {
       if (userId) {
         await updateUserDetails(userId, detailsPayload);
       }
+      void recordAuditLog({
+        module: 'user_management',
+        action: 'user_create',
+        route: '/admin/users',
+        targetType: 'user',
+        targetId: userId,
+        metadata: { target_email: email, target_name: fullName, role: currentRole === 'hr' ? 'personnel' : createModal.form.role },
+      });
       setCreateModal((prev) => ({ ...prev, isOpen: false, error: null }));
       await loadUsers();
     } catch (err) {
@@ -758,6 +799,14 @@ export function UserManagementPage() {
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, 'users');
     XLSX.writeFile(workbook, 'user-export-for-update.xlsx');
+    void recordAuditLog({
+      module: 'user_management',
+      action: 'user_export',
+      route: '/admin/users',
+      targetType: 'export',
+      targetId: 'user-export-for-update.xlsx',
+      metadata: { format: 'xlsx', record_count: exportRows.length, search },
+    });
   };
 
   const handleImportUsers = async () => {
@@ -845,6 +894,15 @@ export function UserManagementPage() {
       await loadUsers();
       setImportModal({ isOpen: false, file: null, error: null });
       setImportResultModal({ isOpen: true, created, updated, skipped, failures });
+      void recordAuditLog({
+        module: 'user_management',
+        action: 'user_import',
+        route: '/admin/users',
+        targetType: 'import',
+        targetId: file.name,
+        status: failures.length > 0 ? 'fail' : 'success',
+        metadata: { file_name: file.name, created, updated, skipped, failure_count: failures.length },
+      });
     } catch (err) {
       setImportModal((prev) => ({ ...prev, error: getErrorMessage(err, 'ไม่สามารถนำเข้าไฟล์ผู้ใช้ได้') }));
     } finally {
@@ -890,6 +948,34 @@ export function UserManagementPage() {
         await updateUserEmail(editModal.user.user_id, nextEmail);
       }
 
+      const beforeDetails = {
+        email: editModal.user.email,
+        employee_code: editModal.user.employee_code,
+        full_name: editModal.user.full_name,
+        position: editModal.user.position,
+        department: editModal.user.department,
+        work_group: editModal.user.work_group,
+        gender: editModal.user.gender,
+        education: editModal.user.education,
+        birth_date: editModal.user.birth_date,
+        start_work_date: editModal.user.start_work_date,
+        employment_type: editModal.user.employment_type,
+      };
+
+      const afterDetails = {
+        email: nextEmail,
+        employee_code: editModal.form.employee_code || null,
+        full_name: editModal.form.full_name || null,
+        position: editModal.form.position || null,
+        department: editModal.form.department || null,
+        work_group: editModal.form.work_group || null,
+        gender: editModal.form.gender || null,
+        education: editModal.form.education || null,
+        birth_date: birthDateIso,
+        start_work_date: startWorkDateIso,
+        employment_type: editModal.form.employment_type || null,
+      };
+
       await updateUserDetails(editModal.user.user_id, {
         employee_code: editModal.form.employee_code || null,
         full_name: editModal.form.full_name || null,
@@ -903,6 +989,15 @@ export function UserManagementPage() {
         employment_type: editModal.form.employment_type || null,
       });
 
+      void recordAuditLog({
+        module: 'user_management',
+        action: 'user_update',
+        route: '/admin/users',
+        targetType: 'user',
+        targetId: editModal.user.user_id,
+        beforeData: beforeDetails,
+        afterData: afterDetails,
+      });
       setEditModal((prev) => ({ ...prev, isOpen: false }));
       await loadUsers();
     } catch (err) {

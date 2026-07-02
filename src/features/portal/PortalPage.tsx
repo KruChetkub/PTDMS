@@ -1,7 +1,8 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { ArrowRight, CalendarDays, GraduationCap, Headphones, LogOut, Megaphone, Monitor, ShieldCheck, Sparkles } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ConfirmModal } from '../../components/ui/ConfirmModal';
+import { useAuditPageAccess } from '../../hooks/useAuditPageAccess';
 import { useAuthStore } from '../../stores/auth.store';
 import type { UserRole } from '../../types/roles';
 import { canAccess, roleLabels } from '../../types/roles';
@@ -84,6 +85,7 @@ export function PortalPage() {
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const { profile, signOut } = useAuthStore();
+  useAuditPageAccess({ module: 'ptdms', action: 'ptdms_portal_access', route: '/portal' });
   const visibleSystems = [...coreSystems, ...assetSystems, ...serviceSystems, ...adminSystems].filter((system) => canAccess(profile?.role, system.roles));
   const getSystemPath = (system: PortalCard) => {
     if (system.to === '/dashboard' && profile?.role === 'personnel') {

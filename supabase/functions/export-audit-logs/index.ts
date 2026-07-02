@@ -1,0 +1,297 @@
+import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.47.10';
+
+const exportedLogRetentionMs = 72 * 60 * 60 * 1000;
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-audit-export-secret',
+  'Access-Control-Max-Age': '86400',
+};
+
+type AuditLogRow = {
+  id: string;
+  created_at: string;
+  actor_user_id: string | null;
+  actor_email: string | null;
+  actor_name: string | null;
+  actor_role: string | null;
+  module: string | null;
+  action: string;
+  route: string | null;
+  target_type: string | null;
+  target_id: string | null;
+  status: string;
+  error_message: string | null;
+  ip_address: string | null;
+  user_agent: string | null;
+  request_id: string | null;
+  session_id: string | null;
+  metadata: Record<string, unknown> | null;
+  before_data: Record<string, unknown> | null;
+  after_data: Record<string, unknown> | null;
+  retry_count: number;
+};
+
+type ExportCaller = {
+  type: 'scheduler' | 'manual';
+  userId?: string;
+  email?: string | null;
+  name?: string | null;
+  role?: string | null;
+};
+
+function jsonResponse(body: Record<string, unknown>, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  });
+}
+
+function getBangkokDateKey(date = new Date()) {
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Bangkok',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  });
+
+  return formatter.format(date);
+}
+
+function summarizeByField(logs: AuditLogRow[], field: 'module' | 'action') {
+  return logs.reduce<Record<string, number>>((summary, log) => {
+    const key = String(log[field] || 'unknown');
+    summary[key] = (summary[key] || 0) + 1;
+    return summary;
+  }, {});
+}
+
+function getBearerToken(req: Request) {
+  const authorization = req.headers.get('authorization') || '';
+  const [scheme, token] = authorization.split(' ');
+  if (scheme?.toLowerCase() !== 'bearer' || !token) {
+    return null;
+  }
+
+  return token;
+}
+
+async function authorizeExportRequest(req: Request, adminClient: ReturnType<typeof createClient>, cronSecret: string | undefined) {
+  const requestSecret = req.headers.get('x-audit-export-secret') || '';
+  if (cronSecret && requestSecret === cronSecret) {
+    return { authorized: true, caller: { type: 'scheduler' } as ExportCaller };
+  }
+
+  const token = getBearerToken(req);
+  if (!token) {
+    return { authorized: false, status: 401, reason: 'missing_authorization' };
+  }
+
+  const { data: userData, error: userError } = await adminClient.auth.getUser(token);
+  const user = userData?.user;
+  if (userError || !user) {
+    return { authorized: false, status: 401, reason: 'invalid_authorization' };
+  }
+
+  const { data: profile, error: profileError } = await adminClient
+    .from('profiles')
+    .select('user_id, full_name, role')
+    .eq('user_id', user.id)
+    .maybeSingle();
+
+  if (profileError) {
+    return { authorized: false, status: 500, reason: profileError.message };
+  }
+
+  if (profile?.role !== 'super_admin') {
+    return { authorized: false, status: 403, reason: 'super_admin_required' };
+  }
+
+  return {
+    authorized: true,
+    caller: {
+      type: 'manual',
+      userId: user.id,
+      email: user.email ?? null,
+      name: profile.full_name ?? null,
+      role: profile.role ?? null,
+    } as ExportCaller,
+  };
+}
+
+async function recordManualExportRequest(adminClient: ReturnType<typeof createClient>, caller: ExportCaller, batchId: string) {
+  if (caller.type !== 'manual' || !caller.userId) {
+    return;
+  }
+
+  await adminClient.from('audit_logs').insert({
+    actor_id: caller.userId,
+    actor_user_id: caller.userId,
+    actor_email: caller.email ?? null,
+    actor_name: caller.name ?? null,
+    actor_role: caller.role ?? null,
+    module: 'audit_logs',
+    action: 'audit_log_google_sheet_export_manual',
+    route: '/admin/security',
+    resource_type: 'audit_logs',
+    target_type: 'google_sheet_export',
+    target_id: batchId,
+    status: 'success',
+    metadata: {
+      export_destination: 'google_sheet',
+      trigger: 'manual',
+      batch_id: batchId,
+    },
+    export_status: 'pending',
+  }).then(() => null, () => null);
+}
+
+serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders });
+  }
+
+  if (req.method !== 'POST') {
+    return jsonResponse({ exported: false, reason: 'method_not_allowed' }, 405);
+  }
+
+  const supabaseUrl = Deno.env.get('SUPABASE_URL');
+  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  const appsScriptUrl = Deno.env.get('AUDIT_LOG_APPS_SCRIPT_URL');
+  const exportSecret = Deno.env.get('AUDIT_LOG_EXPORT_SECRET');
+  const cronSecret = Deno.env.get('AUDIT_LOG_EXPORT_CRON_SECRET');
+  const notifyEmails = (Deno.env.get('AUDIT_LOG_NOTIFY_EMAILS') || '')
+    .split(',')
+    .map((email) => email.trim())
+    .filter(Boolean);
+
+  if (!supabaseUrl || !serviceRoleKey) {
+    return jsonResponse({ exported: false, reason: 'missing_supabase_env' }, 500);
+  }
+
+  if (!appsScriptUrl || !exportSecret) {
+    return jsonResponse({ exported: false, reason: 'missing_export_env' }, 500);
+  }
+
+  const adminClient = createClient(supabaseUrl, serviceRoleKey, {
+    auth: { persistSession: false },
+  });
+
+  const authResult = await authorizeExportRequest(req, adminClient, cronSecret || undefined);
+  if (!authResult.authorized) {
+    return jsonResponse({ exported: false, reason: authResult.reason }, authResult.status);
+  }
+
+  const caller = authResult.caller;
+  const batchId = crypto.randomUUID();
+  const startedAt = new Date().toISOString();
+  const bangkokDate = getBangkokDateKey();
+
+  await recordManualExportRequest(adminClient, caller, batchId);
+
+  const { data: logs, error: logsError } = await adminClient
+    .from('audit_logs')
+    .select('*')
+    .neq('export_status', 'exported')
+    .order('created_at', { ascending: true })
+    .limit(1000);
+
+  if (logsError) {
+    return jsonResponse({ exported: false, reason: logsError.message }, 500);
+  }
+
+  const pendingLogs = (logs || []) as AuditLogRow[];
+  const payload = {
+    event: caller.type === 'scheduler' ? 'audit_logs_daily_export' : 'audit_logs_manual_export',
+    trigger: caller.type,
+    requested_by: caller.type === 'manual'
+      ? { user_id: caller.userId, email: caller.email, name: caller.name, role: caller.role }
+      : null,
+    batch_id: batchId,
+    bangkok_date: bangkokDate,
+    started_at: startedAt,
+    completed_at: new Date().toISOString(),
+    notify_emails: notifyEmails,
+    export_secret: exportSecret,
+    total_logs: pendingLogs.length,
+    module_summary: summarizeByField(pendingLogs, 'module'),
+    action_summary: summarizeByField(pendingLogs, 'action'),
+    logs: pendingLogs,
+  };
+
+  const appsScriptBody = JSON.stringify(payload);
+  const appsScriptResponse = await fetch(appsScriptUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Content-Length': String(new TextEncoder().encode(appsScriptBody).length),
+      'X-Audit-Export-Secret': exportSecret,
+    },
+    body: appsScriptBody,
+  });
+
+  const responseText = await appsScriptResponse.text();
+  let appsScriptResult: { ok?: boolean; error?: string } | null = null;
+
+  try {
+    appsScriptResult = JSON.parse(responseText) as { ok?: boolean; error?: string };
+  } catch {
+    appsScriptResult = null;
+  }
+
+  const appsScriptError = appsScriptResult?.ok === false
+    ? appsScriptResult.error || responseText
+    : responseText;
+
+  if (!appsScriptResponse.ok || appsScriptResult?.ok === false) {
+    const ids = pendingLogs.map((log) => log.id);
+    if (ids.length > 0) {
+      await adminClient
+        .from('audit_logs')
+        .update({
+          export_status: 'failed',
+          last_export_error: appsScriptError.slice(0, 500),
+        })
+        .in('id', ids);
+
+      await adminClient.rpc('increment_audit_log_retry_count', { p_ids: ids }).then(() => null, () => null);
+    }
+
+    return jsonResponse({ exported: false, batch_id: batchId, reason: appsScriptError.slice(0, 500) }, 502);
+  }
+
+  const ids = pendingLogs.map((log) => log.id);
+  if (ids.length > 0) {
+    const { error: updateError } = await adminClient
+      .from('audit_logs')
+      .update({
+        exported_at: new Date().toISOString(),
+        export_status: 'exported',
+        export_batch_id: batchId,
+        last_export_error: null,
+      })
+      .in('id', ids);
+
+    if (updateError) {
+      return jsonResponse({ exported: false, batch_id: batchId, reason: updateError.message }, 500);
+    }
+  }
+
+  const cleanupCutoff = new Date(Date.now() - exportedLogRetentionMs).toISOString();
+  const { count: cleanupDeleted, error: cleanupError } = await adminClient
+    .from('audit_logs')
+    .delete({ count: 'exact' })
+    .eq('export_status', 'exported')
+    .lt('exported_at', cleanupCutoff);
+
+  return jsonResponse({
+    exported: true,
+    trigger: caller.type,
+    batch_id: batchId,
+    total_logs: pendingLogs.length,
+    cleanup_deleted: cleanupDeleted || 0,
+    cleanup_error: cleanupError?.message || null,
+  });
+});
