@@ -5,6 +5,7 @@ import { CalendarLayout } from '../components/layout/CalendarLayout';
 import { LoginPage } from '../features/auth/pages/LoginPage';
 import { ForgotPasswordPage } from '../features/auth/pages/ForgotPasswordPage';
 import { ResetPasswordPage } from '../features/auth/pages/ResetPasswordPage';
+import { SetNewPasswordPage } from '../features/auth/pages/SetNewPasswordPage';
 import { AuthCallbackPage } from '../features/auth/pages/AuthCallbackPage';
 import { PendingApprovalPage } from '../features/auth/pages/PendingApprovalPage';
 import { PublicHomePage } from '../features/public-home/pages/PublicHomePage';
@@ -56,12 +57,17 @@ export const router = createBrowserRouter([
         path: '/forgot-password',
         element: <ForgotPasswordPage />,
       },
-      {
-        path: '/reset-password',
-        element: <ResetPasswordPage />,
-      },
     ],
   },
+  {
+    path: '/reset-password',
+    element: <ResetPasswordPage />,
+  },
+  {
+    path: '/set-new-password',
+    element: <SetNewPasswordPage />,
+  },
+
   {
     path: '/auth/callback',
     element: <AuthCallbackPage />,

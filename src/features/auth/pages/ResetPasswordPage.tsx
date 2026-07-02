@@ -10,7 +10,6 @@ import { resetPasswordSchema, type ResetPasswordFormValues } from '../auth.schem
 
 export function ResetPasswordPage() {
   const navigate = useNavigate();
-  const [submitted, setSubmitted] = useState(false);
   const [preparingSession, setPreparingSession] = useState(true);
   const [recoveryError, setRecoveryError] = useState<string | null>(null);
   const { updatePassword, loading, error, clearError } = useAuthStore();
@@ -74,7 +73,7 @@ export function ResetPasswordPage() {
         }
 
         if (window.location.search || window.location.hash) {
-          navigate('/reset-password', { replace: true });
+          navigate(window.location.pathname || '/set-new-password', { replace: true });
         }
       } catch (err) {
         setRecoveryError(err instanceof Error ? err.message : 'ไม่สามารถตรวจสอบลิงก์ Reset Password ได้');
@@ -90,7 +89,7 @@ export function ResetPasswordPage() {
     clearError();
     try {
       await updatePassword(values.password);
-      setSubmitted(true);
+      navigate('/portal', { replace: true });
     } catch (err) {
       // Error is handled by the store and displayed in the UI
       console.error('Password update failed:', err);
@@ -103,19 +102,12 @@ export function ResetPasswordPage() {
         <div>
           <div className="text-2xl font-bold text-brand-700">PTDMS</div>
           <h1 className="mt-6 text-2xl font-semibold text-slate-950">ตั้งรหัสผ่านใหม่</h1>
-          <p className="mt-2 text-sm text-slate-600">หน้านี้ใช้หลังจากเปิดลิงก์ Reset Password จากอีเมล</p>
+          <p className="mt-2 text-sm text-slate-600">กรอกรหัสผ่านใหม่ หลังบันทึกสำเร็จระบบจะพาเข้าสู่หน้าแรก</p>
         </div>
 
         <ConfiguredNotice />
 
-        {submitted ? (
-          <div className="rounded-md border border-emerald-200 bg-white p-6 text-sm text-slate-700 shadow-sm">
-            <p className="font-semibold text-emerald-700">เปลี่ยนรหัสผ่านเรียบร้อย</p>
-            <Link className="mt-4 inline-block font-medium text-brand-700 hover:text-brand-600" to="/login">
-              กลับไปหน้า Login
-            </Link>
-          </div>
-        ) : preparingSession ? (
+        {preparingSession ? (
           <div className="rounded-md border border-slate-200 bg-white p-6 text-sm text-slate-600 shadow-sm">
             กำลังตรวจสอบลิงก์ Reset Password...
           </div>

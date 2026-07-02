@@ -11,10 +11,11 @@ export function AuthCallbackPage() {
     const finish = async () => {
       const searchParams = new URLSearchParams(location.search);
       const hashParams = new URLSearchParams(location.hash.replace(/^#/, ''));
-      const isPasswordRecovery = searchParams.get('next') === 'reset-password' || hashParams.get('type') === 'recovery';
+      const next = searchParams.get('next');
+      const isPasswordRecovery = next === 'reset-password' || next === 'set-new-password' || hashParams.get('type') === 'recovery';
 
       if (isPasswordRecovery) {
-        navigate(`/reset-password${location.search}${location.hash}`, { replace: true });
+        navigate(`/set-new-password${location.search}${location.hash}`, { replace: true });
         return;
       }
 
