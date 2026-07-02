@@ -49,8 +49,14 @@ export async function listMeetingRoomReservations(startDate: string, endDate: st
   return data ?? [];
 }
 
-export async function listUpcomingMeetingRoomLinkNotifications(fromDate: string) {
-  const { data, error } = await supabase
+export async function listUpcomingMeetingRoomLinkNotifications(
+  fromDate: string,
+  options?: { userId?: string; includeAll?: boolean },
+) {
+  const includeAll = options?.includeAll ?? false;
+  const userId = options?.userId;
+
+  let query = supabase
     .from('meeting_room_reservations')
     .select(meetingRoomReservationSelect)
     .gte('reservation_date', fromDate)
@@ -58,6 +64,16 @@ export async function listUpcomingMeetingRoomLinkNotifications(fromDate: string)
     .not('online_meeting_url', 'is', null)
     .order('reservation_date', { ascending: true })
     .order('start_time', { ascending: true });
+
+  if (!includeAll) {
+    if (!userId) {
+      return [];
+    }
+
+    query = query.eq('created_by', userId);
+  }
+
+  const { data, error } = await query;
 
   if (error) {
     throw new Error(error.message);

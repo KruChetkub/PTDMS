@@ -13,6 +13,9 @@ vite.config.js
 vite.config.d.ts
 tailwind.config.js
 tailwind.config.d.ts
-
+graphify-out/
+scratch/
+Mmd/
 .vercel
 .env*.local
+

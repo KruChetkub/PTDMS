@@ -358,7 +358,10 @@ export function MeetingRoomBookingPage() {
     }
 
     try {
-      const data = await listUpcomingMeetingRoomLinkNotifications(todayKey);
+      const data = await listUpcomingMeetingRoomLinkNotifications(todayKey, {
+        userId: profile.user_id,
+        includeAll: canManageAll,
+      });
       setLinkNotifications(data);
     } catch (error) {
       console.error('Failed to load meeting room link notifications:', error);
@@ -392,7 +395,7 @@ export function MeetingRoomBookingPage() {
 
   useEffect(() => {
     void loadLinkNotifications();
-  }, [canShowLinkNotifications, todayKey]);
+  }, [canManageAll, canShowLinkNotifications, profile?.user_id, todayKey]);
 
   const scrollToReservationList = () => {
     window.setTimeout(() => {
