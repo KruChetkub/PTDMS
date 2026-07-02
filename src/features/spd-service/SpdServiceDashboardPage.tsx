@@ -54,6 +54,8 @@ const statusTones: Record<SpdServiceTicketStatus, string> = {
 const chartColors = ['#0f766e', '#2563eb', '#d97706', '#dc2626', '#7c3aed', '#475569'];
 const openStatuses: SpdServiceTicketStatus[] = ['NEW', 'ASSIGNED', 'IN_PROGRESS', 'WAITING'];
 const recentTicketsPageSize = 10;
+const subjectDetailPageSize = 5;
+const chartDetailPageSize = 5;
 
 function isToday(dateValue: string) {
   const date = new Date(dateValue);
@@ -90,16 +92,52 @@ function countByCategory(tickets: SpdServiceTicket[], categories: SpdServiceCate
   }));
 }
 
-function countByMonth(tickets: SpdServiceTicket[]) {
-  const formatter = new Intl.DateTimeFormat('th-TH', { month: 'short', year: '2-digit' });
+function countBySubject(tickets: SpdServiceTicket[]) {
   const buckets = new Map<string, number>();
 
   tickets.forEach((ticket) => {
-    const label = formatter.format(new Date(ticket.created_at));
-    buckets.set(label, (buckets.get(label) || 0) + 1);
+    const name = ticket.subject.trim() || 'ไม่ระบุหัวข้อ';
+    buckets.set(name, (buckets.get(name) || 0) + 1);
   });
 
-  return [...buckets.entries()].slice(0, 6).reverse().map(([name, value]) => ({ name, value }));
+  return [...buckets.entries()]
+    .map(([name, value]) => ({ name, value }))
+    .sort((left, right) => right.value - left.value || left.name.localeCompare(right.name, 'th'));
+}
+
+function countByTicketField(tickets: SpdServiceTicket[], getValue: (ticket: SpdServiceTicket) => string | null) {
+  const buckets = new Map<string, number>();
+
+  tickets.forEach((ticket) => {
+    const name = getValue(ticket)?.trim() || 'ไม่ระบุ';
+    buckets.set(name, (buckets.get(name) || 0) + 1);
+  });
+
+  return [...buckets.entries()]
+    .map(([name, value]) => ({ name, value }))
+    .sort((left, right) => right.value - left.value || left.name.localeCompare(right.name, 'th'));
+}
+
+function getTicketMonthKey(ticket: SpdServiceTicket) {
+  const date = new Date(ticket.created_at);
+  return `${date.getFullYear()}-${`${date.getMonth() + 1}`.padStart(2, '0')}`;
+}
+
+function countByMonth(tickets: SpdServiceTicket[]) {
+  const formatter = new Intl.DateTimeFormat('th-TH', { month: 'short', year: '2-digit' });
+  const buckets = new Map<string, { name: string; value: number }>();
+
+  tickets.forEach((ticket) => {
+    const key = getTicketMonthKey(ticket);
+    const label = formatter.format(new Date(ticket.created_at));
+    const current = buckets.get(key) || { name: label, value: 0 };
+    buckets.set(key, { ...current, value: current.value + 1 });
+  });
+
+  return [...buckets.entries()]
+    .slice(0, 6)
+    .reverse()
+    .map(([key, item]) => ({ key, ...item }));
 }
 
 function DashboardStat({
@@ -426,6 +464,11 @@ export function SpdServiceDashboardPage() {
   const [ticketDetail, setTicketDetail] = useState<SpdServiceTicketDetail | null>(null);
   const [isDetailLoading, setIsDetailLoading] = useState(false);
   const [recentTicketsPage, setRecentTicketsPage] = useState(1);
+  const [selectedCategoryName, setSelectedCategoryName] = useState<string | null>(null);
+  const [selectedMonthKey, setSelectedMonthKey] = useState<string | null>(null);
+  const [chartDetailPage, setChartDetailPage] = useState(1);
+  const [selectedSubject, setSelectedSubject] = useState<string | null>(null);
+  const [subjectDetailPage, setSubjectDetailPage] = useState(1);
   const [pendingTicketAction, setPendingTicketAction] = useState<PendingTicketAction>(null);
   const [error, setError] = useState<string | null>(null);
   const canManageWorkflow = profile?.role === 'super_admin' || profile?.role === 'admin';
@@ -459,9 +502,10 @@ export function SpdServiceDashboardPage() {
     const pending = tickets.filter((ticket) => openStatuses.includes(ticket.status)).length;
     const overSla = tickets.filter(isOverSla).length;
     const categoryChartData = countByCategory(tickets, categories);
+    const subjectChartData = countBySubject(tickets);
     const monthlyChartData = countByMonth(tickets);
 
-    return { newToday, inProgress, completed, pending, overSla, categoryChartData, monthlyChartData };
+    return { newToday, inProgress, completed, pending, overSla, categoryChartData, subjectChartData, monthlyChartData };
   }, [categories, tickets]);
 
   const recentTicketTotalPages = Math.max(1, Math.ceil(tickets.length / recentTicketsPageSize));
@@ -472,6 +516,61 @@ export function SpdServiceDashboardPage() {
   useEffect(() => {
     setRecentTicketsPage((current) => Math.min(current, Math.max(1, Math.ceil(tickets.length / recentTicketsPageSize))));
   }, [tickets.length]);
+
+  const selectedChartDetail = useMemo(() => {
+    if (selectedCategoryName) {
+      return {
+        label: 'รายละเอียดประเภทบริการ',
+        title: selectedCategoryName,
+        tickets: tickets.filter((ticket) => ticket.category_name === selectedCategoryName),
+      };
+    }
+
+    if (selectedMonthKey) {
+      const monthLabel = stats.monthlyChartData.find((item) => item.key === selectedMonthKey)?.name || selectedMonthKey;
+
+      return {
+        label: 'รายละเอียดรายเดือน',
+        title: monthLabel,
+        tickets: tickets.filter((ticket) => getTicketMonthKey(ticket) === selectedMonthKey),
+      };
+    }
+
+    return null;
+  }, [selectedCategoryName, selectedMonthKey, stats.monthlyChartData, tickets]);
+  const chartDetailTicketsSource = selectedChartDetail?.tickets || [];
+  const chartDetailTotalPages = Math.max(1, Math.ceil(chartDetailTicketsSource.length / chartDetailPageSize));
+  const normalizedChartDetailPage = Math.min(chartDetailPage, chartDetailTotalPages);
+  const chartDetailStart = (normalizedChartDetailPage - 1) * chartDetailPageSize;
+  const chartDetailTickets = chartDetailTicketsSource.slice(chartDetailStart, chartDetailStart + chartDetailPageSize);
+
+  useEffect(() => {
+    setChartDetailPage((current) => Math.min(current, Math.max(1, Math.ceil(chartDetailTicketsSource.length / chartDetailPageSize))));
+  }, [chartDetailTicketsSource.length]);
+
+  const selectedSubjectTickets = useMemo(() => {
+    if (!selectedSubject) {
+      return [];
+    }
+
+    return tickets.filter((ticket) => (ticket.subject.trim() || 'ไม่ระบุหัวข้อ') === selectedSubject);
+  }, [selectedSubject, tickets]);
+  const selectedSubjectRequesterCounts = useMemo(
+    () => countByTicketField(selectedSubjectTickets, (ticket) => ticket.requester_name),
+    [selectedSubjectTickets],
+  );
+  const selectedSubjectDepartmentCounts = useMemo(
+    () => countByTicketField(selectedSubjectTickets, (ticket) => ticket.requester_department),
+    [selectedSubjectTickets],
+  );
+  const subjectDetailTotalPages = Math.max(1, Math.ceil(selectedSubjectTickets.length / subjectDetailPageSize));
+  const normalizedSubjectDetailPage = Math.min(subjectDetailPage, subjectDetailTotalPages);
+  const subjectDetailStart = (normalizedSubjectDetailPage - 1) * subjectDetailPageSize;
+  const subjectDetailTickets = selectedSubjectTickets.slice(subjectDetailStart, subjectDetailStart + subjectDetailPageSize);
+
+  useEffect(() => {
+    setSubjectDetailPage((current) => Math.min(current, Math.max(1, Math.ceil(selectedSubjectTickets.length / subjectDetailPageSize))));
+  }, [selectedSubjectTickets.length]);
 
   const applyTicketUpdate = (updatedTicket: SpdServiceTicket) => {
     setTickets((current) => current.map((ticket) => (ticket.id === updatedTicket.id ? updatedTicket : ticket)));
@@ -768,7 +867,17 @@ export function SpdServiceDashboardPage() {
                   <Bar dataKey="value" name="จำนวนคำขอ" radius={[4, 4, 0, 0]} barSize={36}>
                     <LabelList dataKey="value" position="top" className="fill-slate-700 text-xs font-semibold" />
                     {stats.categoryChartData.map((entry, index) => (
-                      <Cell key={entry.name} fill={chartColors[index % chartColors.length]} />
+                      <Cell
+                        key={entry.name}
+                        fill={selectedCategoryName === entry.name ? '#0f766e' : chartColors[index % chartColors.length]}
+                        className="cursor-pointer outline-none"
+                        onClick={() => {
+                          setSelectedCategoryName(entry.name);
+                          setSelectedMonthKey(null);
+                          setSelectedSubject(null);
+                          setChartDetailPage(1);
+                        }}
+                      />
                     ))}
                   </Bar>
                 </BarChart>
@@ -788,8 +897,21 @@ export function SpdServiceDashboardPage() {
                   <XAxis dataKey="name" tick={{ fontSize: 12 }} />
                   <YAxis allowDecimals={false} tick={{ fontSize: 12 }} domain={[0, 'dataMax + 2']} />
                   <Tooltip />
-                  <Bar dataKey="value" name="จำนวนคำขอ" fill="#2563eb" radius={[4, 4, 0, 0]} barSize={42}>
+                  <Bar dataKey="value" name="จำนวนคำขอ" radius={[4, 4, 0, 0]} barSize={42}>
                     <LabelList dataKey="value" position="top" className="fill-slate-700 text-xs font-semibold" />
+                    {stats.monthlyChartData.map((entry) => (
+                      <Cell
+                        key={entry.key}
+                        fill={selectedMonthKey === entry.key ? '#0f766e' : '#2563eb'}
+                        className="cursor-pointer outline-none"
+                        onClick={() => {
+                          setSelectedMonthKey(entry.key);
+                          setSelectedCategoryName(null);
+                          setSelectedSubject(null);
+                          setChartDetailPage(1);
+                        }}
+                      />
+                    ))}
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
@@ -797,6 +919,287 @@ export function SpdServiceDashboardPage() {
           </section>
         </div>
 
+        {selectedChartDetail ? (
+          <section className="rounded-md border border-teal-100 bg-white p-5 shadow-sm">
+            <div className="flex flex-col gap-3 border-b border-slate-100 pb-4 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0">
+                <p className="text-xs font-semibold uppercase text-teal-700">{selectedChartDetail.label}</p>
+                <h2 className="mt-1 break-words text-lg font-semibold text-slate-950">{selectedChartDetail.title}</h2>
+                <p className="mt-1 text-sm text-slate-500">รวม {chartDetailTicketsSource.length} รายการ</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedCategoryName(null);
+                  setSelectedMonthKey(null);
+                  setChartDetailPage(1);
+                }}
+                className="inline-flex items-center justify-center rounded-md border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+              >
+                ล้างการเลือก
+              </button>
+            </div>
+
+            <div className="mt-4 overflow-x-auto">
+              <table className="w-full min-w-[860px] border-collapse text-left text-sm">
+                <thead>
+                  <tr className="border-b border-slate-200 text-xs font-semibold uppercase text-slate-500">
+                    <th className="px-2 pb-3">เลขคำขอ</th>
+                    <th className="px-2 pb-3">หัวข้อ</th>
+                    <th className="px-2 pb-3">ประเภท</th>
+                    <th className="px-2 pb-3">ผู้แจ้ง</th>
+                    <th className="px-2 pb-3">กลุ่มงาน</th>
+                    <th className="px-2 pb-3">สถานะ</th>
+                    <th className="px-2 pb-3">วันที่สร้าง</th>
+                    <th className="px-2 pb-3">รายละเอียด</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {chartDetailTickets.map((ticket) => (
+                    <tr key={ticket.id} className="transition hover:bg-slate-50">
+                      <td className="px-2 py-3">
+                        <button
+                          type="button"
+                          onClick={() => void handleOpenTicketDetail(ticket.id)}
+                          className="font-mono text-xs font-semibold text-teal-700 transition hover:text-teal-900 hover:underline"
+                        >
+                          {ticket.ticket_no}
+                        </button>
+                      </td>
+                      <td className="max-w-[260px] truncate px-2 py-3 font-semibold text-slate-900">{ticket.subject}</td>
+                      <td className="px-2 py-3 text-slate-600">{ticket.category_name}</td>
+                      <td className="px-2 py-3 text-slate-700">{ticket.requester_name}</td>
+                      <td className="px-2 py-3 text-slate-600">{ticket.requester_department || '-'}</td>
+                      <td className="px-2 py-3">
+                        <span className={cn('inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ring-1', statusTones[ticket.status])}>
+                          {statusLabels[ticket.status]}
+                        </span>
+                      </td>
+                      <td className="px-2 py-3 text-slate-500">{new Date(ticket.created_at).toLocaleDateString('th-TH')}</td>
+                      <td className="px-2 py-3">
+                        <button
+                          type="button"
+                          onClick={() => void handleOpenTicketDetail(ticket.id)}
+                          className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
+                        >
+                          <Eye className="h-3.5 w-3.5" aria-hidden="true" />
+                          เปิดดู
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                  {chartDetailTickets.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="px-2 py-10 text-center text-slate-400">
+                        ไม่มีรายการในกราฟนี้
+                      </td>
+                    </tr>
+                  ) : null}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="mt-4 flex flex-col gap-3 border-t border-slate-100 pt-4 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm text-slate-500">
+                แสดง {chartDetailTicketsSource.length === 0 ? 0 : chartDetailStart + 1}-{Math.min(chartDetailStart + chartDetailTickets.length, chartDetailTicketsSource.length)} จาก {chartDetailTicketsSource.length} รายการ
+              </p>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setChartDetailPage((current) => Math.max(1, current - 1))}
+                  disabled={normalizedChartDetailPage <= 1}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+                  ก่อนหน้า
+                </button>
+                <span className="rounded-md bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-700">
+                  หน้า {normalizedChartDetailPage} / {chartDetailTotalPages}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setChartDetailPage((current) => Math.min(chartDetailTotalPages, current + 1))}
+                  disabled={normalizedChartDetailPage >= chartDetailTotalPages}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  ถัดไป
+                  <ChevronRight className="h-4 w-4" aria-hidden="true" />
+                </button>
+              </div>
+            </div>
+          </section>
+        ) : null}
+        <section className="rounded-md border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+            <div className="flex items-center gap-2">
+              <BarChart3 className="h-5 w-5 text-violet-700" aria-hidden="true" />
+              <h2 className="text-base font-semibold text-slate-950">งานตามหัวข้อบริการ</h2>
+            </div>
+            <p className="text-sm text-slate-500">กดที่แท่งกราฟเพื่อดูผู้แจ้งและกลุ่มงาน</p>
+          </div>
+          <div className="h-80">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={stats.subjectChartData} margin={{ top: 28, right: 18, left: 4, bottom: 72 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                <XAxis dataKey="name" tick={{ fontSize: 11 }} interval={0} angle={-22} textAnchor="end" height={72} />
+                <YAxis allowDecimals={false} tick={{ fontSize: 12 }} domain={[0, 'dataMax + 2']} />
+                <Tooltip />
+                <Bar dataKey="value" name="จำนวนคำขอ" radius={[4, 4, 0, 0]} barSize={34}>
+                  <LabelList dataKey="value" position="top" className="fill-slate-700 text-xs font-semibold" />
+                  {stats.subjectChartData.map((entry, index) => (
+                    <Cell
+                      key={entry.name}
+                      fill={selectedSubject === entry.name ? '#0f766e' : chartColors[index % chartColors.length]}
+                      className="cursor-pointer outline-none"
+                      onClick={() => {
+                        setSelectedSubject(entry.name);
+                        setSelectedCategoryName(null);
+                        setSelectedMonthKey(null);
+                        setSubjectDetailPage(1);
+                      }}
+                    />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </section>
+
+        {selectedSubject ? (
+          <section className="rounded-md border border-violet-100 bg-white p-5 shadow-sm">
+            <div className="flex flex-col gap-3 border-b border-slate-100 pb-4 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0">
+                <p className="text-xs font-semibold uppercase text-violet-700">รายละเอียดหัวข้อบริการ</p>
+                <h2 className="mt-1 break-words text-lg font-semibold text-slate-950">{selectedSubject}</h2>
+                <p className="mt-1 text-sm text-slate-500">รวม {selectedSubjectTickets.length} รายการ</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedSubject(null);
+                  setSubjectDetailPage(1);
+                }}
+                className="inline-flex items-center justify-center rounded-md border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+              >
+                ล้างการเลือก
+              </button>
+            </div>
+
+            <div className="mt-4 grid gap-4 lg:grid-cols-2">
+              <div className="rounded-md border border-slate-200 bg-slate-50/60 p-4">
+                <h3 className="text-sm font-semibold text-slate-950">แยกตามผู้ใช้</h3>
+                <div className="mt-3 space-y-2">
+                  {selectedSubjectRequesterCounts.map((item) => (
+                    <div key={item.name} className="flex items-center justify-between gap-3 rounded-md bg-white px-3 py-2 text-sm ring-1 ring-slate-100">
+                      <span className="min-w-0 truncate font-medium text-slate-700">{item.name}</span>
+                      <span className="shrink-0 rounded-full bg-violet-50 px-2.5 py-1 text-xs font-semibold text-violet-700">{item.value} รายการ</span>
+                    </div>
+                  ))}
+                  {selectedSubjectRequesterCounts.length === 0 ? <p className="text-sm text-slate-400">ไม่มีข้อมูลผู้ใช้</p> : null}
+                </div>
+              </div>
+
+              <div className="rounded-md border border-slate-200 bg-slate-50/60 p-4">
+                <h3 className="text-sm font-semibold text-slate-950">แยกตามกลุ่มงาน</h3>
+                <div className="mt-3 space-y-2">
+                  {selectedSubjectDepartmentCounts.map((item) => (
+                    <div key={item.name} className="flex items-center justify-between gap-3 rounded-md bg-white px-3 py-2 text-sm ring-1 ring-slate-100">
+                      <span className="min-w-0 truncate font-medium text-slate-700">{item.name}</span>
+                      <span className="shrink-0 rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">{item.value} รายการ</span>
+                    </div>
+                  ))}
+                  {selectedSubjectDepartmentCounts.length === 0 ? <p className="text-sm text-slate-400">ไม่มีข้อมูลกลุ่มงาน</p> : null}
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-4 overflow-x-auto">
+              <table className="w-full min-w-[820px] border-collapse text-left text-sm">
+                <thead>
+                  <tr className="border-b border-slate-200 text-xs font-semibold uppercase text-slate-500">
+                    <th className="px-2 pb-3">เลขคำขอ</th>
+                    <th className="px-2 pb-3">ประเภท</th>
+                    <th className="px-2 pb-3">ผู้แจ้ง</th>
+                    <th className="px-2 pb-3">กลุ่มงาน</th>
+                    <th className="px-2 pb-3">สถานะ</th>
+                    <th className="px-2 pb-3">วันที่สร้าง</th>
+                    <th className="px-2 pb-3">รายละเอียด</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {subjectDetailTickets.map((ticket) => (
+                    <tr key={ticket.id} className="transition hover:bg-slate-50">
+                      <td className="px-2 py-3">
+                        <button
+                          type="button"
+                          onClick={() => void handleOpenTicketDetail(ticket.id)}
+                          className="font-mono text-xs font-semibold text-teal-700 transition hover:text-teal-900 hover:underline"
+                        >
+                          {ticket.ticket_no}
+                        </button>
+                      </td>
+                      <td className="px-2 py-3 text-slate-600">{ticket.category_name}</td>
+                      <td className="px-2 py-3 text-slate-700">{ticket.requester_name}</td>
+                      <td className="px-2 py-3 text-slate-600">{ticket.requester_department || '-'}</td>
+                      <td className="px-2 py-3">
+                        <span className={cn('inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ring-1', statusTones[ticket.status])}>
+                          {statusLabels[ticket.status]}
+                        </span>
+                      </td>
+                      <td className="px-2 py-3 text-slate-500">{new Date(ticket.created_at).toLocaleDateString('th-TH')}</td>
+                      <td className="px-2 py-3">
+                        <button
+                          type="button"
+                          onClick={() => void handleOpenTicketDetail(ticket.id)}
+                          className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
+                        >
+                          <Eye className="h-3.5 w-3.5" aria-hidden="true" />
+                          เปิดดู
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                  {subjectDetailTickets.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="px-2 py-10 text-center text-slate-400">
+                        ไม่มีรายการในหัวข้อนี้
+                      </td>
+                    </tr>
+                  ) : null}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="mt-4 flex flex-col gap-3 border-t border-slate-100 pt-4 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm text-slate-500">
+                แสดง {selectedSubjectTickets.length === 0 ? 0 : subjectDetailStart + 1}-{Math.min(subjectDetailStart + subjectDetailTickets.length, selectedSubjectTickets.length)} จาก {selectedSubjectTickets.length} รายการ
+              </p>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSubjectDetailPage((current) => Math.max(1, current - 1))}
+                  disabled={normalizedSubjectDetailPage <= 1}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+                  ก่อนหน้า
+                </button>
+                <span className="rounded-md bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-700">
+                  หน้า {normalizedSubjectDetailPage} / {subjectDetailTotalPages}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setSubjectDetailPage((current) => Math.min(subjectDetailTotalPages, current + 1))}
+                  disabled={normalizedSubjectDetailPage >= subjectDetailTotalPages}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  ถัดไป
+                  <ChevronRight className="h-4 w-4" aria-hidden="true" />
+                </button>
+              </div>
+            </div>
+          </section>
+        ) : null}
         <section className="rounded-md border border-slate-200 bg-white p-5 shadow-sm">
           <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
             <div>

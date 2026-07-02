@@ -12,17 +12,15 @@ const urgencyOptions: Array<{ value: SpdServiceUrgency; label: string; hint: str
   { value: 'CRITICAL', label: 'CRITICAL', hint: 'กระทบงานสำคัญ' },
 ];
 
-const subjectOptions = [
-  'ขอใช้งาน Conference',
-  'แจ้งปัญหาการใช้งานเครื่องคอมพิวเตอร์',
-  'ลงข้อมูลหน้า Website',
-  'ขอใช้งาน Internet',
-  'แจ้งปัญหาการใช้งานระบบ NAS',
-  'แจ้ง Reset Password Internet',
-  'ขอความอนุเคราะห์เจ้าหน้าที่',
-  'ลงข่าวประชาสัมพันธ์',
-  'อื่นๆ',
-];
+const otherCategoryId = '__other__';
+const otherCategoryName = 'อื่นๆ';
+
+const subjectOptionsByCategory: Record<string, string[]> = {
+  'IT Support': ['แจ้งปัญหาการใช้งานเครื่องคอมพิวเตอร์', 'ขอใช้งาน Internet', 'แจ้ง Reset Password Internet'],
+  'Software Support': ['แจ้งใช้งาน AI ChatGPT'],
+  'Information System Support': ['แจ้งปัญหาการใช้งานระบบ NAS'],
+  'Digital Service': ['ขอใช้งาน Conference', 'ลงข้อมูลหน้า Website', 'ลงข่าวประชาสัมพันธ์'],
+};
 
 export function SpdServiceRequestPage() {
   const { profile, user } = useAuthStore();
@@ -32,7 +30,6 @@ export function SpdServiceRequestPage() {
   const [categoryId, setCategoryId] = useState('');
   const [urgency, setUrgency] = useState<SpdServiceUrgency>('MEDIUM');
   const [subject, setSubject] = useState('');
-  const [customSubject, setCustomSubject] = useState('');
   const [description, setDescription] = useState('');
   const [isLoadingCategories, setIsLoadingCategories] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -47,7 +44,7 @@ export function SpdServiceRequestPage() {
         setError(null);
         const data = await getSpdServiceCategories();
         setCategories(data);
-        setCategoryId((current) => current || data[0]?.id || '');
+        setCategoryId((current) => current || data[0]?.id || otherCategoryId);
       } catch (loadError) {
         console.error('Failed to load SPD Service categories:', loadError);
         setError('ไม่สามารถโหลดประเภทบริการได้');
@@ -57,13 +54,32 @@ export function SpdServiceRequestPage() {
     })();
   }, []);
 
-  const selectedCategory = useMemo(() => categories.find((category) => category.id === categoryId) || null, [categories, categoryId]);
-  const finalSubject = subject === 'อื่นๆ' ? customSubject.trim() : subject.trim();
+  const categoryOptions = useMemo(() => {
+    if (categories.some((category) => category.name === otherCategoryName)) {
+      return categories;
+    }
+
+    return [
+      ...categories,
+      {
+        id: otherCategoryId,
+        name: otherCategoryName,
+        description: null,
+        is_active: true,
+        sort_order: 50,
+        created_at: '',
+        updated_at: '',
+      },
+    ];
+  }, [categories]);
+  const selectedCategory = useMemo(() => categoryOptions.find((category) => category.id === categoryId) || null, [categoryOptions, categoryId]);
+  const isOtherCategory = selectedCategory?.name === otherCategoryName;
+  const subjectOptions = selectedCategory ? subjectOptionsByCategory[selectedCategory.name] || [] : [];
+  const finalSubject = isOtherCategory ? otherCategoryName : subject.trim();
 
   const resetIssueFields = () => {
     setUrgency('MEDIUM');
     setSubject('');
-    setCustomSubject('');
     setDescription('');
   };
 
@@ -75,7 +91,7 @@ export function SpdServiceRequestPage() {
       return;
     }
 
-    if (!requesterName.trim() || !selectedCategory || !finalSubject || !description.trim()) {
+    if (!requesterName.trim() || !selectedCategory || (!isOtherCategory && !finalSubject) || !description.trim()) {
       setError('กรุณากรอกข้อมูลที่จำเป็นให้ครบถ้วน');
       return;
     }
@@ -90,7 +106,7 @@ export function SpdServiceRequestPage() {
         requesterName: requesterName.trim(),
         requesterDepartment: requesterDepartment.trim() || null,
         requesterPhone: '-',
-        categoryId: selectedCategory.id,
+        categoryId: isOtherCategory ? null : selectedCategory.id,
         categoryName: selectedCategory.name,
         urgency,
         subject: finalSubject,
@@ -186,11 +202,14 @@ export function SpdServiceRequestPage() {
               <span className="text-sm font-medium text-slate-700">ประเภทบริการ</span>
               <select
                 value={categoryId}
-                onChange={(event) => setCategoryId(event.target.value)}
+                onChange={(event) => {
+                  setCategoryId(event.target.value);
+                  setSubject('');
+                }}
                 disabled={isLoadingCategories}
                 className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-100 disabled:cursor-not-allowed disabled:bg-slate-50"
               >
-                {categories.map((category) => (
+                {categoryOptions.map((category) => (
                   <option key={category.id} value={category.id}>
                     {category.name}
                   </option>
@@ -225,36 +244,26 @@ export function SpdServiceRequestPage() {
           </div>
 
           <div className="mt-4 grid gap-4">
-            <label className="block">
-              <span className="text-sm font-medium text-slate-700">หัวข้อปัญหา</span>
-              <select
-                value={subject}
-                onChange={(event) => setSubject(event.target.value)}
-                className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
-              >
-                <option value="">เลือกหัวข้อปัญหา</option>
-                {subjectOptions.map((option) => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            {subject === 'อื่นๆ' ? (
+            {!isOtherCategory ? (
               <label className="block">
-                <span className="text-sm font-medium text-slate-700">ระบุหัวข้อปัญหา</span>
-                <input
-                  value={customSubject}
-                  onChange={(event) => setCustomSubject(event.target.value)}
-                  className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
-                  placeholder="กรอกหัวข้อปัญหาอื่นๆ"
-                />
+                <span className="text-sm font-medium text-slate-700">หัวข้อ</span>
+                <select
+                  value={subject}
+                  onChange={(event) => setSubject(event.target.value)}
+                  className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
+                >
+                  <option value="">เลือกหัวข้อ</option>
+                  {subjectOptions.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
               </label>
             ) : null}
 
             <label className="block">
-              <span className="text-sm font-medium text-slate-700">รายละเอียดปัญหา</span>
+              <span className="text-sm font-medium text-slate-700">รายละเอียด</span>
               <textarea
                 value={description}
                 onChange={(event) => setDescription(event.target.value)}
