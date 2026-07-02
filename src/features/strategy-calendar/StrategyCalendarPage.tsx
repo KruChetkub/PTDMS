@@ -132,32 +132,20 @@ function statusLabel(status: StrategyEventRow['status']) {
   return 'เผยแพร่';
 }
 
-const eventColorClasses: Record<string, string> = {
-  slate: 'bg-slate-500 text-white',
-  blue: 'bg-blue-500 text-white',
-  emerald: 'bg-emerald-500 text-white',
-  amber: 'bg-amber-500 text-white',
-  red: 'bg-red-500 text-white',
-  purple: 'bg-purple-500 text-white',
-};
+const fallbackWorkGroupLabel = 'ไม่ระบุกลุ่มงาน';
 
-const eventColorLabels: Record<string, string> = {
-  slate: 'ทั่วไป',
-  blue: 'การประชุม',
-  emerald: 'โครงการ/กิจกรรม',
-  amber: 'ลงพื้นที่/เดินทาง',
-  red: 'ด่วน/สำคัญ',
-  purple: 'วันหยุด/อื่นๆ',
-};
-
-const eventColorDotClasses: Record<string, string> = {
-  slate: 'bg-slate-500',
-  blue: 'bg-blue-500',
-  emerald: 'bg-emerald-500',
-  amber: 'bg-amber-500',
-  red: 'bg-red-500',
-  purple: 'bg-purple-500',
-};
+const workGroupColorPalette = [
+  { key: 'blue', eventClassName: 'bg-blue-500 text-white', dotClassName: 'bg-blue-500', badgeClassName: 'bg-blue-50 text-blue-700', fill: '#3B82F6' },
+  { key: 'emerald', eventClassName: 'bg-emerald-500 text-white', dotClassName: 'bg-emerald-500', badgeClassName: 'bg-emerald-50 text-emerald-700', fill: '#10B981' },
+  { key: 'amber', eventClassName: 'bg-amber-500 text-white', dotClassName: 'bg-amber-500', badgeClassName: 'bg-amber-50 text-amber-700', fill: '#F59E0B' },
+  { key: 'rose', eventClassName: 'bg-rose-500 text-white', dotClassName: 'bg-rose-500', badgeClassName: 'bg-rose-50 text-rose-700', fill: '#F43F5E' },
+  { key: 'purple', eventClassName: 'bg-purple-500 text-white', dotClassName: 'bg-purple-500', badgeClassName: 'bg-purple-50 text-purple-700', fill: '#8B5CF6' },
+  { key: 'cyan', eventClassName: 'bg-cyan-500 text-white', dotClassName: 'bg-cyan-500', badgeClassName: 'bg-cyan-50 text-cyan-700', fill: '#06B6D4' },
+  { key: 'indigo', eventClassName: 'bg-indigo-500 text-white', dotClassName: 'bg-indigo-500', badgeClassName: 'bg-indigo-50 text-indigo-700', fill: '#6366F1' },
+  { key: 'teal', eventClassName: 'bg-teal-500 text-white', dotClassName: 'bg-teal-500', badgeClassName: 'bg-teal-50 text-teal-700', fill: '#14B8A6' },
+  { key: 'orange', eventClassName: 'bg-orange-500 text-white', dotClassName: 'bg-orange-500', badgeClassName: 'bg-orange-50 text-orange-700', fill: '#F97316' },
+  { key: 'slate', eventClassName: 'bg-slate-500 text-white', dotClassName: 'bg-slate-500', badgeClassName: 'bg-slate-50 text-slate-700', fill: '#64748B' },
+];
 
 function formatDateRange(event: StrategyEventRow) {
   if (!event.end_date || event.end_date === event.event_date) {
@@ -296,8 +284,19 @@ function ThaiDateSelect({ value, onChange }: { value: string; onChange: (val: st
   );
 }
 
-function getEventColorClass(color: string | null | undefined) {
-  return eventColorClasses[color || 'slate'] || eventColorClasses.slate;
+function getWorkGroupName(ownerWorkGroup: string | null | undefined) {
+  return ownerWorkGroup?.trim() || fallbackWorkGroupLabel;
+}
+
+function getWorkGroupColor(ownerWorkGroup: string | null | undefined) {
+  const name = getWorkGroupName(ownerWorkGroup);
+  let hash = 0;
+
+  for (let index = 0; index < name.length; index += 1) {
+    hash = (hash * 31 + name.charCodeAt(index)) >>> 0;
+  }
+
+  return workGroupColorPalette[hash % workGroupColorPalette.length];
 }
 
 const ITEMS_PER_PAGE = 5;
@@ -348,8 +347,11 @@ function StrategyEventDetailModal({
               <p className="mt-1 text-sm font-semibold text-slate-950">{statusLabel(event.status)}</p>
             </div>
             <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-              <p className="text-xs font-medium text-slate-500">ประเภทกิจกรรม</p>
-              <p className="mt-1 text-sm font-semibold text-slate-950">{eventColorLabels[event.color || 'slate'] || 'ทั่วไป'}</p>
+              <p className="text-xs font-medium text-slate-500">สีประจำกลุ่มงาน</p>
+              <p className="mt-1 inline-flex items-center gap-2 text-sm font-semibold text-slate-950">
+                <span className={cn('h-2.5 w-2.5 rounded-full', getWorkGroupColor(event.owner_work_group).dotClassName)} />
+                {getWorkGroupName(event.owner_work_group)}
+              </p>
             </div>
             <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
               <p className="text-xs font-medium text-slate-500">วันที่</p>
@@ -403,6 +405,8 @@ export function StrategyCalendarPage() {
   const [dashboardYear, setDashboardYear] = useState(() => new Date().getFullYear());
   const [listPage, setListPage] = useState(0);
   const [selectedUpcomingEvent, setSelectedUpcomingEvent] = useState<StrategyEventRow | null>(null);
+  const [selectedWorkGroup, setSelectedWorkGroup] = useState<string | null>(null);
+  const [workGroupPage, setWorkGroupPage] = useState(0);
   const [form, setForm] = useState({
     title: '',
     description: '',
@@ -517,7 +521,6 @@ export function StrategyCalendarPage() {
   const dashboardChartYear = canFilterDashboard && dashboardFilterMode !== 'all' ? dashboardYear : monthDate.getFullYear();
 
   const dashboardAnalytics = useMemo(() => {
-    const typeColors = ['blue', 'emerald', 'amber', 'red', 'purple', 'slate'];
     const activeEvents = dashboardSourceEvents.filter((event) => event.status !== 'cancelled');
     const published = dashboardSourceEvents.filter((event) => event.status === 'published');
 
@@ -535,14 +538,19 @@ export function StrategyCalendarPage() {
       };
     });
 
-    const activityTypeData = typeColors
-      .map((color) => ({
-        color,
-        name: eventColorLabels[color] || color,
-        count: published.filter((event) => (event.color || 'slate') === color).length,
-        fill: color === 'slate' ? '#64748B' : color === 'blue' ? '#3B82F6' : color === 'emerald' ? '#10B981' : color === 'amber' ? '#F59E0B' : color === 'red' ? '#EF4444' : '#8B5CF6',
+    const workGroupCounts = new Map<string, number>();
+    published.forEach((event) => {
+      const workGroup = getWorkGroupName(event.owner_work_group);
+      workGroupCounts.set(workGroup, (workGroupCounts.get(workGroup) || 0) + 1);
+    });
+
+    const workGroupColorData = Array.from(workGroupCounts.entries())
+      .map(([name, count]) => ({
+        name,
+        count,
+        fill: getWorkGroupColor(name).fill,
       }))
-      .sort((a, b) => b.count - a.count);
+      .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, 'th'));
 
     const trendEnd =
       canFilterDashboard && dashboardFilterMode === 'year'
@@ -614,18 +622,18 @@ export function StrategyCalendarPage() {
       return isFirstWeek || isNewMonth ? thaiShortMonths[date.getMonth()] : '';
     });
     const bestMonth = monthlyActivityData.reduce((best, item) => (item.total > best.total ? item : best), monthlyActivityData[0]);
-    const topType = activityTypeData.reduce((best, item) => (item.count > best.count ? item : best), activityTypeData[0]);
+    const topWorkGroup = workGroupColorData.reduce((best, item) => (item.count > best.count ? item : best), workGroupColorData[0] || { name: '-', count: 0, fill: '#64748B' });
 
     return {
       monthlyActivityData,
-      activityTypeData,
+      workGroupColorData,
       activityTrendData,
       heatmapDays,
       heatmapWeeks,
       heatmapMonthLabels,
       heatmapMax,
       bestMonth,
-      topType,
+      topWorkGroup,
     };
   }, [canFilterDashboard, dashboardChartYear, dashboardFilterMode, dashboardMonth, dashboardSourceEvents, dashboardYear, todayKey]);
 
@@ -638,6 +646,23 @@ export function StrategyCalendarPage() {
     ],
     [dashboardCancelledCount, dashboardCompletedCount, dashboardInProgressCount, dashboardPendingCount],
   );
+
+  const selectedWorkGroupEvents = useMemo(
+    () =>
+      selectedWorkGroup
+        ? dashboardPublishedEvents
+            .filter((event) => getWorkGroupName(event.owner_work_group) === selectedWorkGroup)
+            .sort((a, b) => a.event_date.localeCompare(b.event_date) || (a.start_time || '').localeCompare(b.start_time || ''))
+        : [],
+    [dashboardPublishedEvents, selectedWorkGroup],
+  );
+  const totalWorkGroupPages = Math.max(1, Math.ceil(selectedWorkGroupEvents.length / ITEMS_PER_PAGE));
+  const safeWorkGroupPage = Math.min(workGroupPage, totalWorkGroupPages - 1);
+  const paginatedWorkGroupEvents = selectedWorkGroupEvents.slice(safeWorkGroupPage * ITEMS_PER_PAGE, (safeWorkGroupPage + 1) * ITEMS_PER_PAGE);
+
+  useEffect(() => {
+    setWorkGroupPage(0);
+  }, [selectedWorkGroup]);
 
   const dashboardFilterLabel = useMemo(() => {
     if (!canFilterDashboard) {
@@ -789,7 +814,7 @@ export function StrategyCalendarPage() {
         endDate: form.endDate || selectedDate,
         startTime: form.startTime,
         endTime: form.endTime,
-        color: form.color,
+        color: getWorkGroupColor(profile?.work_group || profile?.department).key,
         location: form.location,
         ownerWorkGroup: profile?.work_group || profile?.department || null,
       };
@@ -850,7 +875,7 @@ export function StrategyCalendarPage() {
   };
 
   return (
-    <div className="mx-auto max-w-7xl">
+    <div className="w-full">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="hidden sm:block">
           <PageHeader
@@ -1168,8 +1193,9 @@ export function StrategyCalendarPage() {
                               <span className="inline-flex items-center gap-1"><Clock className="h-3 w-3" aria-hidden="true" />{formatTime(item)}</span>
                               <span className="inline-flex items-center gap-1"><MapPin className="h-3 w-3" aria-hidden="true" />{item.location || '-'}</span>
                             </div>
-                            <span className={cn('mt-2 inline-flex rounded-md px-2 py-1 text-[11px] font-semibold', item.color === 'emerald' ? 'bg-emerald-50 text-emerald-700' : item.color === 'amber' ? 'bg-amber-50 text-amber-700' : item.color === 'red' ? 'bg-red-50 text-red-700' : item.color === 'purple' ? 'bg-purple-50 text-purple-700' : 'bg-blue-50 text-blue-700')}>
-                              {eventColorLabels[item.color || 'slate'] || 'ทั่วไป'}
+                            <span className={cn('mt-2 inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-semibold', getWorkGroupColor(item.owner_work_group).badgeClassName)}>
+                              <span className={cn('h-2 w-2 rounded-full', getWorkGroupColor(item.owner_work_group).dotClassName)} />
+                              {getWorkGroupName(item.owner_work_group)}
                             </span>
                           </div>
                         </>
@@ -1194,26 +1220,60 @@ export function StrategyCalendarPage() {
               </section>
             </div>
 
-            <div className="grid gap-4 xl:grid-cols-[13rem_minmax(0,1fr)]">
+            <div className="grid gap-4 xl:grid-cols-[minmax(18rem,0.42fr)_minmax(0,1fr)]">
               <section className="rounded-md border border-slate-200 bg-white p-4 shadow-sm">
                 <div className="flex items-center gap-2">
                   <ClipboardList className="h-4 w-4 text-slate-500" aria-hidden="true" />
-                  <h3 className="text-sm font-bold text-slate-950">ประเภทกิจกรรม</h3>
+                  <h3 className="text-sm font-bold text-slate-950">สีของกลุ่มงาน</h3>
                 </div>
+                <p className="mt-1 text-[11px] text-slate-500">คลิกแท่งสีเพื่อดูรายการกิจกรรมของกลุ่มงาน</p>
                 <div className="mt-4 h-52">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={dashboardAnalytics.activityTypeData} layout="vertical" margin={{ top: 4, right: 10, bottom: 14, left: -6 }}>
-                      <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#E2E8F0" />
-                      <XAxis type="number" allowDecimals={false} tickLine={false} axisLine={false} fontSize={10} />
-                      <YAxis type="category" dataKey="name" width={82} tickLine={false} axisLine={false} fontSize={10} />
-                      <Tooltip />
-                      <Bar dataKey="count" name="จำนวน" radius={[0, 5, 5, 0]} barSize={10}>
-                        {dashboardAnalytics.activityTypeData.map((entry) => (
-                          <Cell key={entry.name} fill={entry.fill} />
-                        ))}
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
+                  {dashboardAnalytics.workGroupColorData.length === 0 ? (
+                    <div className="flex h-full items-center justify-center rounded-md border border-dashed border-slate-300 text-sm text-slate-500">ยังไม่มีข้อมูลกลุ่มงาน</div>
+                  ) : (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart
+                        data={dashboardAnalytics.workGroupColorData}
+                        layout="vertical"
+                        margin={{ top: 4, right: 10, bottom: 14, left: -6 }}
+                        onClick={(chartState) => {
+                          const name = chartState?.activePayload?.[0]?.payload?.name;
+                          if (typeof name === 'string') {
+                            setSelectedWorkGroup((current) => (current === name ? null : name));
+                          }
+                        }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#E2E8F0" />
+                        <XAxis type="number" allowDecimals={false} tickLine={false} axisLine={false} fontSize={10} />
+                        <YAxis type="category" dataKey="name" width={82} tickLine={false} axisLine={false} fontSize={10} />
+                        <Tooltip />
+                        <Bar dataKey="count" name="จำนวน" radius={[0, 5, 5, 0]} barSize={10} cursor="pointer">
+                          {dashboardAnalytics.workGroupColorData.map((entry) => (
+                            <Cell key={entry.name} fill={entry.fill} opacity={!selectedWorkGroup || selectedWorkGroup === entry.name ? 1 : 0.42} />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  )}
+                </div>
+                <div className="mt-3 space-y-2">
+                  {dashboardAnalytics.workGroupColorData.map((item) => (
+                    <button
+                      key={item.name}
+                      type="button"
+                      onClick={() => setSelectedWorkGroup((current) => (current === item.name ? null : item.name))}
+                      className={cn(
+                        'flex w-full items-center justify-between rounded-md border px-2.5 py-2 text-left text-xs transition',
+                        selectedWorkGroup === item.name ? 'border-slate-900 bg-slate-50 text-slate-950' : 'border-slate-200 text-slate-600 hover:bg-slate-50',
+                      )}
+                    >
+                      <span className="inline-flex min-w-0 items-center gap-2">
+                        <span className={cn('h-2.5 w-2.5 shrink-0 rounded-full', getWorkGroupColor(item.name).dotClassName)} />
+                        <span className="truncate font-semibold">{item.name}</span>
+                      </span>
+                      <span className="shrink-0 font-bold">{item.count}</span>
+                    </button>
+                  ))}
                 </div>
               </section>
 
@@ -1241,6 +1301,81 @@ export function StrategyCalendarPage() {
                 </div>
               </section>
             </div>
+
+            {selectedWorkGroup ? (
+              <section className="rounded-md border border-slate-200 bg-white p-4 shadow-sm">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-950">รายการกิจกรรมของกลุ่มงาน</h3>
+                    <p className="mt-1 inline-flex items-center gap-2 text-xs font-semibold text-slate-600">
+                      <span className={cn('h-2.5 w-2.5 rounded-full', getWorkGroupColor(selectedWorkGroup).dotClassName)} />
+                      {selectedWorkGroup} · {selectedWorkGroupEvents.length} รายการ
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedWorkGroup(null)}
+                    className="inline-flex items-center justify-center gap-1.5 rounded-md border border-slate-300 px-2.5 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-50"
+                  >
+                    <X className="h-3.5 w-3.5" aria-hidden="true" />
+                    ล้างการเลือก
+                  </button>
+                </div>
+                <div className="mt-4 divide-y divide-slate-100 rounded-md border border-slate-200">
+                  {selectedWorkGroupEvents.length === 0 ? (
+                    <div className="px-3 py-6 text-center text-sm text-slate-500">ยังไม่พบกิจกรรมของกลุ่มงานนี้</div>
+                  ) : (
+                    paginatedWorkGroupEvents.map((item) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => setSelectedUpcomingEvent(item)}
+                        className="flex w-full flex-col gap-2 px-3 py-3 text-left transition hover:bg-slate-50 sm:flex-row sm:items-center sm:justify-between"
+                      >
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className={cn('h-2.5 w-2.5 shrink-0 rounded-full', getWorkGroupColor(item.owner_work_group).dotClassName)} />
+                            <p className="truncate text-sm font-semibold text-slate-950">{item.title}</p>
+                          </div>
+                          <p className="mt-1 line-clamp-1 text-xs text-slate-500">{item.description || item.location || 'ไม่มีรายละเอียดเพิ่มเติม'}</p>
+                        </div>
+                        <div className="shrink-0 text-xs font-medium text-slate-500 sm:text-right">
+                          <p>{formatDateRange(item)}</p>
+                          <p className="mt-0.5">{formatTime(item)}</p>
+                        </div>
+                      </button>
+                    ))
+                  )}
+                </div>
+                {selectedWorkGroupEvents.length > ITEMS_PER_PAGE ? (
+                  <div className="mt-3 flex flex-col gap-2 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between">
+                    <span>
+                      แสดง {safeWorkGroupPage * ITEMS_PER_PAGE + 1}-{Math.min((safeWorkGroupPage + 1) * ITEMS_PER_PAGE, selectedWorkGroupEvents.length)} จาก {selectedWorkGroupEvents.length} รายการ
+                    </span>
+                    <div className="inline-flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setWorkGroupPage((page) => Math.max(0, page - 1))}
+                        disabled={safeWorkGroupPage === 0}
+                        className="inline-flex items-center gap-1 rounded-md border border-slate-300 px-2.5 py-1.5 font-semibold text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        <ChevronLeft className="h-3.5 w-3.5" aria-hidden="true" />
+                        ก่อนหน้า
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setWorkGroupPage((page) => Math.min(totalWorkGroupPages - 1, page + 1))}
+                        disabled={safeWorkGroupPage >= totalWorkGroupPages - 1}
+                        className="inline-flex items-center gap-1 rounded-md border border-slate-300 px-2.5 py-1.5 font-semibold text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        ถัดไป
+                        <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+              </section>
+            ) : null}
 
             <section className="rounded-md border border-slate-200 bg-white p-4 shadow-sm">
               <div className="flex items-start justify-between gap-3">
@@ -1354,7 +1489,7 @@ export function StrategyCalendarPage() {
                           <td className="whitespace-nowrap px-4 py-3 text-slate-600">{formatTime(item)}</td>
                           <td className="min-w-64 px-4 py-3">
                             <div className="flex items-center gap-2">
-                              <span className={cn('inline-block h-2.5 w-2.5 shrink-0 rounded-full', eventColorDotClasses[item.color || 'slate'] || 'bg-slate-500')}></span>
+                              <span className={cn('inline-block h-2.5 w-2.5 shrink-0 rounded-full', getWorkGroupColor(item.owner_work_group).dotClassName)}></span>
                               <div>
                                 <div className={cn('font-semibold text-slate-950', item.status === 'cancelled' && 'text-slate-400 line-through')}>
                                   {item.title}
@@ -1439,7 +1574,7 @@ export function StrategyCalendarPage() {
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
                           <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-700">
-                            <span className={cn('inline-block h-2 w-2 rounded-full', eventColorDotClasses[item.color || 'slate'] || 'bg-slate-500')}></span>
+                            <span className={cn('inline-block h-2 w-2 rounded-full', getWorkGroupColor(item.owner_work_group).dotClassName)}></span>
                             {item.end_date && item.end_date !== item.event_date
                               ? `${formatThaiDate(item.event_date)} - ${formatThaiDate(item.end_date)}`
                               : formatThaiDate(item.event_date)}
@@ -1647,7 +1782,7 @@ export function StrategyCalendarPage() {
                             barClasses,
                             isCancelled
                               ? 'bg-slate-100 text-slate-400 line-through'
-                              : getEventColorClass(item.color),
+                              : getWorkGroupColor(item.owner_work_group).eventClassName,
                           )}
                         >
                           {showTitle ? item.title : '\u00A0'}
@@ -1676,7 +1811,7 @@ export function StrategyCalendarPage() {
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
-                          <span className={cn('inline-block h-2.5 w-2.5 rounded-full', eventColorDotClasses[item.color || 'slate'] || 'bg-slate-500')}></span>
+                          <span className={cn('inline-block h-2.5 w-2.5 rounded-full', getWorkGroupColor(item.owner_work_group).dotClassName)}></span>
                           <h3 className={cn('text-sm font-semibold text-slate-950', item.status === 'cancelled' && 'text-slate-400 line-through')}>
                             {item.title}
                           </h3>
@@ -1799,22 +1934,17 @@ export function StrategyCalendarPage() {
                   </div>
                 </label>
               </div>
-              <div>
-                <label className="block">
-                  <span className="text-xs font-medium text-slate-600">ประเภทกิจกรรม (สี)</span>
-                  <select
-                    value={form.color}
-                    onChange={(event) => setForm((current) => ({ ...current, color: event.target.value }))}
-                    className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
-                  >
-                    <option value="blue">การประชุม (สีฟ้า)</option>
-                    <option value="slate">ทั่วไป (สีเทา)</option>
-                    <option value="emerald">โครงการ/กิจกรรม (สีเขียว)</option>
-                    <option value="amber">ลงพื้นที่/เดินทาง (สีเหลือง)</option>
-                    <option value="red">ด่วน/สำคัญ (สีแดง)</option>
-                    <option value="purple">วันหยุด/อื่นๆ (สีม่วง)</option>
-                  </select>
-                </label>
+              <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+                <span className="text-xs font-medium text-slate-600">สีของกลุ่มงาน</span>
+                <div className="mt-1 flex items-center justify-between gap-3">
+                  <span className="min-w-0 truncate text-sm font-semibold text-slate-900">
+                    {getWorkGroupName(profile?.work_group || profile?.department)}
+                  </span>
+                  <span className={cn('inline-flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-semibold', getWorkGroupColor(profile?.work_group || profile?.department).badgeClassName)}>
+                    <span className={cn('h-2 w-2 rounded-full', getWorkGroupColor(profile?.work_group || profile?.department).dotClassName)} />
+                    อัตโนมัติ
+                  </span>
+                </div>
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <TimeSelect
@@ -1832,7 +1962,7 @@ export function StrategyCalendarPage() {
                 value={form.location}
                 onChange={(event) => setForm((current) => ({ ...current, location: event.target.value }))}
                 className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
-                placeholder="สถานที่ / ช่องทางประชุม"
+                placeholder="สถานที่"
               />
               <textarea
                 value={form.description}

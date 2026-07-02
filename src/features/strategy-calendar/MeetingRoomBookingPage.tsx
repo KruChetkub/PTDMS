@@ -1,11 +1,13 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import {
+  BellRing,
   CalendarDays,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
   Clock,
   Edit3,
+  ExternalLink,
   Home,
   Library,
   LineChart,
@@ -24,6 +26,8 @@ import {
   createMeetingRoomReservation,
   listAllMeetingRoomReservations,
   listMeetingRoomReservations,
+  listUpcomingMeetingRoomLinkNotifications,
+  notifyMeetingRoomReservationCreated,
   updateMeetingRoomReservation,
   type MeetingRoomReservationForm,
   type MeetingRoomReservationRow,
@@ -48,6 +52,7 @@ const thaiMonths = [
 
 const weekdays = ['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส'];
 const rooms = ['ห้องประชุม 1', 'ห้องประชุม 2', 'ห้องสมุด'];
+const meetingTypes = ['การประชุมแบบ on site', 'การประชุม online', 'การประชุมแบบ on site และ online'];
 const workGroups = [
   'กลุ่มพัฒนาและบริหารยุทธศาสตร์',
   'กลุ่มงบประมาณ',
@@ -62,10 +67,14 @@ const startSlots = buildTimeSlots('08:00', '17:00');
 const endSlots = buildTimeSlots('08:30', '17:30');
 
 type DashboardFilterMode = 'all' | 'month' | 'year';
+type DashboardUsageSelection = { type: 'room' | 'workGroup'; value: string } | null;
 
 const emptyForm = (date: string, profileName?: string | null, workGroup?: string | null): MeetingRoomReservationForm => ({
   topic: '',
   room: '',
+  meetingType: meetingTypes[0],
+  onlineMeetingUrl: '',
+  details: '',
   reservationDate: date,
   startTime: '',
   endTime: '',
@@ -178,6 +187,7 @@ export function MeetingRoomBookingPage() {
   const [selectedDate, setSelectedDate] = useState(todayKey);
   const [reservations, setReservations] = useState<MeetingRoomReservationRow[]>([]);
   const [dashboardReservations, setDashboardReservations] = useState<MeetingRoomReservationRow[]>([]);
+  const [linkNotifications, setLinkNotifications] = useState<MeetingRoomReservationRow[]>([]);
   const [form, setForm] = useState(() => emptyForm(todayKey, profile?.full_name, profile?.work_group));
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
@@ -190,12 +200,17 @@ export function MeetingRoomBookingPage() {
   const [dashboardYear, setDashboardYear] = useState(() => new Date().getFullYear());
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [dashboardUsageSelection, setDashboardUsageSelection] = useState<DashboardUsageSelection>(null);
+  const [highlightedReservationId, setHighlightedReservationId] = useState<string | null>(null);
+  const [isLinkNotificationPanelOpen, setIsLinkNotificationPanelOpen] = useState(false);
 
   const calendarDays = useMemo(() => getCalendarDays(monthDate), [monthDate]);
   const currentMonthDays = useMemo(() => calendarDays.filter((date) => date.getMonth() === monthDate.getMonth()), [calendarDays, monthDate]);
   const monthLabel = `${thaiMonths[monthDate.getMonth()]} ${monthDate.getFullYear() + 543}`;
   const canManageAll = profile?.role === 'super_admin' || profile?.role === 'admin';
   const canViewDashboard = profile?.role === 'super_admin' || profile?.role === 'admin' || profile?.role === 'executive';
+  const canShowLinkNotifications = Boolean(profile?.user_id);
+  const canEditOnlineMeetingUrl = canManageAll;
 
   const reservationsByDate = useMemo(() => {
     return reservations.reduce<Record<string, MeetingRoomReservationRow[]>>((acc, reservation) => {
@@ -288,6 +303,29 @@ export function MeetingRoomBookingPage() {
     };
   }, [filteredDashboardSource]);
 
+  const selectedDashboardReservations = useMemo(() => {
+    if (!dashboardUsageSelection) {
+      return [];
+    }
+
+    const selectedItems = filteredDashboardSource.filter((reservation) =>
+      dashboardUsageSelection.type === 'room'
+        ? reservation.room === dashboardUsageSelection.value
+        : reservation.work_group === dashboardUsageSelection.value,
+    );
+
+    return [...selectedItems].sort((a, b) => {
+      const dateCompare = a.reservation_date.localeCompare(b.reservation_date);
+      return dateCompare || a.start_time.localeCompare(b.start_time);
+    });
+  }, [dashboardUsageSelection, filteredDashboardSource]);
+
+  const selectedDashboardTitle = dashboardUsageSelection
+    ? dashboardUsageSelection.type === 'room'
+      ? 'รายการใช้งาน' + dashboardUsageSelection.value
+      : 'รายการใช้งานของ' + dashboardUsageSelection.value
+    : '';
+
   const filteredEndSlots = useMemo(() => {
     if (!form.startTime) {
       return endSlots;
@@ -310,6 +348,21 @@ export function MeetingRoomBookingPage() {
       setMessage({ type: 'error', text: error instanceof Error ? error.message : 'ไม่สามารถโหลดข้อมูลการจองได้' });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadLinkNotifications = async () => {
+    if (!profile?.user_id || !canShowLinkNotifications) {
+      setLinkNotifications([]);
+      return;
+    }
+
+    try {
+      const data = await listUpcomingMeetingRoomLinkNotifications(todayKey);
+      setLinkNotifications(data);
+    } catch (error) {
+      console.error('Failed to load meeting room link notifications:', error);
+      setLinkNotifications([]);
     }
   };
 
@@ -337,9 +390,23 @@ export function MeetingRoomBookingPage() {
     void loadDashboardReservations();
   }, [canViewDashboard]);
 
-  const selectDate = (dateKey: string) => {
+  useEffect(() => {
+    void loadLinkNotifications();
+  }, [canShowLinkNotifications, todayKey]);
+
+  const scrollToReservationList = () => {
+    window.setTimeout(() => {
+      document.getElementById('meeting-room-reservation-list')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 100);
+  };
+
+  const selectDate = (dateKey: string, shouldScroll = false) => {
     setSelectedDate(dateKey);
     setForm((current) => ({ ...current, reservationDate: dateKey }));
+
+    if (shouldScroll) {
+      scrollToReservationList();
+    }
   };
 
   const moveMonth = (amount: number) => {
@@ -389,18 +456,31 @@ export function MeetingRoomBookingPage() {
     setMessage(null);
 
     try {
+      let successText = editingId ? 'แก้ไขการจองเรียบร้อยแล้ว' : 'บันทึกการจองเรียบร้อยแล้ว';
+
       if (editingId) {
         await updateMeetingRoomReservation(editingId, input);
-        setMessage({ type: 'success', text: 'แก้ไขการจองเรียบร้อยแล้ว' });
       } else {
-        await createMeetingRoomReservation(input);
-        setMessage({ type: 'success', text: 'บันทึกการจองเรียบร้อยแล้ว' });
+        const savedReservation = await createMeetingRoomReservation(input);
+
+        try {
+          const notificationResult = await notifyMeetingRoomReservationCreated(savedReservation.id);
+
+          if (!notificationResult.sent && !notificationResult.skipped) {
+            successText = 'บันทึกการจองเรียบร้อยแล้ว แต่ยังส่ง Telegram ไม่สำเร็จ';
+          }
+        } catch (notificationError) {
+          console.error('Failed to notify meeting room Telegram:', notificationError);
+          successText = 'บันทึกการจองเรียบร้อยแล้ว แต่ยังส่ง Telegram ไม่สำเร็จ';
+        }
       }
 
+      setMessage({ type: 'success', text: successText });
       resetForm();
       setIsBookingModalOpen(false);
       await loadReservations();
       await loadDashboardReservations();
+      await loadLinkNotifications();
     } catch (error) {
       setMessage({ type: 'error', text: error instanceof Error ? error.message : 'บันทึกการจองไม่สำเร็จ' });
     } finally {
@@ -411,7 +491,7 @@ export function MeetingRoomBookingPage() {
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
-    if (!form.topic.trim() || !form.room || !form.reservationDate || !form.startTime || !form.endTime || !form.bookerName.trim() || !form.workGroup.trim()) {
+    if (!form.topic.trim() || !form.room || !form.meetingType || !form.reservationDate || !form.startTime || !form.endTime || !form.bookerName.trim() || !form.workGroup.trim()) {
       setMessage({ type: 'error', text: 'กรุณากรอกข้อมูลการจองให้ครบถ้วน' });
       return;
     }
@@ -430,12 +510,27 @@ export function MeetingRoomBookingPage() {
     void saveReservation(form);
   };
 
+  const openReservationFromNotification = (reservation: MeetingRoomReservationRow) => {
+    const reservationDate = parseDateKey(reservation.reservation_date);
+    setMonthDate(new Date(reservationDate.getFullYear(), reservationDate.getMonth(), 1));
+    setSelectedDate(reservation.reservation_date);
+    setHighlightedReservationId(reservation.id);
+    setIsLinkNotificationPanelOpen(false);
+
+    window.setTimeout(() => {
+      document.getElementById(`meeting-room-reservation-${reservation.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 100);
+  };
+
   const startEdit = (reservation: MeetingRoomReservationRow) => {
     setEditingId(reservation.id);
     setSelectedDate(reservation.reservation_date);
     setForm({
       topic: reservation.topic,
       room: reservation.room,
+      meetingType: reservation.meeting_type || meetingTypes[0],
+      onlineMeetingUrl: reservation.online_meeting_url || '',
+      details: reservation.details || '',
       reservationDate: reservation.reservation_date,
       startTime: formatTime(reservation.start_time),
       endTime: formatTime(reservation.end_time),
@@ -457,6 +552,7 @@ export function MeetingRoomBookingPage() {
       setMessage({ type: 'success', text: 'ยกเลิกการจองเรียบร้อยแล้ว' });
       await loadReservations();
       await loadDashboardReservations();
+      await loadLinkNotifications();
     } catch (error) {
       setMessage({ type: 'error', text: error instanceof Error ? error.message : 'ยกเลิกการจองไม่สำเร็จ' });
     } finally {
@@ -490,6 +586,46 @@ export function MeetingRoomBookingPage() {
             </option>
           ))}
         </select>
+      </label>
+
+      <label className="block">
+        <span className="text-xs font-semibold text-blue-700">รูปแบบการประชุม</span>
+        <select
+          value={form.meetingType}
+          onChange={(event) => setForm((current) => ({ ...current, meetingType: event.target.value }))}
+          className="mt-1 w-full rounded-md border border-blue-100 bg-white px-3 py-2 text-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+        >
+          {meetingTypes.map((meetingType) => (
+            <option key={meetingType} value={meetingType}>
+              {meetingType}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      <label className="block">
+        <span className="text-xs font-semibold text-blue-700">ลิงก์ประชุมออนไลน์</span>
+        <input
+          type="url"
+          value={form.onlineMeetingUrl}
+          onChange={(event) => setForm((current) => ({ ...current, onlineMeetingUrl: event.target.value }))}
+          disabled={!canEditOnlineMeetingUrl}
+          className={cn(
+            'mt-1 w-full rounded-md border border-blue-100 px-3 py-2 text-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100',
+            !canEditOnlineMeetingUrl && 'bg-slate-50 text-slate-500',
+          )}
+          placeholder={canEditOnlineMeetingUrl ? 'https://...' : 'รอ Admin สร้างลิงก์ประชุมออนไลน์'}
+        />
+      </label>
+
+      <label className="block">
+        <span className="text-xs font-semibold text-blue-700">รายละเอียดเพิ่มเติม</span>
+        <textarea
+          value={form.details}
+          onChange={(event) => setForm((current) => ({ ...current, details: event.target.value }))}
+          className="mt-1 min-h-24 w-full resize-y rounded-md border border-blue-100 px-3 py-2 text-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+          placeholder="ระบุรายละเอียดเพิ่มเติม"
+        />
       </label>
 
       <label className="block">
@@ -592,8 +728,59 @@ export function MeetingRoomBookingPage() {
   return (
     <div className="mx-auto max-w-7xl">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="hidden sm:block">
+        <div className="hidden min-w-0 items-start gap-3 sm:flex">
           <PageHeader title="ห้องประชุม กองยุทธศาสตร์และแผนงาน"/>
+          {canShowLinkNotifications ? (
+            <div className="relative pt-1">
+              <button
+                type="button"
+                onClick={() => setIsLinkNotificationPanelOpen((current) => !current)}
+                className="relative inline-flex h-10 w-10 items-center justify-center rounded-full border border-sky-200 bg-white text-sky-700 shadow-sm transition hover:bg-sky-50"
+                aria-label="แจ้งเตือนลิงก์ประชุมออนไลน์"
+              >
+                <BellRing className="h-4 w-4" aria-hidden="true" />
+                {linkNotifications.length > 0 ? (
+                  <span className="absolute -right-1 -top-1 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
+                    {linkNotifications.length}
+                  </span>
+                ) : null}
+              </button>
+
+              {isLinkNotificationPanelOpen ? (
+                <div className="absolute left-0 z-30 mt-2 w-[min(22rem,calc(100vw-2rem))] overflow-hidden rounded-md border border-sky-100 bg-white shadow-xl shadow-slate-900/15">
+                  <div className="border-b border-sky-100 px-4 py-3">
+                    <h2 className="text-sm font-semibold text-slate-950">แจ้งเตือนลิงก์ประชุมออนไลน์</h2>
+                    <p className="mt-0.5 text-xs text-slate-500">รายการจองที่มีลิงก์แล้วและยังไม่ถึงกำหนดประชุม</p>
+                  </div>
+                  <div className="max-h-80 overflow-y-auto">
+                    {linkNotifications.length > 0 ? (
+                      linkNotifications.map((reservation) => (
+                        <button
+                          key={reservation.id}
+                          type="button"
+                          onClick={() => openReservationFromNotification(reservation)}
+                          className="flex w-full items-start gap-3 border-b border-sky-50 px-4 py-3 text-left transition last:border-b-0 hover:bg-sky-50"
+                        >
+                          <div className="mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-sky-100 text-sky-700">
+                            <ExternalLink className="h-4 w-4" aria-hidden="true" />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-semibold text-slate-950">ได้สร้างลิงก์ประชุมเรียบร้อยแล้ว</p>
+                            <p className="mt-1 truncate text-xs text-slate-600">{reservation.topic}</p>
+                            <p className="mt-1 text-xs text-slate-500">
+                              {formatThaiDate(reservation.reservation_date)} · {formatTime(reservation.start_time)} - {formatTime(reservation.end_time)} น.
+                            </p>
+                          </div>
+                        </button>
+                      ))
+                    ) : (
+                      <div className="px-4 py-6 text-center text-sm text-slate-500">ยังไม่มีแจ้งเตือนลิงก์ประชุมออนไลน์</div>
+                    )}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
         </div>
         <div className="hidden">
           <h1 className="text-xl font-semibold text-slate-950">ระบบจองห้องประชุม</h1>
@@ -617,8 +804,7 @@ export function MeetingRoomBookingPage() {
           </button>
         </div>
       </div>
-
-      {message ? (
+{message ? (
         <div
           className={cn(
             'mb-4 rounded-md border px-4 py-3 text-sm',
@@ -711,8 +897,23 @@ export function MeetingRoomBookingPage() {
                 {dashboardAnalytics.roomUsage.map((item) => {
                   const percent = dashboardAnalytics.total > 0 ? (item.count / dashboardAnalytics.total) * 100 : 0;
                   const style = roomStyle(item.room);
+                  const isSelected = dashboardUsageSelection?.type === 'room' && dashboardUsageSelection.value === item.room;
                   return (
-                    <div key={item.room}>
+                    <button
+                      key={item.room}
+                      type="button"
+                      disabled={item.count === 0}
+                      onClick={() =>
+                        setDashboardUsageSelection((current) =>
+                          current?.type === 'room' && current.value === item.room ? null : { type: 'room', value: item.room },
+                        )
+                      }
+                      className={cn(
+                        'w-full rounded-md border p-2 text-left transition',
+                        isSelected ? 'border-blue-300 bg-blue-50 ring-2 ring-blue-100' : 'border-transparent hover:border-blue-100 hover:bg-slate-50',
+                        item.count === 0 && 'cursor-not-allowed opacity-60 hover:border-transparent hover:bg-transparent',
+                      )}
+                    >
                       <div className="mb-1 flex items-center justify-between gap-2 text-xs">
                         <span className="font-semibold text-slate-700">{item.room}</span>
                         <span className="text-slate-500">
@@ -722,7 +923,7 @@ export function MeetingRoomBookingPage() {
                       <div className="h-2 overflow-hidden rounded-full bg-slate-100">
                         <div className={cn('h-full rounded-full', style.stripe)} style={{ width: `${Math.max(percent, item.count > 0 ? 5 : 0)}%` }}></div>
                       </div>
-                    </div>
+                    </button>
                   );
                 })}
               </div>
@@ -733,8 +934,21 @@ export function MeetingRoomBookingPage() {
               <div className="mt-4 space-y-3">
                 {dashboardAnalytics.workGroupUsage.map((item) => {
                   const percent = dashboardAnalytics.total > 0 ? (item.count / dashboardAnalytics.total) * 100 : 0;
+                  const isSelected = dashboardUsageSelection?.type === 'workGroup' && dashboardUsageSelection.value === item.name;
                   return (
-                    <div key={item.name}>
+                    <button
+                      key={item.name}
+                      type="button"
+                      onClick={() =>
+                        setDashboardUsageSelection((current) =>
+                          current?.type === 'workGroup' && current.value === item.name ? null : { type: 'workGroup', value: item.name },
+                        )
+                      }
+                      className={cn(
+                        'w-full rounded-md border p-2 text-left transition',
+                        isSelected ? 'border-cyan-300 bg-cyan-50 ring-2 ring-cyan-100' : 'border-transparent hover:border-cyan-100 hover:bg-slate-50',
+                      )}
+                    >
                       <div className="mb-1 flex items-center justify-between gap-2 text-xs">
                         <span className="truncate font-semibold text-slate-700">{item.name}</span>
                         <span className="shrink-0 text-slate-500">{item.count}</span>
@@ -742,13 +956,63 @@ export function MeetingRoomBookingPage() {
                       <div className="h-2 overflow-hidden rounded-full bg-slate-100">
                         <div className="h-full rounded-full bg-gradient-to-r from-blue-700 to-cyan-500" style={{ width: `${Math.max(percent, 5)}%` }}></div>
                       </div>
-                    </div>
+                    </button>
                   );
                 })}
                 {dashboardAnalytics.workGroupUsage.length === 0 ? <p className="text-sm text-slate-500">ยังไม่มีข้อมูล</p> : null}
               </div>
             </div>
           </div>
+
+          {dashboardUsageSelection ? (
+            <div className="border-t border-blue-50 p-4">
+              <div className="rounded-md border border-blue-100 bg-blue-50/40">
+                <div className="flex flex-col gap-2 border-b border-blue-100 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <h3 className="text-sm font-semibold text-blue-950">{selectedDashboardTitle}</h3>
+                    <p className="mt-1 text-xs text-slate-500">
+                      {dashboardFilterLabel} · {selectedDashboardReservations.length} รายการ
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setDashboardUsageSelection(null)}
+                    className="inline-flex w-full items-center justify-center rounded-md border border-blue-200 bg-white px-3 py-2 text-xs font-semibold text-blue-700 transition hover:bg-blue-50 sm:w-fit"
+                  >
+                    ล้างการเลือก
+                  </button>
+                </div>
+
+                <div className="divide-y divide-blue-100 bg-white">
+                  {selectedDashboardReservations.map((reservation) => {
+                    const style = roomStyle(reservation.room);
+                    return (
+                      <article key={reservation.id} className="grid gap-3 px-4 py-3 sm:grid-cols-[160px_1fr] sm:items-start">
+                        <div>
+                          <p className="text-sm font-semibold text-slate-900">{formatThaiDate(reservation.reservation_date)}</p>
+                          <p className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-slate-500">
+                            <Clock className="h-3.5 w-3.5" aria-hidden="true" />
+                            {formatTime(reservation.start_time)} - {formatTime(reservation.end_time)} น.
+                          </p>
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className={cn('inline-flex items-center gap-1.5 rounded px-2 py-1 text-xs font-semibold', style.chip)}>
+                              {style.icon}
+                              {reservation.room}
+                            </span>
+                            <span className="rounded bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600">{reservation.work_group}</span>
+                          </div>
+                          <h4 className="mt-2 break-words text-sm font-semibold text-slate-950">{reservation.topic}</h4>
+                          <p className="mt-1 text-xs text-slate-500">ผู้จอง: {reservation.booker_name}</p>
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          ) : null}
         </section>
       ) : null}
 
@@ -810,7 +1074,7 @@ export function MeetingRoomBookingPage() {
                 <button
                   key={dateKey}
                   type="button"
-                  onClick={() => selectDate(dateKey)}
+                  onClick={() => selectDate(dateKey, dayReservations.length > 0)}
                   className={cn(
                     'min-h-28 border-b border-r border-blue-50 p-2 text-left transition hover:bg-blue-50',
                     !isCurrentMonth && 'bg-slate-50/70 text-slate-400',
@@ -853,7 +1117,7 @@ export function MeetingRoomBookingPage() {
                 <button
                   key={dateKey}
                   type="button"
-                  onClick={() => selectDate(dateKey)}
+                  onClick={() => selectDate(dateKey, dayReservations.length > 0)}
                   className={cn(
                     'flex w-full gap-3 px-3 py-3 text-left transition hover:bg-blue-50',
                     isSelected && 'bg-blue-50 ring-2 ring-inset ring-blue-300',
@@ -908,7 +1172,7 @@ export function MeetingRoomBookingPage() {
           </div>
         </section>
 
-        <section className="rounded-md border border-blue-100 bg-white shadow-lg shadow-blue-900/5">
+        <section id="meeting-room-reservation-list" className="scroll-mt-4 rounded-md border border-blue-100 bg-white shadow-lg shadow-blue-900/5">
             <div className="border-b border-blue-100 px-4 py-3">
               <h2 className="text-base font-semibold text-blue-900">รายการจอง</h2>
               <p className="mt-1 text-xs text-slate-500">{formatThaiDate(selectedDate)} · {selectedReservations.length} รายการ</p>
@@ -922,7 +1186,7 @@ export function MeetingRoomBookingPage() {
                 selectedReservations.map((reservation) => {
                   const style = roomStyle(reservation.room);
                   return (
-                    <article key={reservation.id} className="flex gap-3 rounded-md border border-blue-50 bg-slate-50 p-3">
+                    <article id={`meeting-room-reservation-${reservation.id}`} key={reservation.id} className={cn('flex gap-3 rounded-md border bg-slate-50 p-3 transition', highlightedReservationId === reservation.id ? 'border-sky-300 ring-2 ring-sky-100' : 'border-blue-50')}>
                       <div className={cn('w-1 shrink-0 rounded-full', style.stripe)}></div>
                       <div className="min-w-0 flex-1">
                         <div className={cn('inline-flex items-center gap-1.5 rounded px-2 py-1 text-xs font-semibold', style.chip)}>
@@ -937,7 +1201,19 @@ export function MeetingRoomBookingPage() {
                           </span>
                           <span>{reservation.booker_name}</span>
                           <span>{reservation.work_group}</span>
+                          <span>{reservation.meeting_type}</span>
                         </div>
+                        {reservation.online_meeting_url ? (
+                          <a
+                            href={reservation.online_meeting_url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="mt-2 inline-flex break-all text-xs font-semibold text-blue-600 hover:text-blue-800"
+                          >
+                            {reservation.online_meeting_url}
+                          </a>
+                        ) : null}
+                        {reservation.details ? <p className="mt-2 whitespace-pre-wrap break-words text-xs text-slate-600">{reservation.details}</p> : null}
                       </div>
                       {canManageReservation(reservation) ? (
                         <div className="flex shrink-0 flex-col gap-1">

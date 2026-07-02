@@ -5,14 +5,15 @@ import type { Profile } from '../types/database.types';
 import type { Database } from '../types/database.types';
 import type { UserRole, ProfileStatus } from '../types/roles';
 
+export type UserManagementProfile = Profile & {
+  email: string | null;
+};
+
 export async function listAllUsers() {
-  const { data, error } = await supabase
-    .from('profiles')
-    .select('*')
-    .order('full_name');
+  const { data, error } = await (supabase as any).rpc('list_user_management_profiles');
 
   if (error) throw error;
-  return data as Profile[];
+  return data as UserManagementProfile[];
 }
 
 export async function updateUserRole(userId: string, role: UserRole) {
@@ -46,12 +47,30 @@ export async function deleteUser(userId: string) {
   if (error) throw error;
 }
 
+export async function updateUserEmail(userId: string, email: string) {
+  const { error } = await supabase.functions.invoke('update-user-email', {
+    body: {
+      userId,
+      email,
+    },
+  });
+
+  if (error) throw error;
+}
+
 export type CreateUserPayload = {
   fullName: string;
   email: string;
-  password: string;
+  password?: string;
   role: UserRole;
 };
+
+function generateTemporaryPassword() {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*';
+  const bytes = new Uint8Array(24);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (byte) => chars[byte % chars.length]).join('') + 'Aa1!';
+}
 
 export async function createManagedUser(payload: CreateUserPayload) {
   const isolatedSupabase = createClient<Database>(env.supabaseUrl, env.supabaseAnonKey, {
@@ -63,9 +82,10 @@ export async function createManagedUser(payload: CreateUserPayload) {
   });
 
   const redirectTo = `${window.location.origin}/auth/callback`;
-  const { error } = await isolatedSupabase.auth.signUp({
+  const temporaryPassword = payload.password ?? generateTemporaryPassword();
+  const { data, error } = await isolatedSupabase.auth.signUp({
     email: payload.email,
-    password: payload.password,
+    password: temporaryPassword,
     options: {
       emailRedirectTo: redirectTo,
       data: {
@@ -76,6 +96,13 @@ export async function createManagedUser(payload: CreateUserPayload) {
   });
 
   if (error) throw error;
+
+  if (!payload.password) {
+    const { error: resetError } = await isolatedSupabase.auth.resetPasswordForEmail(payload.email, { redirectTo });
+    if (resetError) throw resetError;
+  }
+
+  return data.user?.id ?? null;
 }
 
 export type UpdateUserDetailsPayload = {
@@ -87,6 +114,7 @@ export type UpdateUserDetailsPayload = {
   gender?: 'male' | 'female' | null;
   education?: 'ต่ำกว่าปริญญาตรี' | 'ปริญญาตรี' | 'ปริญญาโท' | 'ปริญญาเอก' | null;
   birth_date?: string | null;
+  start_work_date?: string | null;
   employment_type?: 'ข้าราชการ' | 'พนักงานราชการ' | 'พนักงานกระทรวงสาธารณสุข' | 'ลูกจ้างชั่วคราว' | 'จ้างเหมาบริการฯ (พขร.)' | null;
 };
 
@@ -101,6 +129,7 @@ export async function updateUserDetails(userId: string, payload: UpdateUserDetai
     p_gender: payload.gender ?? null,
     p_education: payload.education ?? null,
     p_birth_date: payload.birth_date ?? null,
+    p_start_work_date: payload.start_work_date ?? null,
     p_employment_type: payload.employment_type ?? null,
   });
 

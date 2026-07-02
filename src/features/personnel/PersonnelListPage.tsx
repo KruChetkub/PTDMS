@@ -225,7 +225,7 @@ export function PersonnelListPage() {
       <section className="hidden rounded-md border border-slate-200 bg-white shadow-sm lg:block">
         <div className="flex items-center gap-2 border-b border-slate-200 px-4 py-3 text-sm font-semibold text-slate-800">
           <List className="h-4 w-4" aria-hidden="true" />
-          <span>☰ รายการ</span>
+          <span> รายการ</span>
         </div>
 
         {loading ? (

@@ -404,7 +404,7 @@ export async function createSpdServiceSatisfactionSurvey(
 export async function getSpdServiceAdminRecipients(): Promise<Profile[]> {
   const { data, error } = await supabase
     .from('profiles')
-    .select('user_id, employee_code, full_name, position, department, work_group, gender, education, birth_date, generation, employment_type, role, status, avatar_url, created_at, updated_at')
+    .select('user_id, employee_code, full_name, position, department, work_group, gender, education, birth_date, start_work_date, generation, employment_type, role, status, avatar_url, created_at, updated_at')
     .eq('role', 'admin')
     .eq('status', 'active')
     .order('full_name', { ascending: true });

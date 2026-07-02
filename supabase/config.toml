@@ -1,2 +1,5 @@
 [functions.spd-service-telegram-notify]
 verify_jwt = false
+
+[functions.meeting-room-telegram-notify]
+verify_jwt = false

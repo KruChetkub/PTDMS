@@ -10,6 +10,7 @@ export type Profile = {
   gender: 'male' | 'female' | null;
   education: 'ต่ำกว่าปริญญาตรี' | 'ปริญญาตรี' | 'ปริญญาโท' | 'ปริญญาเอก' | null;
   birth_date: string | null;
+  start_work_date: string | null;
   generation: 'Gen B' | 'Gen X' | 'Gen Y' | 'Gen Z' | null;
   employment_type: 'ข้าราชการ' | 'พนักงานราชการ' | 'พนักงานกระทรวงสาธารณสุข' | 'ลูกจ้างชั่วคราว' | 'จ้างเหมาบริการฯ (พขร.)' | null;
   role: UserRole;
@@ -150,6 +151,9 @@ export type MeetingRoomReservation = {
   legacy_id: string | null;
   reservation_date: string;
   room: string;
+  meeting_type: string;
+  online_meeting_url: string | null;
+  details: string | null;
   start_time: string;
   end_time: string;
   booker_name: string;
@@ -297,6 +301,7 @@ export type Database = {
           gender?: 'male' | 'female' | null;
           education?: 'ต่ำกว่าปริญญาตรี' | 'ปริญญาตรี' | 'ปริญญาโท' | 'ปริญญาเอก' | null;
           birth_date?: string | null;
+          start_work_date?: string | null;
           generation?: 'Gen B' | 'Gen X' | 'Gen Y' | 'Gen Z' | null;
           employment_type?: 'ข้าราชการ' | 'พนักงานราชการ' | 'พนักงานกระทรวงสาธารณสุข' | 'ลูกจ้างชั่วคราว' | 'จ้างเหมาบริการฯ (พขร.)' | null;
           role?: UserRole;
@@ -481,6 +486,9 @@ export type Database = {
           legacy_id?: string | null;
           reservation_date: string;
           room: string;
+          meeting_type?: string;
+          online_meeting_url?: string | null;
+          details?: string | null;
           start_time: string;
           end_time: string;
           booker_name: string;
