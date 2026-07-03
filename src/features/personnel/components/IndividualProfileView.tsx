@@ -1,16 +1,16 @@
 import { useEffect, useState } from 'react';
-import { Calendar, BookOpen, Award, BarChart3, Clock, ExternalLink, Lightbulb } from 'lucide-react';
+import { Calendar, BookOpen, Award, BarChart3, Clock, ExternalLink, Lightbulb, ChevronLeft, ChevronRight } from 'lucide-react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
   Cell 
 } from 'recharts';
 import { useNavigate } from 'react-router-dom';
 import { PageHeader } from '../../../components/ui/PageHeader';
-import { getPersonnelDetails, updatePersonnelProfile } from '../../../services/personnel.service';
+import { getPersonnelDetails } from '../../../services/personnel.service';
 import type { Profile, TrainingRecord, Certificate, DevelopmentAnalysis } from '../../../types/database.types';
 import { roleLabels } from '../../../types/roles';
 import { useAuthStore } from '../../../stores/auth.store';
-import { Edit2, X, Save, Plus } from 'lucide-react';
+import { Edit2, X, Plus } from 'lucide-react';
 import { TrainingForm } from '../../../components/training/TrainingForm';
 import { formatThaiDate, getCurrentThaiFiscalYear } from '../../../utils/thaiDate';
 import { 
@@ -26,6 +26,8 @@ type IndividualProfileViewProps = {
   isMyProfile?: boolean;
 };
 
+const trainingPageSize = 5;
+
 export function IndividualProfileView({ userId, isMyProfile }: IndividualProfileViewProps) {
   const [data, setData] = useState<{
     profile: Profile;
@@ -36,9 +38,7 @@ export function IndividualProfileView({ userId, isMyProfile }: IndividualProfile
   } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [isEditing, setIsEditing] = useState(false);
-  const [editValues, setEditValues] = useState({ position: '', department: '', work_group: '' });
-  const [saving, setSaving] = useState(false);
+  const [trainingPage, setTrainingPage] = useState(1);
 
   const [isSubmittingTraining, setIsSubmittingTraining] = useState(false);
   const [trainingSubmitError, setTrainingSubmitError] = useState<string | null>(null);
@@ -64,11 +64,7 @@ export function IndividualProfileView({ userId, isMyProfile }: IndividualProfile
     try {
       const result = await getPersonnelDetails(userId);
       setData(result);
-      setEditValues({
-        position: result.profile.position || '',
-        department: result.profile.department || '',
-        work_group: result.profile.work_group || '',
-      });
+
     } catch (err) {
       const message = err instanceof Error ? err.message : 'ไม่สามารถโหลดข้อมูลโปรไฟล์ได้';
       if (showLoading || !data) {
@@ -85,8 +81,17 @@ export function IndividualProfileView({ userId, isMyProfile }: IndividualProfile
 
   useEffect(() => {
     if (!userId) return;
+    setTrainingPage(1);
     void loadData({ showLoading: true });
   }, [userId]);
+
+  const trainingTotalPages = Math.max(1, Math.ceil((data?.records.length || 0) / trainingPageSize));
+
+  useEffect(() => {
+    if (trainingPage > trainingTotalPages) {
+      setTrainingPage(trainingTotalPages);
+    }
+  }, [trainingPage, trainingTotalPages]);
 
   const refreshTrainingData = () => {
     void loadData({ showLoading: false });
@@ -102,19 +107,6 @@ export function IndividualProfileView({ userId, isMyProfile }: IndividualProfile
     });
   };
 
-  const handleSave = async () => {
-    if (!data) return;
-    setSaving(true);
-    try {
-      await updatePersonnelProfile(userId, editValues);
-      await loadData({ showLoading: false });
-      setIsEditing(false);
-    } catch (err) {
-      alert(err instanceof Error ? err.message : 'ไม่สามารถบันทึกข้อมูลได้');
-    } finally {
-      setSaving(false);
-    }
-  };
 
   const handleEditTrainingClick = async (id: string) => {
     setTrainingSubmitError(null);
@@ -191,12 +183,15 @@ export function IndividualProfileView({ userId, isMyProfile }: IndividualProfile
   const { profile, records, certificates, analysis, chartData } = data;
   const certMap = new Map(certificates.map(c => [c.training_id, c]));
   const analysisMap = new Map(analysis.map(a => [a.training_id, a]));
+  const trainingCurrentPage = Math.min(trainingPage, trainingTotalPages);
+  const trainingPageStart = (trainingCurrentPage - 1) * trainingPageSize;
+  const visibleTrainingRecords = records.slice(trainingPageStart, trainingPageStart + trainingPageSize);
 
   return (
     <div className="space-y-6">
       <PageHeader 
         title={isMyProfile ? "My Profile" : profile.full_name} 
-        description={isMyProfile ? "จัดการข้อมูลส่วนตัวและดูประวัติการพัฒนาของตนเอง" : `รายละเอียดข้อมูลและสถิติการพัฒนาของ ${profile.full_name}`} 
+        description={isMyProfile ? "จัดการข้อมูลประวัติการพัฒนาของตนเอง" : `รายละเอียดข้อมูลและสถิติการพัฒนาของ ${profile.full_name}`} 
       />
 
       <div className="grid gap-6 lg:grid-cols-3">
@@ -215,87 +210,19 @@ export function IndividualProfileView({ userId, isMyProfile }: IndividualProfile
 
           <div className="mt-8 space-y-4 border-t border-slate-100 pt-6">
             <div className="flex flex-col gap-1">
-              <div className="flex justify-between items-center text-sm">
-                <span className="text-slate-500">ตำแหน่ง</span>
-                {!isEditing && canEdit && (
-                  <button 
-                    onClick={() => setIsEditing(true)}
-                    className="text-brand-600 hover:text-brand-700"
-                  >
-                    <Edit2 className="h-3.5 w-3.5" />
-                  </button>
-                )}
-              </div>
-              {isEditing ? (
-                <input
-                  type="text"
-                  className="mt-1 w-full rounded-md border border-slate-300 px-2 py-1 text-sm outline-none focus:border-brand-500"
-                  value={editValues.position}
-                  onChange={(e) => setEditValues({ ...editValues, position: e.target.value })}
-                  placeholder="ระบุตำแหน่ง"
-                />
-              ) : (
-                <div className="font-semibold text-slate-900">{profile.position || '-'}</div>
-              )}
+              <span className="text-sm text-slate-500">ตำแหน่ง</span>
+              <div className="font-semibold text-slate-900">{profile.position || '-'}</div>
             </div>
 
             <div className="flex flex-col gap-1">
               <span className="text-sm text-slate-500">หน่วยงาน</span>
-              {isEditing ? (
-                <input
-                  type="text"
-                  className="mt-1 w-full rounded-md border border-slate-300 px-2 py-1 text-sm outline-none focus:border-brand-500"
-                  value={editValues.department}
-                  onChange={(e) => setEditValues({ ...editValues, department: e.target.value })}
-                  placeholder="ระบุหน่วยงาน"
-                />
-              ) : (
-                <div className="font-semibold text-slate-900">{profile.department || '-'}</div>
-              )}
+              <div className="font-semibold text-slate-900">{profile.department || '-'}</div>
             </div>
 
             <div className="flex flex-col gap-1">
               <span className="text-sm text-slate-500">กลุ่มงาน</span>
-              {isEditing ? (
-                <input
-                  type="text"
-                  className="mt-1 w-full rounded-md border border-slate-300 px-2 py-1 text-sm outline-none focus:border-brand-500"
-                  value={editValues.work_group}
-                  onChange={(e) => setEditValues({ ...editValues, work_group: e.target.value })}
-                  placeholder="ระบุกลุ่มงาน"
-                />
-              ) : (
-                <div className="font-semibold text-slate-900">{profile.work_group || '-'}</div>
-              )}
+              <div className="font-semibold text-slate-900">{profile.work_group || '-'}</div>
             </div>
-
-            {isEditing && (
-              <div className="flex gap-2 mt-4 pt-2 border-t border-slate-50">
-                <button
-                  disabled={saving}
-                  onClick={handleSave}
-                  className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-md bg-brand-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand-700 disabled:opacity-50"
-                >
-                  <Save className="h-3.5 w-3.5" />
-                  {saving ? 'กำลังบันทึก...' : 'บันทึก'}
-                </button>
-                <button
-                  disabled={saving}
-                  onClick={() => {
-                    setIsEditing(false);
-                    setEditValues({
-                      position: profile.position || '',
-                      department: profile.department || '',
-                      work_group: profile.work_group || '',
-                    });
-                  }}
-                  className="inline-flex items-center justify-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-                >
-                  <X className="h-3.5 w-3.5" />
-                  ยกเลิก
-                </button>
-              </div>
-            )}
           </div>
         </div>
 
@@ -386,6 +313,7 @@ export function IndividualProfileView({ userId, isMyProfile }: IndividualProfile
           <table className="w-full text-left text-sm">
             <thead>
               <tr className="border-b border-slate-100 text-xs font-bold uppercase tracking-wider text-slate-500">
+                <th className="whitespace-nowrap px-6 py-4">ลำดับที่</th>
                 <th className="px-6 py-4">วันที่ / ปีงบประมาณ</th>
                 <th className="px-6 py-4">หลักสูตร / ผู้จัด</th>
                 <th className="px-6 py-4">ประเภท</th>
@@ -395,13 +323,14 @@ export function IndividualProfileView({ userId, isMyProfile }: IndividualProfile
             </thead>
             <tbody className="divide-y divide-slate-100">
               {records.length === 0 ? (
-                <tr><td colSpan={canEdit ? 5 : 4} className="px-6 py-8 text-center text-slate-500">ยังไม่มีข้อมูลประวัติการอบรม</td></tr>
+                <tr><td colSpan={canEdit ? 6 : 5} className="px-6 py-8 text-center text-slate-500">ยังไม่มีข้อมูลประวัติการอบรม</td></tr>
               ) : (
-                records.map((record) => {
+                visibleTrainingRecords.map((record, index) => {
                   const cert = certMap.get(record.id);
                   const dev = analysisMap.get(record.id);
                   return (
                     <tr key={record.id} className="hover:bg-slate-50/50 transition">
+                      <td className="whitespace-nowrap px-6 py-4 font-medium text-slate-600">{trainingPageStart + index + 1}</td>
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-2 font-medium text-slate-900"><Calendar className="h-3 w-3 text-slate-400" />{formatThaiDate(record.date)}</div>
                         <div className="mt-1 text-xs text-slate-500">ปีงบประมาณ {record.year}</div>
@@ -463,6 +392,37 @@ export function IndividualProfileView({ userId, isMyProfile }: IndividualProfile
             </tbody>
           </table>
         </div>
+
+        {records.length > trainingPageSize ? (
+          <div className="flex flex-col gap-3 border-t border-slate-100 px-6 py-4 text-sm text-slate-600 sm:flex-row sm:items-center sm:justify-between">
+            <p>
+              แสดง {trainingPageStart + 1}-{Math.min(trainingPageStart + visibleTrainingRecords.length, records.length)} จาก {records.length} รายการ
+            </p>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setTrainingPage((current) => Math.max(1, current - 1))}
+                disabled={trainingCurrentPage <= 1}
+                className="inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+                ก่อนหน้า
+              </button>
+              <span className="min-w-16 text-center text-sm font-medium text-slate-700">
+                {trainingCurrentPage} / {trainingTotalPages}
+              </span>
+              <button
+                type="button"
+                onClick={() => setTrainingPage((current) => Math.min(trainingTotalPages, current + 1))}
+                disabled={trainingCurrentPage >= trainingTotalPages}
+                className="inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                ถัดไป
+                <ChevronRight className="h-4 w-4" aria-hidden="true" />
+              </button>
+            </div>
+          </div>
+        ) : null}
       </div>
 
       <TrainingModal
