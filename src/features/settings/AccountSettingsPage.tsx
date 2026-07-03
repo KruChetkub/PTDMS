@@ -3,8 +3,8 @@ import { Eye, EyeOff, KeyRound, Save, UserCog } from 'lucide-react';
 import { PageHeader } from '../../components/ui/PageHeader';
 import { useAuditPageAccess } from '../../hooks/useAuditPageAccess';
 import { updateOwnProfileDetails } from '../../services/personnel.service';
-import { recordAuditLog } from '../../services/audit.service';
 import { useAuthStore } from '../../stores/auth.store';
+import { roleLabels } from '../../types/roles';
 
 type SettingsTab = 'profile' | 'password';
 
@@ -17,6 +17,7 @@ type ProfileFormState = {
   gender: '' | 'male' | 'female';
   education: '' | 'ต่ำกว่าปริญญาตรี' | 'ปริญญาตรี' | 'ปริญญาโท' | 'ปริญญาเอก';
   birth_date_th: string;
+  start_work_date_th: string;
   employment_type: '' | 'ข้าราชการ' | 'พนักงานราชการ' | 'พนักงานกระทรวงสาธารณสุข' | 'ลูกจ้างชั่วคราว' | 'จ้างเหมาบริการฯ (พขร.)';
 };
 
@@ -40,12 +41,12 @@ function formatISOToThaiDate(isoDate: string | null) {
   return `${parts[2]}/${parts[1]}/${String(year)}`;
 }
 
-function parseThaiDateToISO(value: string) {
+function parseThaiDateToISO(value: string, fieldLabel = 'วันเกิด') {
   if (!value.trim()) return null;
 
   const parts = value.trim().replace(/\//g, '-').split('-');
   if (parts.length !== 3) {
-    throw new Error('วันเกิดต้องเป็นรูปแบบ วว/ดด/ปปปป (พ.ศ.)');
+    throw new Error(`${fieldLabel}ต้องเป็นรูปแบบ วว/ดด/ปปปป (พ.ศ.)`);
   }
 
   const day = Number(parts[0]);
@@ -53,12 +54,12 @@ function parseThaiDateToISO(value: string) {
   const thaiYear = Number(parts[2]);
 
   if (!day || !month || !thaiYear || day < 1 || day > 31 || month < 1 || month > 12) {
-    throw new Error('วันเกิดไม่ถูกต้อง');
+    throw new Error(`${fieldLabel}ไม่ถูกต้อง`);
   }
 
   const christianYear = thaiYear - 543;
   if (christianYear < 1900 || christianYear > 2100) {
-    throw new Error('ปีเกิดไม่ถูกต้อง');
+    throw new Error(`${fieldLabel}ปีไม่ถูกต้อง`);
   }
 
   return `${String(christianYear).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
@@ -66,6 +67,7 @@ function parseThaiDateToISO(value: string) {
 
 export function AccountSettingsPage() {
   useAuditPageAccess({ module: 'settings', action: 'settings_page_access', route: '/settings' });
+  const user = useAuthStore((state) => state.user);
   const profile = useAuthStore((state) => state.profile);
   const refreshProfile = useAuthStore((state) => state.refreshProfile);
   const updatePassword = useAuthStore((state) => state.updatePassword);
@@ -82,6 +84,7 @@ export function AccountSettingsPage() {
     gender: '',
     education: '',
     birth_date_th: '',
+    start_work_date_th: '',
     employment_type: '',
   });
   const [passwordForm, setPasswordForm] = useState({ password: '', confirmPassword: '' });
@@ -105,6 +108,7 @@ export function AccountSettingsPage() {
       gender: profile.gender || '',
       education: profile.education || '',
       birth_date_th: formatISOToThaiDate(profile.birth_date),
+      start_work_date_th: formatISOToThaiDate(profile.start_work_date),
       employment_type: profile.employment_type || '',
     });
   }, [profile]);
@@ -121,7 +125,8 @@ export function AccountSettingsPage() {
     setProfileError(null);
 
     try {
-      const birthDate = parseThaiDateToISO(profileForm.birth_date_th);
+      const birthDate = parseThaiDateToISO(profileForm.birth_date_th, 'วันเกิด');
+      const startWorkDate = parseThaiDateToISO(profileForm.start_work_date_th, 'วันที่เริ่มงาน');
       await updateOwnProfileDetails({
         employee_code: profileForm.employee_code || null,
         full_name: profileForm.full_name || null,
@@ -131,6 +136,7 @@ export function AccountSettingsPage() {
         gender: profileForm.gender || null,
         education: profileForm.education || null,
         birth_date: birthDate,
+        start_work_date: startWorkDate,
         employment_type: profileForm.employment_type || null,
       });
       await refreshProfile();
@@ -203,12 +209,23 @@ export function AccountSettingsPage() {
         <section className="rounded-md border border-slate-200 bg-white p-5 shadow-sm">
           <div className="grid gap-4 md:grid-cols-2">
             <label className="block">
-              <span className="text-sm font-medium text-slate-700">รหัสบุคลากร</span>
+              <span className="text-sm font-medium text-slate-700">รหัสพนักงาน</span>
               <input className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm" value={profileForm.employee_code} onChange={(e) => updateProfileField('employee_code', e.target.value)} />
             </label>
             <label className="block">
               <span className="text-sm font-medium text-slate-700">ชื่อ-นามสกุล</span>
               <input className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm" value={profileForm.full_name} onChange={(e) => updateProfileField('full_name', e.target.value)} />
+            </label>
+            <label className="block md:col-span-2">
+              <span className="text-sm font-medium text-slate-700">Email</span>
+              <input className="mt-1 w-full rounded-md border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-500" value={user?.email || ''} disabled />
+              <span className="mt-1 block text-xs text-slate-500">หากต้องการแก้ไข Email กรุณาแจ้ง HR หรือผู้มีสิทธิ์สูงกว่า</span>
+            </label>
+            <label className="block md:col-span-2">
+              <span className="text-sm font-medium text-slate-700">Role</span>
+              <select className="mt-1 w-full rounded-md border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-500" value={profile.role} disabled>
+                <option value={profile.role}>{roleLabels[profile.role]}</option>
+              </select>
             </label>
             <label className="block">
               <span className="text-sm font-medium text-slate-700">ตำแหน่ง</span>
@@ -231,7 +248,7 @@ export function AccountSettingsPage() {
               </select>
             </label>
             <label className="block">
-              <span className="text-sm font-medium text-slate-700">ระดับการศึกษา</span>
+              <span className="text-sm font-medium text-slate-700">การศึกษา</span>
               <select className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm" value={profileForm.education} onChange={(e) => updateProfileField('education', e.target.value)}>
                 {educationOptions.map((option) => <option key={option || 'empty'} value={option}>{option || 'ไม่ระบุ'}</option>)}
               </select>
@@ -239,6 +256,10 @@ export function AccountSettingsPage() {
             <label className="block">
               <span className="text-sm font-medium text-slate-700">วันเกิด (วว/ดด/ปปปป พ.ศ.)</span>
               <input className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm" value={profileForm.birth_date_th} onChange={(e) => updateProfileField('birth_date_th', e.target.value)} placeholder="01/01/2530" />
+            </label>
+            <label className="block">
+              <span className="text-sm font-medium text-slate-700">วันที่เริ่มงาน (วว/ดด/ปปปป พ.ศ.)</span>
+              <input className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm" value={profileForm.start_work_date_th} onChange={(e) => updateProfileField('start_work_date_th', e.target.value)} placeholder="01/10/2560" />
             </label>
             <label className="block md:col-span-2">
               <span className="text-sm font-medium text-slate-700">รูปแบบการจ้าง</span>

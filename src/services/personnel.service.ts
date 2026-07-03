@@ -160,6 +160,7 @@ export async function updateOwnProfileDetails(data: {
   gender?: 'male' | 'female' | null;
   education?: 'ต่ำกว่าปริญญาตรี' | 'ปริญญาตรี' | 'ปริญญาโท' | 'ปริญญาเอก' | null;
   birth_date?: string | null;
+  start_work_date?: string | null;
   employment_type?: 'ข้าราชการ' | 'พนักงานราชการ' | 'พนักงานกระทรวงสาธารณสุข' | 'ลูกจ้างชั่วคราว' | 'จ้างเหมาบริการฯ (พขร.)' | null;
 }) {
   await runSupabaseQuery(
@@ -172,6 +173,7 @@ export async function updateOwnProfileDetails(data: {
       p_gender: data.gender ?? null,
       p_education: data.education ?? null,
       p_birth_date: data.birth_date ?? null,
+      p_start_work_date: data.start_work_date ?? null,
       p_employment_type: data.employment_type ?? null,
     }),
     'อัปเดตข้อมูลส่วนบุคคล',

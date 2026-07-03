@@ -723,6 +723,7 @@ export type Database = {
           p_gender: 'male' | 'female' | null;
           p_education: 'ต่ำกว่าปริญญาตรี' | 'ปริญญาตรี' | 'ปริญญาโท' | 'ปริญญาเอก' | null;
           p_birth_date: string | null;
+          p_start_work_date: string | null;
           p_employment_type:
             | 'ข้าราชการ'
             | 'พนักงานราชการ'
