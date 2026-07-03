@@ -14,6 +14,7 @@ export type TrainingFormProps = {
   onCancel?: () => void;
   isLoading?: boolean;
   submitLabel?: string;
+  showDevelopmentAnalysis?: boolean;
 };
 
 const defaultValues: TrainingFormValues = {
@@ -34,7 +35,8 @@ export function TrainingForm({
   onSubmit, 
   onCancel, 
   isLoading, 
-  submitLabel = 'บันทึกข้อมูลอบรม' 
+  submitLabel = 'บันทึกข้อมูลอบรม',
+  showDevelopmentAnalysis = true,
 }: TrainingFormProps) {
   const {
     register,
@@ -157,40 +159,42 @@ export function TrainingForm({
         </div>
       </div>
 
-      <div className="border-t border-slate-200 pt-5">
-        <h2 className="text-base font-semibold text-slate-900">ข้อมูลวิเคราะห์การพัฒนา</h2>
-        <div className="mt-4 grid gap-4 lg:grid-cols-2">
-          <label className="block">
-            <span className="text-sm font-medium text-slate-700">ด้านการพัฒนา</span>
-            <input
-              type="text"
-              className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
-              {...register('developmentArea')}
-              disabled={isPending}
-            />
-          </label>
+      {showDevelopmentAnalysis ? (
+        <div className="border-t border-slate-200 pt-5">
+          <h2 className="text-base font-semibold text-slate-900">ข้อมูลวิเคราะห์การพัฒนา</h2>
+          <div className="mt-4 grid gap-4 lg:grid-cols-2">
+            <label className="block">
+              <span className="text-sm font-medium text-slate-700">ด้านการพัฒนา</span>
+              <input
+                type="text"
+                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+                {...register('developmentArea')}
+                disabled={isPending}
+              />
+            </label>
 
-          <label className="block">
-            <span className="text-sm font-medium text-slate-700">กลุ่มทักษะ</span>
-            <input
-              type="text"
-              className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
-              {...register('skillGroup')}
-              disabled={isPending}
-            />
-          </label>
+            <label className="block">
+              <span className="text-sm font-medium text-slate-700">กลุ่มทักษะ</span>
+              <input
+                type="text"
+                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+                {...register('skillGroup')}
+                disabled={isPending}
+              />
+            </label>
 
-          <label className="block lg:col-span-2">
-            <span className="text-sm font-medium text-slate-700">แนวทางการพัฒนา</span>
-            <textarea
-              rows={4}
-              className="mt-1 w-full resize-y rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
-              {...register('targetDirection')}
-              disabled={isPending}
-            />
-          </label>
+            <label className="block lg:col-span-2">
+              <span className="text-sm font-medium text-slate-700">แนวทางการพัฒนา</span>
+              <textarea
+                rows={4}
+                className="mt-1 w-full resize-y rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+                {...register('targetDirection')}
+                disabled={isPending}
+              />
+            </label>
+          </div>
         </div>
-      </div>
+      ) : null}
 
       <div className="flex flex-col gap-3 border-t border-slate-200 pt-5 sm:flex-row sm:items-center sm:justify-end">
         {onCancel && (

@@ -1,5 +1,5 @@
 import { supabase } from '../lib/supabase';
-import { trainingTypeOptions } from '../features/self-service/training-form.schema';
+import { trainingTypeOptions } from '../constants/training';
 import type { Profile, TrainingRecord } from '../types/database.types';
 
 export type DashboardSummary = {

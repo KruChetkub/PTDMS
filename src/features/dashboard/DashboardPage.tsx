@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { CalendarDays, ChevronRight, RefreshCw, UsersRound, X } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { CalendarDays, ChevronRight, Moon, RefreshCw, Sun, UsersRound, X } from 'lucide-react';
 import {
   Bar,
   BarChart,
@@ -15,7 +16,6 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { PageHeader } from '../../components/ui/PageHeader';
 import {
   listCourseAttendees,
   listCourseDirectory,
@@ -24,7 +24,7 @@ import {
   type CourseDirectorySection,
 } from '../../services/course.service';
 import { getDashboardSummary, type DashboardSummary } from '../../services/dashboard.service';
-import { trainingTypeOptions } from '../self-service/training-form.schema';
+import { trainingTypeOptions } from '../../constants/training';
 import { formatThaiDate } from '../../utils/thaiDate';
 
 const emptySummary: DashboardSummary = {
@@ -44,10 +44,110 @@ const emptySummary: DashboardSummary = {
   yearlyTrend: [],
 };
 
-const genderColors = ['#1d75bd', '#db2777', '#94a3b8'];
-const generationColors = ['#23805f', '#d97706', '#7c3aed'];
-const demographicCardClass =
-  'rounded-md border border-white/80 bg-white/95 p-5 shadow-[0_16px_36px_rgba(15,23,42,0.10)] ring-1 ring-slate-900/5 transition duration-200 hover:-translate-y-0.5 hover:shadow-[0_20px_44px_rgba(15,23,42,0.14)]';
+type DashboardTheme = 'light' | 'dark';
+
+const dashboardThemeConfig = {
+  light: {
+    page: 'min-h-screen rounded-2xl bg-[#f7f8ff] p-4 text-[#151a3d] transition-colors duration-300',
+    headerTitle: 'text-2xl font-semibold tracking-normal text-[#151a3d]',
+    sectionTitle: 'text-xl font-semibold text-[#151a3d]',
+    cardTitle: 'font-semibold text-[#151a3d]',
+    chartTitle: 'text-sm font-semibold text-[#151a3d]',
+    mutedText: 'text-slate-500',
+    secondaryText: 'text-slate-600',
+    panel: 'rounded-2xl border border-white bg-white/70 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.80)] ring-1 ring-[#edf0ff]',
+    card: 'rounded-2xl border border-[#edf0ff] bg-white p-5 shadow-[0_18px_44px_rgba(87,93,245,0.08)] ring-1 ring-white transition duration-200 hover:shadow-[0_22px_50px_rgba(87,93,245,0.12)]',
+    kpiPersonnel: 'rounded-2xl border border-[#dfe7ff] border-l-4 border-l-[#5b5ff4] bg-white p-4 shadow-[0_14px_36px_rgba(91,95,244,0.10)] ring-1 ring-white',
+    kpiAge: 'rounded-2xl border border-[#ffe8bb] border-l-4 border-l-[#ffb800] bg-white p-4 shadow-[0_14px_36px_rgba(255,184,0,0.10)] ring-1 ring-white',
+    iconPersonnel: 'rounded-2xl bg-[#eef0ff] p-3 text-[#5b5ff4] ring-1 ring-[#dfe3ff]',
+    iconAge: 'rounded-2xl bg-[#fff4de] p-3 text-[#d99200] ring-1 ring-[#ffe5ad]',
+    actionButton: 'inline-flex items-center justify-center gap-2 rounded-xl border border-[#dfe3f5] bg-white px-3 py-2 text-sm font-medium text-[#151a3d] shadow-sm transition hover:bg-[#f1f3ff]',
+    toggleButton: 'inline-flex items-center justify-center gap-2 rounded-xl bg-[#5b5ff4] px-3 py-2 text-sm font-semibold text-white shadow-[0_12px_28px_rgba(91,95,244,0.28)] transition hover:bg-[#4b4fe0]',
+    exportButton: 'inline-flex h-6 items-center justify-center rounded-lg border border-[#dfe3f5] bg-white px-1.5 text-[10px] font-semibold uppercase text-slate-600 shadow-sm transition hover:border-[#c7cbff] hover:bg-[#f1f3ff] hover:text-[#5b5ff4] disabled:cursor-not-allowed disabled:opacity-50',
+    emptyChartState: 'flex h-full min-h-40 items-center justify-center rounded-xl border border-dashed border-[#dfe3f5] bg-[#f8f9ff] text-sm text-slate-500',
+    courseSection: 'mt-6 overflow-hidden rounded-2xl border border-[#edf0ff] bg-white shadow-[0_18px_44px_rgba(87,93,245,0.08)]',
+    courseHeader: 'border-b border-[#edf0ff] bg-gradient-to-r from-[#eef0ff] via-white to-[#dcfce7] px-5 py-5 ring-1 ring-inset ring-white/70',
+    courseCard: 'rounded-xl border border-[#edf0ff] bg-white shadow-sm',
+    courseHeaderButton: 'flex w-full flex-col gap-2 border-b border-[#edf0ff] px-5 py-4 text-left transition hover:bg-[#f8f9ff] sm:flex-row sm:items-center sm:justify-between',
+    courseRowCount: 'shrink-0 rounded-lg bg-white/80 px-2.5 py-1 text-xs font-semibold text-[#151a3d] ring-1 ring-[#edf0ff]',
+    activeBadge: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
+    inactiveBadge: 'bg-slate-100 text-slate-600 ring-slate-200',
+    errorBox: 'mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700',
+    tableHead: 'bg-[#f8f9ff] text-xs font-semibold uppercase tracking-wider text-slate-500',
+    drawerPanel: 'absolute right-0 top-0 flex h-full w-full max-w-2xl flex-col border-l border-[#edf0ff] bg-white shadow-2xl',
+    drawerStat: 'rounded-xl bg-[#f8f9ff] px-3 py-3',
+    overlay: 'absolute inset-0 bg-slate-900/40 backdrop-blur-sm',
+    grid: '#e4e8f7',
+    chartLabel: '#151a3d',
+    chartAxisTick: { fontSize: 12, fill: '#7a83a6' },
+    tooltipContentStyle: { border: '1px solid #dfe3f5', borderRadius: 12, backgroundColor: '#ffffff', color: '#151a3d', boxShadow: '0 14px 34px rgba(87,93,245,0.14)' },
+    tooltipLabelStyle: { color: '#151a3d', fontWeight: 700 },
+    tooltipItemStyle: { color: '#151a3d' },
+    genderColors: ['#0095ff', '#ff5b7f', '#a0aec0'],
+    educationColors: ['#0095ff', '#00d4a6', '#ffb800', '#8b5cf6', '#ff5b7f', '#94a3b8'],
+    generationColors: ['#00d4a6', '#ffb800', '#8b5cf6'],
+    employmentTypeColors: ['#0095ff', '#00d4a6', '#ffb800', '#ff5b7f', '#8b5cf6', '#94a3b8'],
+    monthlyBar: '#0095ff',
+    yearlyLine: '#00a879',
+    courseToneClasses: [
+      'border-l-[#0095ff] bg-gradient-to-r from-[#e8f5ff] via-white to-white hover:from-[#dff0ff]',
+      'border-l-[#00d4a6] bg-gradient-to-r from-[#dcfce7] via-white to-white hover:from-[#c9f7d8]',
+      'border-l-[#ffb800] bg-gradient-to-r from-[#fff4de] via-white to-white hover:from-[#ffedc2]',
+      'border-l-[#ff5b7f] bg-gradient-to-r from-[#ffe2e8] via-white to-white hover:from-[#ffd3dd]',
+      'border-l-[#8b5cf6] bg-gradient-to-r from-[#f3e8ff] via-white to-white hover:from-[#ead9ff]',
+    ],
+  },
+  dark: {
+    page: 'min-h-screen rounded-2xl bg-[#0f1225] p-4 text-slate-100 transition-colors duration-300',
+    headerTitle: 'text-2xl font-semibold tracking-normal text-slate-50',
+    sectionTitle: 'text-xl font-semibold text-slate-50',
+    cardTitle: 'font-semibold text-slate-50',
+    chartTitle: 'text-sm font-semibold text-slate-50',
+    mutedText: 'text-slate-400',
+    secondaryText: 'text-slate-300',
+    panel: 'rounded-2xl border border-[#272d52] bg-[#171b35] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] ring-1 ring-white/5',
+    card: 'rounded-2xl border border-[#272d52] bg-[#171b35] p-5 shadow-[0_18px_44px_rgba(0,0,0,0.24)] ring-1 ring-white/5 transition duration-200 hover:border-[#394174] hover:shadow-[0_22px_54px_rgba(0,0,0,0.30)]',
+    kpiPersonnel: 'rounded-2xl border border-[#30386c] border-l-4 border-l-[#7c83ff] bg-[#171b35] p-4 shadow-[0_14px_36px_rgba(0,0,0,0.24)] ring-1 ring-white/5',
+    kpiAge: 'rounded-2xl border border-[#5a4724] border-l-4 border-l-[#ffd166] bg-[#171b35] p-4 shadow-[0_14px_36px_rgba(0,0,0,0.24)] ring-1 ring-white/5',
+    iconPersonnel: 'rounded-2xl bg-[#252b61] p-3 text-[#9aa0ff] ring-1 ring-[#38407d]',
+    iconAge: 'rounded-2xl bg-[#3d321f] p-3 text-[#ffd166] ring-1 ring-[#5a4724]',
+    actionButton: 'inline-flex items-center justify-center gap-2 rounded-xl border border-[#343b68] bg-[#171b35] px-3 py-2 text-sm font-medium text-slate-100 shadow-sm transition hover:bg-[#20264a]',
+    toggleButton: 'inline-flex items-center justify-center gap-2 rounded-xl bg-[#ffd166] px-3 py-2 text-sm font-semibold text-[#151a3d] shadow-[0_12px_28px_rgba(255,209,102,0.22)] transition hover:bg-[#ffc342]',
+    exportButton: 'inline-flex h-6 items-center justify-center rounded-lg border border-[#343b68] bg-[#11162d] px-1.5 text-[10px] font-semibold uppercase text-slate-300 shadow-sm transition hover:border-[#7c83ff] hover:bg-[#20264a] hover:text-white disabled:cursor-not-allowed disabled:opacity-50',
+    emptyChartState: 'flex h-full min-h-40 items-center justify-center rounded-xl border border-dashed border-[#343b68] bg-[#11162d] text-sm text-slate-400',
+    courseSection: 'mt-6 overflow-hidden rounded-2xl border border-[#272d52] bg-[#171b35] shadow-[0_18px_44px_rgba(0,0,0,0.24)]',
+    courseHeader: 'border-b border-[#272d52] bg-gradient-to-r from-[#242a5d] via-[#171b35] to-[#16362f] px-5 py-5 ring-1 ring-inset ring-white/5',
+    courseCard: 'rounded-xl border border-[#272d52] bg-[#151932] shadow-sm',
+    courseHeaderButton: 'flex w-full flex-col gap-2 border-b border-[#272d52] px-5 py-4 text-left transition hover:bg-[#20264a] sm:flex-row sm:items-center sm:justify-between',
+    courseRowCount: 'shrink-0 rounded-lg bg-[#20264a] px-2.5 py-1 text-xs font-semibold text-slate-100 ring-1 ring-[#343b68]',
+    activeBadge: 'bg-emerald-400/10 text-emerald-200 ring-emerald-400/30',
+    inactiveBadge: 'bg-slate-700/50 text-slate-300 ring-slate-600',
+    errorBox: 'mb-4 rounded-xl border border-red-400/30 bg-red-950/40 px-4 py-3 text-sm text-red-200',
+    tableHead: 'bg-[#11162d] text-xs font-semibold uppercase tracking-wider text-slate-400',
+    drawerPanel: 'absolute right-0 top-0 flex h-full w-full max-w-2xl flex-col border-l border-[#272d52] bg-[#171b35] shadow-2xl',
+    drawerStat: 'rounded-xl bg-[#11162d] px-3 py-3',
+    overlay: 'absolute inset-0 bg-black/60 backdrop-blur-sm',
+    grid: '#323a68',
+    chartLabel: '#eef2ff',
+    chartAxisTick: { fontSize: 12, fill: '#aab2d8' },
+    tooltipContentStyle: { border: '1px solid #343b68', borderRadius: 12, backgroundColor: '#11162d', color: '#eef2ff', boxShadow: '0 14px 34px rgba(0,0,0,0.34)' },
+    tooltipLabelStyle: { color: '#ffffff', fontWeight: 700 },
+    tooltipItemStyle: { color: '#eef2ff' },
+    genderColors: ['#38bdf8', '#fb7185', '#94a3b8'],
+    educationColors: ['#38bdf8', '#34d399', '#facc15', '#a78bfa', '#fb7185', '#cbd5e1'],
+    generationColors: ['#34d399', '#facc15', '#a78bfa'],
+    employmentTypeColors: ['#38bdf8', '#34d399', '#facc15', '#fb7185', '#a78bfa', '#cbd5e1'],
+    monthlyBar: '#38bdf8',
+    yearlyLine: '#34d399',
+    courseToneClasses: [
+      'border-l-[#38bdf8] bg-gradient-to-r from-[#12334c] via-[#151932] to-[#151932] hover:from-[#17415f]',
+      'border-l-[#34d399] bg-gradient-to-r from-[#12392f] via-[#151932] to-[#151932] hover:from-[#164638]',
+      'border-l-[#facc15] bg-gradient-to-r from-[#3c3518] via-[#151932] to-[#151932] hover:from-[#4a411c]',
+      'border-l-[#fb7185] bg-gradient-to-r from-[#42202d] via-[#151932] to-[#151932] hover:from-[#512637]',
+      'border-l-[#a78bfa] bg-gradient-to-r from-[#2c2555] via-[#151932] to-[#151932] hover:from-[#372e68]',
+    ],
+  },
+};
 type ImageFormat = 'png' | 'jpg' | 'svg';
 type ExportKey = 'gender' | 'education' | 'generation' | 'employment' | 'monthly-training' | 'yearly-training';
 type ExportDetail = {
@@ -69,12 +169,8 @@ function truncateSvgText(value: string, maxLength: number) {
   return value.length > maxLength ? `${value.slice(0, maxLength - 1)}...` : value;
 }
 
-function EmptyChartState() {
-  return (
-    <div className="flex h-full min-h-40 items-center justify-center rounded-md border border-dashed border-slate-200 bg-slate-50 text-sm text-slate-500">
-      ไม่มีข้อมูล
-    </div>
-  );
+function EmptyChartState({ className }: { className: string }) {
+  return <div className={className}>ไม่มีข้อมูล</div>;
 }
 
 function copyComputedStyles(source: Element, target: Element) {
@@ -150,19 +246,19 @@ function buildElementSvg(element: HTMLElement, details: ExportDetail[] = [], sum
       const percentText = typeof item.percent === 'number' ? ` (${item.percent}%)` : '';
       const labelMaxLength = detailColumns === 1 ? 22 : 14;
       const label = escapeSvgText(truncateSvgText(item.label, labelMaxLength));
-      const color = item.color || genderColors[index % genderColors.length];
+      const color = item.color || dashboardThemeConfig.light.genderColors[index % dashboardThemeConfig.light.genderColors.length];
       const valueX = Math.min(width - 28, detailX + detailColumnWidth - 8);
       const valueText = `${countText}${percentText}`;
 
       return [
         `<circle cx="${detailX + 4}" cy="${y - 4}" r="4" fill="${color}"/>`,
         `<text x="${detailX + 16}" y="${y}" font-family="Tahoma, Arial, sans-serif" font-size="${detailLabelFontSize}" font-weight="500" fill="#475569">${label}</text>`,
-        `<text x="${valueX}" y="${y}" font-family="Tahoma, Arial, sans-serif" font-size="${detailValueFontSize}" font-weight="600" fill="#0f172a" text-anchor="end">${valueText}</text>`,
+        `<text x="${valueX}" y="${y}" font-family="Tahoma, Arial, sans-serif" font-size="${detailValueFontSize}" font-weight="600" fill="#151a3d" text-anchor="end">${valueText}</text>`,
       ].join('');
     })
     .join('');
   const summarySvg = summaryText
-    ? `<text x="22" y="58" font-family="Tahoma, Arial, sans-serif" font-size="${summaryFontSize}" font-weight="600" fill="#1d75bd">${escapeSvgText(summaryText)}</text>`
+    ? `<text x="22" y="58" font-family="Tahoma, Arial, sans-serif" font-size="${summaryFontSize}" font-weight="600" fill="#5b5ff4">${escapeSvgText(summaryText)}</text>`
     : '';
   const svg = [
     `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">`,
@@ -171,8 +267,8 @@ function buildElementSvg(element: HTMLElement, details: ExportDetail[] = [], sum
     '<feDropShadow dx="0" dy="10" stdDeviation="10" flood-color="#0f172a" flood-opacity="0.12"/>',
     '</filter>',
     '</defs>',
-    `<rect x="4" y="4" width="${width - 8}" height="${height - 8}" rx="8" fill="#ffffff" stroke="#e2e8f0" filter="url(#cardShadow)"/>`,
-    `<text x="22" y="34" font-family="Tahoma, Arial, sans-serif" font-size="${titleFontSize}" font-weight="600" fill="#0f172a">${escapeSvgText(title)}</text>`,
+    `<rect x="4" y="4" width="${width - 8}" height="${height - 8}" rx="8" fill="#ffffff" stroke="#e4e8f7" filter="url(#cardShadow)"/>`,
+    `<text x="22" y="34" font-family="Tahoma, Arial, sans-serif" font-size="${titleFontSize}" font-weight="600" fill="#151a3d">${escapeSvgText(title)}</text>`,
     summarySvg,
     serializedChart,
     detailsSvg,
@@ -188,6 +284,7 @@ export function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [exportingKey, setExportingKey] = useState<string | null>(null);
+  const [dashboardTheme, setDashboardTheme] = useState<DashboardTheme>('light');
   const [expandedCourseCategories, setExpandedCourseCategories] = useState<Record<string, boolean>>({});
   const [selectedCourse, setSelectedCourse] = useState<{
     category: string;
@@ -204,6 +301,13 @@ export function DashboardPage() {
   const employmentChartRef = useRef<HTMLElement | null>(null);
   const monthlyTrendRef = useRef<HTMLElement | null>(null);
   const yearlyTrendRef = useRef<HTMLElement | null>(null);
+  const theme = dashboardThemeConfig[dashboardTheme];
+  const isDarkTheme = dashboardTheme === 'dark';
+  const chartTooltipProps = {
+    contentStyle: theme.tooltipContentStyle,
+    labelStyle: theme.tooltipLabelStyle,
+    itemStyle: theme.tooltipItemStyle,
+  };
 
   const loadSummary = async () => {
     setLoading(true);
@@ -274,19 +378,21 @@ export function DashboardPage() {
   };
 
   const educationTotal = summary.demographics.educationBreakdown.reduce((sum, item) => sum + item.count, 0);
-  const educationChartData = summary.demographics.educationBreakdown.map((item) => ({
+  const educationChartData = summary.demographics.educationBreakdown.map((item, index) => ({
     ...item,
+    color: theme.educationColors[index % theme.educationColors.length],
     percent: educationTotal > 0 ? Math.round((item.count / educationTotal) * 100) : 0,
   }));
   const employmentTypeTotal = summary.demographics.employmentTypeBreakdown.reduce((sum, item) => sum + item.count, 0);
-  const employmentTypeChartData = summary.demographics.employmentTypeBreakdown.map((item) => ({
+  const employmentTypeChartData = summary.demographics.employmentTypeBreakdown.map((item, index) => ({
     ...item,
+    color: theme.employmentTypeColors[index % theme.employmentTypeColors.length],
     percent: employmentTypeTotal > 0 ? Math.round((item.count / employmentTypeTotal) * 100) : 0,
   }));
 
   const getExportDetails = (key: ExportKey) => {
     if (key === 'gender') {
-      const details = buildDetails(summary.demographics.genderBreakdown, genderColors);
+      const details = buildDetails(summary.demographics.genderBreakdown, theme.genderColors);
       return {
         details,
         summaryText: `จำนวนรวม: ${details.reduce((sum, item) => sum + item.count, 0).toLocaleString()} คน`,
@@ -294,7 +400,7 @@ export function DashboardPage() {
     }
 
     if (key === 'education') {
-      const details = buildDetails(summary.demographics.educationBreakdown, ['#1d75bd']);
+      const details = buildDetails(summary.demographics.educationBreakdown, theme.educationColors);
       return {
         details,
         summaryText: `จำนวนรวม: ${details.reduce((sum, item) => sum + item.count, 0).toLocaleString()} คน`,
@@ -302,7 +408,7 @@ export function DashboardPage() {
     }
 
     if (key === 'generation') {
-      const details = buildDetails(summary.demographics.generationBreakdown, generationColors);
+      const details = buildDetails(summary.demographics.generationBreakdown, theme.generationColors);
       return {
         details,
         summaryText: `จำนวนรวม: ${details.reduce((sum, item) => sum + item.count, 0).toLocaleString()} คน`,
@@ -310,7 +416,7 @@ export function DashboardPage() {
     }
 
     if (key === 'employment') {
-      const details = buildDetails(summary.demographics.employmentTypeBreakdown, ['#23805f']);
+      const details = buildDetails(summary.demographics.employmentTypeBreakdown, theme.employmentTypeColors);
       return {
         details,
         summaryText: `จำนวนรวม: ${details.reduce((sum, item) => sum + item.count, 0).toLocaleString()} คน`,
@@ -408,7 +514,7 @@ export function DashboardPage() {
             type="button"
             onClick={() => void exportChartImage(element, key, format)}
             disabled={loading || exportingKey !== null}
-            className="inline-flex h-6 items-center justify-center rounded border border-slate-200 bg-white px-1.5 text-[10px] font-semibold uppercase text-slate-600 shadow-sm transition hover:border-brand-200 hover:bg-brand-50 hover:text-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
+            className={theme.exportButton}
             title={`ดาวน์โหลด ${format.toUpperCase()}`}
           >
             {isExporting ? '...' : format}
@@ -419,58 +525,69 @@ export function DashboardPage() {
   );
 
   return (
-    <div>
+    <div className={theme.page}>
       <div className="mb-1 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <PageHeader title="แดชบอร์ดสำหรับผู้บริหาร" description="" />
-        <button
-          type="button"
-          onClick={() => void loadSummary()}
-          className="inline-flex items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100"
-        >
-          <RefreshCw className="h-4 w-4" aria-hidden="true" />
-          Refresh
-        </button>
+        <div className="mb-6"><h1 className={theme.headerTitle}>แดชบอร์ดสำหรับผู้บริหาร</h1></div>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setDashboardTheme((current) => (current === 'light' ? 'dark' : 'light'))}
+            className={theme.toggleButton}
+            aria-label={isDarkTheme ? 'เปลี่ยนเป็นโหมดสว่าง' : 'เปลี่ยนเป็นโหมดมืด'}
+          >
+            {isDarkTheme ? <Sun className="h-4 w-4" aria-hidden="true" /> : <Moon className="h-4 w-4" aria-hidden="true" />}
+            {isDarkTheme ? 'สว่าง' : 'มืด'}
+          </button>
+          <button
+            type="button"
+            onClick={() => void loadSummary()}
+            className={theme.actionButton}
+          >
+            <RefreshCw className="h-4 w-4" aria-hidden="true" />
+            Refresh
+          </button>
+        </div>
       </div>
 
       <section className="mb-3">
         <div className="mb-1">
-          <h2 className="text-xl font-semibold text-slate-1000">ข้อมูลพื้นฐานบุคลากร</h2>
+          <h2 className={theme.sectionTitle}>ข้อมูลพื้นฐานบุคลากร</h2>
         </div>
 
-        <div className="rounded-md border border-slate-200 bg-gradient-to-br from-slate-50 via-white to-blue-50/70 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.75)]">
+        <div className={theme.panel}>
           <div className="mb-4 grid gap-3 xl:grid-cols-2">
-            <section className="rounded-md border border-blue-100 bg-gradient-to-r from-white via-blue-50/70 to-white p-4 shadow-sm ring-1 ring-blue-900/5">
+            <section className={theme.kpiPersonnel}>
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <h2 className="text-lg font-semibold text-slate-900">จำนวนบุคลากรทั้งหมด</h2>
+                  <h2 className={`text-lg ${theme.cardTitle}`}>จำนวนบุคลากรทั้งหมด</h2>
                 </div>
                 <div className="flex items-center gap-4">
                   <div className="flex items-baseline justify-end gap-1 text-right">
-                    <p className="text-4xl font-bold tracking-tight text-slate-950">
+                    <p className={`text-4xl font-bold tracking-tight ${isDarkTheme ? 'text-white' : 'text-[#151a3d]'}`}>
                       {loading ? '...' : summary.personnelCount.toLocaleString()}
                     </p>
-                    <p className="text-xl font-semibold text-slate-1000">คน</p>
+                    <p className={`text-xl font-semibold ${isDarkTheme ? 'text-slate-100' : 'text-[#151a3d]'}`}>คน</p>
                   </div>
-                  <div className="rounded-md bg-blue-100 p-3 text-blue-700">
+                  <div className={theme.iconPersonnel}>
                     <UsersRound className="h-6 w-6" aria-hidden="true" />
                   </div>
                 </div>
               </div>
             </section>
 
-            <section className="rounded-md border border-amber-100 bg-gradient-to-r from-white via-amber-50/70 to-white p-4 shadow-sm ring-1 ring-amber-900/5">
+            <section className={theme.kpiAge}>
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <h2 className="text-lg font-semibold text-slate-900">อายุเฉลี่ยของบุคลากรภายในกองยุทธศาสตร์และแผนงาน</h2>
+                  <h2 className={`text-lg ${theme.cardTitle}`}>อายุเฉลี่ยของบุคลากรภายในกองยุทธศาสตร์และแผนงาน</h2>
                 </div>
                 <div className="flex items-center gap-4">
                   <div className="flex items-baseline justify-end gap-1 text-right">
-                    <p className="text-4xl font-bold tracking-tight text-slate-950">
+                    <p className={`text-4xl font-bold tracking-tight ${isDarkTheme ? 'text-white' : 'text-[#151a3d]'}`}>
                       {loading ? '...' : summary.demographics.averageAge !== null ? summary.demographics.averageAge.toLocaleString() : '-'}
                     </p>
-                    <p className="text-xl font-semibold text-slate-1000">ปี</p>
+                    <p className={`text-xl font-semibold ${isDarkTheme ? 'text-slate-100' : 'text-[#151a3d]'}`}>ปี</p>
                   </div>
-                  <div className="rounded-md bg-amber-100 p-3 text-amber-700">
+                  <div className={theme.iconAge}>
                     <CalendarDays className="h-6 w-6" aria-hidden="true" />
                   </div>
                 </div>
@@ -479,14 +596,14 @@ export function DashboardPage() {
           </div>
 
           <div className="grid gap-4 xl:grid-cols-12">
-          <section ref={genderChartRef} className={`${demographicCardClass} xl:col-span-3`}>
+          <section ref={genderChartRef} className={`${theme.card} xl:col-span-3`}>
             <div className="flex items-start justify-between gap-3">
-              <h2 className="text-sm font-semibold text-slate-900">สัดส่วนเพศ</h2>
+              <h2 className={theme.chartTitle}>สัดส่วนเพศ</h2>
               {renderChartExportButtons(genderChartRef.current, 'gender')}
             </div>
             <div className="mt-4 h-60">
               {loading ? (
-                <EmptyChartState />
+                <EmptyChartState className={theme.emptyChartState} />
               ) : summary.demographics.genderBreakdown.length > 0 ? (
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
@@ -503,61 +620,64 @@ export function DashboardPage() {
                       labelLine={false}
                     >
                       {summary.demographics.genderBreakdown.map((item, index) => (
-                        <Cell key={item.label} fill={genderColors[index % genderColors.length]} />
+                        <Cell key={item.label} fill={theme.genderColors[index % theme.genderColors.length]} />
                       ))}
                     </Pie>
-                    <Tooltip formatter={(value) => [`${Number(value).toLocaleString()} คน`, 'จำนวน']} />
+                    <Tooltip {...chartTooltipProps} formatter={(value) => [`${Number(value).toLocaleString()} คน`, 'จำนวน']} />
                   </PieChart>
                 </ResponsiveContainer>
               ) : (
-                <EmptyChartState />
+                <EmptyChartState className={theme.emptyChartState} />
               )}
             </div>
             <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
               {summary.demographics.genderBreakdown.map((item, index) => (
-                <div key={item.label} className="flex items-center gap-2 text-slate-600">
-                  <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: genderColors[index % genderColors.length] }} />
+                <div key={item.label} className={`flex items-center gap-2 ${theme.secondaryText}`}>
+                  <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: theme.genderColors[index % theme.genderColors.length] }} />
                   <span className="truncate">{item.label}</span>
-                  <span className="ml-2 font-medium text-slate-900">{item.count.toLocaleString()}</span>คน
+                  <span className={`ml-2 font-medium ${isDarkTheme ? 'text-slate-50' : 'text-[#151a3d]'}`}>{item.count.toLocaleString()}</span>คน
                 </div>
               ))}
             </div>
           </section>
 
-          <section ref={educationChartRef} className={`${demographicCardClass} xl:col-span-3`}>
+          <section ref={educationChartRef} className={`${theme.card} xl:col-span-3`}>
             <div className="flex items-start justify-between gap-3">
-              <h2 className="text-sm font-semibold text-slate-900">ระดับการศึกษา</h2>
+              <h2 className={theme.chartTitle}>ระดับการศึกษา</h2>
               {renderChartExportButtons(educationChartRef.current, 'education')}
             </div>
             <div className="mt-4 h-60">
               {loading ? (
-                <EmptyChartState />
+                <EmptyChartState className={theme.emptyChartState} />
                 ) : educationChartData.length > 0 ? (
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={educationChartData} layout="vertical" margin={{ left: 18, right: 34 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" horizontal={false} />
-                    <XAxis type="number" allowDecimals={false} tick={{ fontSize: 12 }} />
-                    <YAxis type="category" dataKey="label" width={92} tick={{ fontSize: 12 }} />
-                    <Tooltip formatter={(value) => [`${Number(value).toLocaleString()} คน`, 'จำนวน']} />
-                    <Bar dataKey="count" fill="#1d75bd" radius={[0, 4, 4, 0]}>
-                      <LabelList dataKey="percent" position="right" formatter={(value: number) => `${value}%`} fill="#0f172a" fontSize={11} />
+                    <CartesianGrid strokeDasharray="3 3" stroke={theme.grid} horizontal={false} />
+                    <XAxis type="number" allowDecimals={false} tick={theme.chartAxisTick} />
+                    <YAxis type="category" dataKey="label" width={92} tick={theme.chartAxisTick} />
+                    <Tooltip {...chartTooltipProps} formatter={(value) => [`${Number(value).toLocaleString()} คน`, 'จำนวน']} />
+                    <Bar dataKey="count" radius={[0, 4, 4, 0]}>
+                      {educationChartData.map((item) => (
+                        <Cell key={item.label} fill={item.color} />
+                      ))}
+                      <LabelList dataKey="percent" position="right" formatter={(value: number) => `${value}%`} fill={theme.chartLabel} fontSize={11} />
                     </Bar>
                   </BarChart>
                 </ResponsiveContainer>
               ) : (
-                <EmptyChartState />
+                <EmptyChartState className={theme.emptyChartState} />
               )}
             </div>
           </section>
 
-          <section ref={generationChartRef} className={`${demographicCardClass} xl:col-span-3`}>
+          <section ref={generationChartRef} className={`${theme.card} xl:col-span-3`}>
             <div className="flex items-start justify-between gap-3">
-              <h2 className="text-sm font-semibold text-slate-900">Generation</h2>
+              <h2 className={theme.chartTitle}>Generation</h2>
               {renderChartExportButtons(generationChartRef.current, 'generation')}
             </div>
             <div className="mt-4 h-60">
               {loading ? (
-                <EmptyChartState />
+                <EmptyChartState className={theme.emptyChartState} />
               ) : summary.demographics.generationBreakdown.length > 0 ? (
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
@@ -574,53 +694,56 @@ export function DashboardPage() {
                       labelLine={false}
                     >
                       {summary.demographics.generationBreakdown.map((item, index) => (
-                        <Cell key={item.label} fill={generationColors[index % generationColors.length]} />
+                        <Cell key={item.label} fill={theme.generationColors[index % theme.generationColors.length]} />
                       ))}
                     </Pie>
-                    <Tooltip formatter={(value) => [`${Number(value).toLocaleString()} คน`, 'จำนวน']} />
+                    <Tooltip {...chartTooltipProps} formatter={(value) => [`${Number(value).toLocaleString()} คน`, 'จำนวน']} />
                   </PieChart>
                 </ResponsiveContainer>
               ) : (
-                <EmptyChartState />
+                <EmptyChartState className={theme.emptyChartState} />
               )}
             </div>
             <div className="mt-3 space-y-2 text-xs">
               {summary.demographics.generationBreakdown.map((item, index) => (
-                <div key={item.label} className="flex items-center gap-2 text-slate-600">
-                  <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: generationColors[index % generationColors.length] }} />
+                <div key={item.label} className={`flex items-center gap-2 ${theme.secondaryText}`}>
+                  <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: theme.generationColors[index % theme.generationColors.length] }} />
                   <span className="truncate">{item.label}</span>
-                  <span className="ml-2 font-medium text-slate-900">{item.count.toLocaleString()}</span>คน
+                  <span className={`ml-2 font-medium ${isDarkTheme ? 'text-slate-50' : 'text-[#151a3d]'}`}>{item.count.toLocaleString()}</span>คน
                 </div>
               ))}
             </div>
           </section>
 
-          <section ref={employmentChartRef} className={`${demographicCardClass} xl:col-span-3`}>
+          <section ref={employmentChartRef} className={`${theme.card} xl:col-span-3`}>
             <div className="flex items-start justify-between gap-3">
-              <h2 className="text-sm font-semibold text-slate-900">รูปแบบการจ้าง</h2>
+              <h2 className={theme.chartTitle}>รูปแบบการจ้าง</h2>
               {renderChartExportButtons(employmentChartRef.current, 'employment')}
             </div>
-            <div className="mt-4 border-t border-slate-100 pt-4">
-              <p className="text-xs font-semibold text-brand-700">
+            <div className={`mt-4 border-t pt-4 ${isDarkTheme ? 'border-[#272d52]' : 'border-[#edf0ff]'}`}>
+              <p className={`text-xs font-semibold ${isDarkTheme ? 'text-sky-300' : 'text-[#5b5ff4]'}`}>
                 จำนวนรวม {summary.demographics.employmentTypeBreakdown.reduce((sum, item) => sum + item.count, 0).toLocaleString()} คน
               </p>
               <div className="mt-3 h-56">
                 {loading ? (
-                  <EmptyChartState />
+                  <EmptyChartState className={theme.emptyChartState} />
                 ) : employmentTypeChartData.length > 0 ? (
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={employmentTypeChartData} layout="vertical" margin={{ left: 20, right: 34 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" horizontal={false} />
+                      <CartesianGrid strokeDasharray="3 3" stroke={theme.grid} horizontal={false} />
                       <XAxis type="number" allowDecimals={false} hide />
-                      <YAxis type="category" dataKey="label" width={118} tick={{ fontSize: 11 }} />
-                      <Tooltip formatter={(value) => [`${Number(value).toLocaleString()} คน`, 'จำนวน']} />
-                      <Bar dataKey="count" fill="#23805f" radius={[0, 4, 4, 0]}>
-                        <LabelList dataKey="percent" position="right" formatter={(value: number) => `${value}%`} fill="#0f172a" fontSize={11} />
+                      <YAxis type="category" dataKey="label" width={118} tick={{ ...theme.chartAxisTick, fontSize: 11 }} />
+                      <Tooltip {...chartTooltipProps} formatter={(value) => [`${Number(value).toLocaleString()} คน`, 'จำนวน']} />
+                      <Bar dataKey="count" radius={[0, 4, 4, 0]}>
+                        {employmentTypeChartData.map((item) => (
+                          <Cell key={item.label} fill={item.color} />
+                        ))}
+                        <LabelList dataKey="percent" position="right" formatter={(value: number) => `${value}%`} fill={theme.chartLabel} fontSize={11} />
                       </Bar>
                     </BarChart>
                   </ResponsiveContainer>
                 ) : (
-                  <EmptyChartState />
+                  <EmptyChartState className={theme.emptyChartState} />
                 )}
               </div>
             </div>
@@ -630,17 +753,17 @@ export function DashboardPage() {
       </section>
 
       {error ? (
-        <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <div className={theme.errorBox}>
           {error}
         </div>
       ) : null}
 
       <div className="grid gap-4 xl:grid-cols-2">
-        <section ref={monthlyTrendRef} className="rounded-md border border-slate-200 bg-white p-5 shadow-sm">
+        <section ref={monthlyTrendRef} className={theme.card}>
           <div className="flex items-start justify-between gap-3">
             <div>
-              <h2 className="text-base font-semibold text-slate-900">สถิติการอบรมรายเดือน</h2>
-              <p className="mt-1 text-xs font-semibold text-brand-700">
+              <h2 className={`text-base ${theme.cardTitle}`}>สถิติการอบรมรายเดือน</h2>
+              <p className={`mt-1 text-xs font-semibold ${isDarkTheme ? 'text-sky-300' : 'text-[#5b5ff4]'}`}>
                 จำนวนรายการรวม {summary.monthlyTrend.reduce((sum, item) => sum + item.count, 0).toLocaleString()} รายการ
               </p>
             </div>
@@ -649,103 +772,105 @@ export function DashboardPage() {
           <div className="mt-4 h-72">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={summary.monthlyTrend}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                <XAxis dataKey="label" tick={{ fontSize: 12 }} />
-                <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
-                <Tooltip
+                <CartesianGrid strokeDasharray="3 3" stroke={theme.grid} />
+                <XAxis dataKey="label" tick={theme.chartAxisTick} />
+                <YAxis allowDecimals={false} tick={theme.chartAxisTick} />
+                <Tooltip {...chartTooltipProps}
                   formatter={(value) => [`${value} รายการ`, 'จำนวน']}
                   labelFormatter={(label) => `เดือน: ${label}`}
                 />
-                <Bar dataKey="count" fill="#1d75bd" radius={[4, 4, 0, 0]}>
-                  <LabelList dataKey="count" position="top" formatter={(value: number) => value.toLocaleString()} fill="#0f172a" fontSize={11} />
+                <Bar dataKey="count" fill={theme.monthlyBar} radius={[4, 4, 0, 0]}>
+                  <LabelList dataKey="count" position="top" formatter={(value: number) => value.toLocaleString()} fill={theme.chartLabel} fontSize={11} />
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
           </div>
         </section>
 
-        <section ref={yearlyTrendRef} className="rounded-md border border-slate-200 bg-white p-5 shadow-sm">
+        <section ref={yearlyTrendRef} className={theme.card}>
           <div className="flex items-start justify-between gap-3">
-            <h2 className="text-base font-semibold text-slate-900">สถิติการอบรมรายปี</h2>
+            <h2 className={`text-base ${theme.cardTitle}`}>สถิติการอบรมรายปี</h2>
             {renderChartExportButtons(yearlyTrendRef.current, 'yearly-training')}
           </div>
           <div className="mt-4 h-72">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={summary.yearlyTrend}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                <XAxis dataKey="label" tick={{ fontSize: 12 }} />
-                <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
-                <Tooltip
+                <CartesianGrid strokeDasharray="3 3" stroke={theme.grid} />
+                <XAxis dataKey="label" tick={theme.chartAxisTick} />
+                <YAxis allowDecimals={false} tick={theme.chartAxisTick} />
+                <Tooltip {...chartTooltipProps}
                   formatter={(value) => [`${value} รายการ`, 'จำนวน']}
                   labelFormatter={(label) => `ปี: ${label}`}
                 />
-                <Line type="monotone" dataKey="count" stroke="#23805f" strokeWidth={2.5} dot={{ r: 4 }} />
+                <Line type="monotone" dataKey="count" stroke={theme.yearlyLine} strokeWidth={2.5} dot={{ r: 4 }} />
               </LineChart>
             </ResponsiveContainer>
           </div>
         </section>
       </div>
 
-      <section className="mt-6 rounded-md border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="flex flex-col gap-3 border-b border-slate-100 pb-4 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <h2 className="text-base font-semibold text-slate-900">Course Directory</h2>
-            <p className="mt-1 text-sm text-slate-500">
-              หมวดหลักสูตรที่มีผู้เรียน
-            </p>
+      <section className={theme.courseSection}>
+        <div className={theme.courseHeader}>
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <h2 className={`text-xl font-semibold ${isDarkTheme ? 'text-slate-100' : 'text-[#151a3d]'}`}>หลักสูตรที่มีผู้เข้ารับการอบรม</h2>
+              <p className={`mt-1 text-sm ${theme.secondaryText}`}>
+                หมวดหลักสูตรที่มีผู้เรียน
+              </p>
+            </div>
           </div>
         </div>
 
-        <div className="mt-4 grid gap-4 xl:grid-cols-2">
+        <div className="grid gap-4 p-5 xl:grid-cols-2">
           {loading ? (
             Array.from({ length: 4 }).map((_, index) => (
-              <section key={index} className="animate-pulse rounded-md border border-slate-200 bg-white p-5 shadow-sm">
-                <div className="h-5 w-40 rounded bg-slate-100" />
+              <section key={index} className={`animate-pulse ${theme.card}`}>
+                <div className={`h-5 w-40 rounded ${isDarkTheme ? 'bg-[#20264a]' : 'bg-slate-100'}`} />
                 <div className="mt-4 space-y-3">
-                  <div className="h-14 rounded-md bg-slate-100" />
-                  <div className="h-14 rounded-md bg-slate-100" />
-                  <div className="h-14 rounded-md bg-slate-100" />
+                  <div className={`h-14 rounded-md ${isDarkTheme ? 'bg-[#20264a]' : 'bg-slate-100'}`} />
+                  <div className={`h-14 rounded-md ${isDarkTheme ? 'bg-[#20264a]' : 'bg-slate-100'}`} />
+                  <div className={`h-14 rounded-md ${isDarkTheme ? 'bg-[#20264a]' : 'bg-slate-100'}`} />
                 </div>
               </section>
             ))
           ) : displayedCourseSections.length === 0 ? (
-            <div className="col-span-full rounded-md border border-dashed border-slate-300 bg-white py-16 text-center text-slate-500 shadow-sm">
+            <div className={`col-span-full ${theme.emptyChartState} py-16 shadow-sm`}>
               ไม่พบข้อมูลหลักสูตร
             </div>
           ) : (
             displayedCourseSections.map((section) => (
-              <section key={section.category} className="rounded-md border border-slate-200 bg-white shadow-sm">
+              <section key={section.category} className={theme.courseCard}>
                 <button
                   type="button"
                   onClick={() => toggleCourseCategory(section.category)}
-                  className="flex w-full flex-col gap-2 border-b border-slate-100 px-5 py-4 text-left transition hover:bg-slate-50 sm:flex-row sm:items-center sm:justify-between"
+                  className={theme.courseHeaderButton}
                 >
                   <div>
-                    <h3 className="text-base font-semibold text-slate-900">{section.category}</h3>
-                    <p className="mt-1 text-sm text-slate-500">
+                    <h3 className={`text-base ${theme.cardTitle}`}>{section.category}</h3>
+                    <p className={`mt-1 text-sm ${theme.mutedText}`}>
                       {section.courseCount.toLocaleString()} หลักสูตร · {section.attendeeCount.toLocaleString()} ผู้เรียน
                     </p>
                   </div>
                   <div className="flex items-center gap-3">
                     <span
                       className={`w-fit rounded-md px-2 py-1 text-xs font-semibold ring-1 ${
-                        section.active ? 'bg-emerald-50 text-emerald-700 ring-emerald-200' : 'bg-slate-100 text-slate-600 ring-slate-200'
+                        section.active ? theme.activeBadge : theme.inactiveBadge
                       }`}
                     >
                       {section.active ? 'Active' : 'Inactive'}
                     </span>
                     <ChevronRight
-                      className={`h-4 w-4 text-slate-500 transition ${expandedCourseCategories[section.category] ? 'rotate-90' : ''}`}
+                      className={`h-4 w-4 transition ${theme.mutedText} ${expandedCourseCategories[section.category] ? 'rotate-90' : ''}`}
                       aria-hidden="true"
                     />
                   </div>
                 </button>
 
-                <div className={`divide-y divide-slate-100 ${expandedCourseCategories[section.category] ? 'block' : 'hidden'}`}>
+                <div className={`divide-y ${isDarkTheme ? 'divide-[#272d52]' : 'divide-[#edf0ff]'} ${expandedCourseCategories[section.category] ? 'block' : 'hidden'}`}>
                   {section.courses.length === 0 ? (
-                    <div className="px-5 py-8 text-sm text-slate-500">ยังไม่มีหลักสูตรในหมวดหมู่นี้</div>
+                    <div className={`px-5 py-8 text-sm ${theme.mutedText}`}>ยังไม่มีหลักสูตรในหมวดหมู่นี้</div>
                   ) : (
-                    section.courses.map((course) => (
+                    section.courses.map((course, courseIndex) => (
                       <button
                         key={`${section.category}-${course.course}`}
                         type="button"
@@ -757,15 +882,15 @@ export function DashboardPage() {
                             latestDate: course.latestDate,
                           })
                         }
-                        className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left transition hover:bg-brand-50/40"
+                        className={`flex w-full items-center justify-between gap-4 border-l-4 px-5 py-4 text-left transition ${theme.courseToneClasses[courseIndex % theme.courseToneClasses.length]}`}
                       >
                         <div className="min-w-0">
-                          <div className="truncate font-semibold text-slate-900">{course.course}</div>
-                          <div className="mt-1 text-xs text-slate-500">
+                          <div className={`truncate ${theme.cardTitle}`}>{course.course}</div>
+                          <div className={`mt-1 text-xs ${theme.mutedText}`}>
                             อบรมล่าสุด {formatThaiDate(course.latestDate)}
                           </div>
                         </div>
-                        <span className="shrink-0 rounded-md bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">
+                        <span className={theme.courseRowCount}>
                           {course.attendeeCount.toLocaleString()} คน
                         </span>
                       </button>
@@ -783,19 +908,19 @@ export function DashboardPage() {
           <button
             type="button"
             aria-label="ปิดรายละเอียดหลักสูตร"
-            className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
+            className={theme.overlay}
             onClick={closeCourseDrawer}
           />
 
           <aside
-            className="absolute right-0 top-0 flex h-full w-full max-w-2xl flex-col border-l border-slate-200 bg-white shadow-2xl"
+            className={theme.drawerPanel}
             onClick={(event) => event.stopPropagation()}
           >
-            <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-5 py-4">
+            <div className={`flex items-start justify-between gap-4 border-b px-5 py-4 ${isDarkTheme ? 'border-[#272d52]' : 'border-[#edf0ff]'}`}>
               <div className="min-w-0">
-                <p className="text-xs font-semibold uppercase tracking-wider text-brand-600">รายชื่อผู้เรียน</p>
-                <h3 className="mt-1 truncate text-lg font-semibold text-slate-900">{selectedCourse.course}</h3>
-                <p className="mt-1 text-sm text-slate-500">
+                <p className={`text-xs font-semibold uppercase tracking-wider ${isDarkTheme ? 'text-sky-300' : 'text-[#5b5ff4]'}`}>รายชื่อผู้เรียน</p>
+                <h3 className={`mt-1 truncate text-lg ${theme.cardTitle}`}>{selectedCourse.course}</h3>
+                <p className={`mt-1 text-sm ${theme.mutedText}`}>
                   {selectedCourse.category} · {selectedCourse.attendeeCount.toLocaleString()} คน · ล่าสุด{' '}
                   {formatThaiDate(selectedCourse.latestDate)}
                 </p>
@@ -803,26 +928,26 @@ export function DashboardPage() {
               <button
                 type="button"
                 onClick={closeCourseDrawer}
-                className="rounded-md border border-slate-200 p-2 text-slate-500 transition hover:bg-slate-50 hover:text-slate-900"
+                className={`rounded-xl border p-2 transition ${isDarkTheme ? 'border-[#343b68] text-slate-300 hover:bg-[#20264a] hover:text-white' : 'border-[#dfe3f5] text-slate-500 hover:bg-[#f1f3ff] hover:text-[#151a3d]'}`}
                 aria-label="ปิด"
               >
                 <X className="h-4 w-4" aria-hidden="true" />
               </button>
             </div>
 
-            <div className="border-b border-slate-100 px-5 py-4">
+            <div className={`border-b px-5 py-4 ${isDarkTheme ? 'border-[#272d52]' : 'border-[#edf0ff]'}`}>
               <div className="grid gap-3 sm:grid-cols-3">
-                <div className="rounded-md bg-slate-50 px-3 py-3">
-                  <p className="text-xs text-slate-500">หมวดหมู่</p>
-                  <p className="mt-1 text-sm font-semibold text-slate-900">{selectedCourse.category}</p>
+                <div className={theme.drawerStat}>
+                  <p className={`text-xs ${theme.mutedText}`}>หมวดหมู่</p>
+                  <p className={`mt-1 text-sm ${theme.cardTitle}`}>{selectedCourse.category}</p>
                 </div>
-                <div className="rounded-md bg-slate-50 px-3 py-3">
-                  <p className="text-xs text-slate-500">ผู้เรียน</p>
-                  <p className="mt-1 text-sm font-semibold text-slate-900">{selectedCourse.attendeeCount.toLocaleString()} คน</p>
+                <div className={theme.drawerStat}>
+                  <p className={`text-xs ${theme.mutedText}`}>ผู้เรียน</p>
+                  <p className={`mt-1 text-sm ${theme.cardTitle}`}>{selectedCourse.attendeeCount.toLocaleString()} คน</p>
                 </div>
-                <div className="rounded-md bg-slate-50 px-3 py-3">
-                  <p className="text-xs text-slate-500">อบรมล่าสุด</p>
-                  <p className="mt-1 text-sm font-semibold text-slate-900">{formatThaiDate(selectedCourse.latestDate)}</p>
+                <div className={theme.drawerStat}>
+                  <p className={`text-xs ${theme.mutedText}`}>อบรมล่าสุด</p>
+                  <p className={`mt-1 text-sm ${theme.cardTitle}`}>{formatThaiDate(selectedCourse.latestDate)}</p>
                 </div>
               </div>
             </div>
@@ -831,36 +956,43 @@ export function DashboardPage() {
               {drawerLoading ? (
                 <div className="space-y-3">
                   {Array.from({ length: 5 }).map((_, index) => (
-                    <div key={index} className="animate-pulse rounded-md border border-slate-200 p-4">
-                      <div className="h-4 w-2/3 rounded bg-slate-100" />
-                      <div className="mt-3 h-3 w-1/2 rounded bg-slate-100" />
+                    <div key={index} className={`animate-pulse rounded-xl border p-4 ${isDarkTheme ? 'border-[#272d52]' : 'border-[#edf0ff]'}`}>
+                      <div className={`h-4 w-2/3 rounded ${isDarkTheme ? 'bg-[#20264a]' : 'bg-slate-100'}`} />
+                      <div className={`mt-3 h-3 w-1/2 rounded ${isDarkTheme ? 'bg-[#20264a]' : 'bg-slate-100'}`} />
                     </div>
                   ))}
                 </div>
               ) : drawerError ? (
-                <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                <div className={theme.errorBox}>
                   {drawerError}
                 </div>
               ) : attendees.length === 0 ? (
-                <div className="rounded-md border border-dashed border-slate-300 bg-white px-4 py-10 text-center text-sm text-slate-500">
+                <div className={`rounded-xl border border-dashed px-4 py-10 text-center text-sm ${isDarkTheme ? 'border-[#343b68] bg-[#11162d] text-slate-400' : 'border-[#dfe3f5] bg-white text-slate-500'}`}>
                   ไม่พบรายชื่อผู้เรียนในหลักสูตรนี้
                 </div>
               ) : (
-                <div className="overflow-hidden rounded-md border border-slate-200">
+                <div className={`overflow-hidden rounded-xl border ${isDarkTheme ? 'border-[#272d52]' : 'border-[#edf0ff]'}`}>
                   <table className="w-full text-left text-sm">
-                    <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    <thead className={theme.tableHead}>
                       <tr>
                         <th className="px-4 py-3">ชื่อ-นามสกุล</th>
-                        <th className="px-4 py-3">หน่วยงาน</th>
+                        <th className="px-4 py-3">กลุ่มงาน</th>
                         <th className="px-4 py-3">วันที่อบรม</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-100 bg-white">
+                    <tbody className={`divide-y ${isDarkTheme ? 'divide-[#272d52] bg-[#171b35]' : 'divide-[#edf0ff] bg-white'}`}>
                       {attendees.map((attendee) => (
                         <tr key={attendee.userId} className="align-top">
-                          <td className="px-4 py-3 font-medium text-slate-900">{attendee.fullName}</td>
-                          <td className="px-4 py-3 text-slate-600">{attendee.department || '-'}</td>
-                          <td className="px-4 py-3 text-slate-600">{formatThaiDate(attendee.date)}</td>
+                          <td className="px-4 py-3">
+                            <Link
+                              to={`/personnel/${attendee.userId}`}
+                              className={`font-medium transition hover:underline ${isDarkTheme ? 'text-sky-200 hover:text-sky-100' : 'text-[#5b5ff4] hover:text-[#4b4fe0]'}`}
+                            >
+                              {attendee.fullName}
+                            </Link>
+                          </td>
+                          <td className={`px-4 py-3 ${theme.secondaryText}`}>{attendee.workGroup || '-'}</td>
+                          <td className={`px-4 py-3 ${theme.secondaryText}`}>{formatThaiDate(attendee.date)}</td>
                         </tr>
                       ))}
                     </tbody>

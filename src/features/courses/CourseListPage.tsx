@@ -32,7 +32,6 @@ function getVisibleSections(data: CourseDirectoryData | null, search: string): C
 }
 
 export function CourseListPage() {
-  const TOP_CATEGORY_LIMIT = 5;
   const [data, setData] = useState<CourseDirectoryData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -46,7 +45,6 @@ export function CourseListPage() {
   const [attendees, setAttendees] = useState<CourseDirectoryAttendee[]>([]);
   const [drawerLoading, setDrawerLoading] = useState(false);
   const [drawerError, setDrawerError] = useState<string | null>(null);
-  const [showAllSections, setShowAllSections] = useState(false);
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
 
   const loadData = async () => {
@@ -56,14 +54,8 @@ export function CourseListPage() {
     try {
       const result = await listCourseDirectory();
       setData(result);
-      const initialExpanded = result.sections
-        .sort((a, b) => b.attendeeCount - a.attendeeCount || a.category.localeCompare(b.category, 'th'))
-        .slice(0, TOP_CATEGORY_LIMIT)
-        .reduce<Record<string, boolean>>((acc, section) => {
-          acc[section.category] = true;
-          return acc;
-        }, {});
-      setExpandedCategories(initialExpanded);
+      setExpandedCategories({});
+
     } catch (err) {
       setError(err instanceof Error ? err.message : 'ไม่สามารถโหลดคลังหลักสูตรได้');
     } finally {
@@ -80,13 +72,6 @@ export function CourseListPage() {
     () => [...visibleSections].sort((a, b) => b.attendeeCount - a.attendeeCount || a.category.localeCompare(b.category, 'th')),
     [visibleSections],
   );
-  const isSearching = search.trim().length > 0;
-  const displayedSections = useMemo(() => {
-    if (isSearching || showAllSections) {
-      return rankedSections;
-    }
-    return rankedSections.slice(0, TOP_CATEGORY_LIMIT);
-  }, [isSearching, rankedSections, showAllSections]);
 
   const openCourseDrawer = async (course: { category: string; course: string; attendeeCount: number; latestDate: string }) => {
     setSelectedCourse(course);
@@ -116,7 +101,6 @@ export function CourseListPage() {
     (sum, section) => sum + section.courses.reduce((courseSum, course) => courseSum + course.attendeeCount, 0),
     0,
   );
-  const hiddenSectionCount = Math.max(rankedSections.length - TOP_CATEGORY_LIMIT, 0);
   const toggleCategory = (category: string) => {
     setExpandedCategories((prev) => ({ ...prev, [category]: !prev[category] }));
   };
@@ -206,17 +190,9 @@ export function CourseListPage() {
           </div>
           <div className="flex items-center justify-between gap-3 sm:justify-end">
             <span className="hidden text-xs text-slate-500 sm:block">
-              แสดง {totalVisibleCourses.toLocaleString()} หลักสูตร · {totalVisibleAttendees.toLocaleString()} ผู้เรียน
+              แสดง {rankedSections.length.toLocaleString()} หมวด · {totalVisibleCourses.toLocaleString()} หลักสูตร ·{' '}
+              {totalVisibleAttendees.toLocaleString()} ผู้เรียน
             </span>
-            {!isSearching && rankedSections.length > TOP_CATEGORY_LIMIT ? (
-              <button
-                type="button"
-                onClick={() => setShowAllSections((prev) => !prev)}
-                className="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50"
-              >
-                {showAllSections ? 'แสดงเฉพาะ 5 หมวดหลัก' : `ดูทั้งหมด (+${hiddenSectionCount.toLocaleString()} หมวด)`}
-              </button>
-            ) : null}
           </div>
         </div>
       </section>
@@ -227,96 +203,137 @@ export function CourseListPage() {
         </div>
       )}
 
-      {!loading && !error && !isSearching && !showAllSections ? (
-        <div className="rounded-md border border-brand-100 bg-brand-50/40 px-4 py-3 text-sm text-brand-800">
-          กำลังแสดง 5 หมวดหลักที่มีผู้เรียนมากที่สุด กด “ดูทั้งหมด” เพื่อดูทุกหมวด
-        </div>
-      ) : null}
 
-      <div className="grid gap-4 xl:grid-cols-2">
+      <section className="overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm">
+        <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
+          <div>
+            <h2 className="text-sm font-semibold text-slate-900">รายการหมวดหลักสูตร</h2>
+            <p className="mt-1 text-xs text-slate-500">กดที่หมวดเพื่อดูหลักสูตรย่อยตามลำดับรายการ</p>
+          </div>
+        </div>
+
         {loading ? (
-          Array.from({ length: 4 }).map((_, index) => (
-            <section key={index} className="animate-pulse rounded-md border border-slate-200 bg-white p-5 shadow-sm">
-              <div className="h-5 w-40 rounded bg-slate-100" />
-              <div className="mt-4 space-y-3">
-                <div className="h-14 rounded-md bg-slate-100" />
-                <div className="h-14 rounded-md bg-slate-100" />
-                <div className="h-14 rounded-md bg-slate-100" />
+          <div className="divide-y divide-slate-100">
+            {Array.from({ length: 5 }).map((_, index) => (
+              <div key={index} className="animate-pulse px-4 py-4">
+                <div className="h-4 w-2/5 rounded bg-slate-100" />
+                <div className="mt-3 h-3 w-1/4 rounded bg-slate-100" />
               </div>
-            </section>
-          ))
-        ) : displayedSections.length === 0 ? (
-          <div className="col-span-full rounded-md border border-dashed border-slate-300 bg-white py-16 text-center text-slate-500 shadow-sm">
+            ))}
+          </div>
+        ) : rankedSections.length === 0 ? (
+          <div className="border border-dashed border-slate-300 bg-white py-16 text-center text-slate-500">
             ไม่พบหลักสูตรตามคำค้นหา
           </div>
         ) : (
-          displayedSections.map((section) => (
-            <section key={section.category} className="rounded-md border border-slate-200 bg-white shadow-sm">
-              <button
-                type="button"
-                onClick={() => toggleCategory(section.category)}
-                className="flex w-full flex-col gap-2 border-b border-slate-100 px-5 py-4 text-left transition hover:bg-slate-50 sm:flex-row sm:items-center sm:justify-between"
-              >
-                <div>
-                  <h2 className="text-base font-semibold text-slate-900">{section.category}</h2>
-                  <p className="mt-1 text-sm text-slate-500">
-                    {section.courseCount.toLocaleString()} หลักสูตร · {section.attendeeCount.toLocaleString()} ผู้เรียน
-                  </p>
-                </div>
-                <div className="flex items-center gap-3">
-                  <span
-                    className={`w-fit rounded-md px-2 py-1 text-xs font-semibold ring-1 ${
-                      section.active ? 'bg-emerald-50 text-emerald-700 ring-emerald-200' : 'bg-slate-100 text-slate-600 ring-slate-200'
-                    }`}
-                  >
-                    {section.active ? 'Active' : 'Inactive'}
-                  </span>
-                  <ChevronRight
-                    className={`h-4 w-4 text-slate-500 transition ${expandedCategories[section.category] ? 'rotate-90' : ''}`}
-                    aria-hidden="true"
-                  />
-                </div>
-              </button>
+          <div>
+            <div className="hidden grid-cols-[72px_minmax(0,1.7fr)_140px_140px_120px_40px] items-center gap-4 border-b border-slate-200 bg-slate-50 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 lg:grid">
+              <span>ลำดับที่</span>
+              <span>หมวดหลักสูตร</span>
+              <span>หลักสูตร</span>
+              <span>ผู้เรียน</span>
+              <span>สถานะ</span>
+              <span></span>
+            </div>
+            <div className="divide-y divide-slate-100">
+              {rankedSections.map((section, sectionIndex) => {
+                const isExpanded = expandedCategories[section.category];
 
-              <div className={`divide-y divide-slate-100 ${expandedCategories[section.category] ? 'block' : 'hidden'}`}>
-                {section.courses.length === 0 ? (
-                  <div className="px-5 py-8 text-sm text-slate-500">ยังไม่มีหลักสูตรในหมวดหมู่นี้</div>
-                ) : (
-                  section.courses.map((course) => (
+                return (
+                  <div key={section.category}>
                     <button
-                      key={`${section.category}-${course.course}`}
                       type="button"
-                      onClick={() =>
-                        void openCourseDrawer({
-                          category: section.category,
-                          course: course.course,
-                          attendeeCount: course.attendeeCount,
-                          latestDate: course.latestDate,
-                        })
-                      }
-                      className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left transition hover:bg-brand-50/40"
+                      onClick={() => toggleCategory(section.category)}
+                      className="grid w-full grid-cols-[48px_minmax(0,1fr)_32px] items-center gap-3 px-4 py-4 text-left transition hover:bg-slate-50 lg:grid-cols-[72px_minmax(0,1.7fr)_140px_140px_120px_40px] lg:gap-4"
                     >
+                      <div className="text-sm font-semibold text-slate-500">
+                        {(sectionIndex + 1).toLocaleString('th-TH')}
+                      </div>
                       <div className="min-w-0">
-                        <div className="truncate font-semibold text-slate-900">{course.course}</div>
-                        <div className="mt-1 text-xs text-slate-500">
-                          อบรมล่าสุด {formatThaiDate(course.latestDate)}
-                        </div>
+                        <h3 className="truncate text-sm font-semibold text-slate-900 lg:text-base">{section.category}</h3>
+                        <p className="mt-1 text-xs text-slate-500 lg:hidden">
+                          {section.courseCount.toLocaleString()} หลักสูตร · {section.attendeeCount.toLocaleString()} ผู้เรียน
+                        </p>
                       </div>
-                      <div className="flex items-center gap-3">
-                        <span className="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">
-                          {course.attendeeCount.toLocaleString()} คน
+                      <div className="hidden text-sm text-slate-700 lg:block">
+                        {section.courseCount.toLocaleString()} หลักสูตร
+                      </div>
+                      <div className="hidden text-sm text-slate-700 lg:block">
+                        {section.attendeeCount.toLocaleString()} ผู้เรียน
+                      </div>
+                      <div className="hidden lg:block">
+                        <span
+                          className={`w-fit rounded-md px-2 py-1 text-xs font-semibold ring-1 ${
+                            section.active ? 'bg-emerald-50 text-emerald-700 ring-emerald-200' : 'bg-slate-100 text-slate-600 ring-slate-200'
+                          }`}
+                        >
+                          {section.active ? 'Active' : 'Inactive'}
                         </span>
-                        <ChevronRight className="h-4 w-4 shrink-0 text-slate-400" aria-hidden="true" />
                       </div>
+                      <ChevronRight
+                        className={`h-4 w-4 justify-self-end text-slate-500 transition ${isExpanded ? 'rotate-90' : ''}`}
+                        aria-hidden="true"
+                      />
                     </button>
-                  ))
-                )}
-              </div>
-            </section>
-          ))
-        )}
-      </div>
 
+                    {isExpanded ? (
+                      <div className="border-t border-slate-100 bg-slate-50/70 px-4 py-3">
+                        {section.courses.length === 0 ? (
+                          <div className="rounded-md border border-dashed border-slate-300 bg-white px-4 py-6 text-sm text-slate-500">
+                            ยังไม่มีหลักสูตรในหมวดหมู่นี้
+                          </div>
+                        ) : (
+                          <div className="overflow-hidden rounded-md border border-slate-200 bg-white">
+                            <div className="hidden grid-cols-[88px_minmax(0,1fr)_120px_140px_40px] items-center gap-4 border-b border-slate-200 bg-slate-50 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500 md:grid">
+                              <span>ลำดับย่อย</span>
+                              <span>หลักสูตร</span>
+                              <span>ผู้เรียน</span>
+                              <span>อบรมล่าสุด</span>
+                              <span></span>
+                            </div>
+                            <div className="divide-y divide-slate-100">
+                              {section.courses.map((course, courseIndex) => (
+                                <button
+                                  key={`${section.category}-${course.course}`}
+                                  type="button"
+                                  onClick={() =>
+                                    void openCourseDrawer({
+                                      category: section.category,
+                                      course: course.course,
+                                      attendeeCount: course.attendeeCount,
+                                      latestDate: course.latestDate,
+                                    })
+                                  }
+                                  className="grid w-full grid-cols-[64px_minmax(0,1fr)_32px] items-center gap-3 px-4 py-3 text-left transition hover:bg-brand-50/40 md:grid-cols-[88px_minmax(0,1fr)_120px_140px_40px] md:gap-4"
+                                >
+                                  <span className="text-xs font-semibold text-slate-500">
+                                    {`${sectionIndex + 1}.${courseIndex + 1}`}
+                                  </span>
+                                  <div className="min-w-0">
+                                    <p className="truncate text-sm font-semibold text-slate-900">{course.course}</p>
+                                    <p className="mt-1 text-xs text-slate-500 md:hidden">
+                                      {course.attendeeCount.toLocaleString()} คน · ล่าสุด {formatThaiDate(course.latestDate)}
+                                    </p>
+                                  </div>
+                                  <span className="hidden text-sm font-medium text-slate-700 md:block">
+                                    {course.attendeeCount.toLocaleString()} คน
+                                  </span>
+                                  <span className="hidden text-sm text-slate-600 md:block">{formatThaiDate(course.latestDate)}</span>
+                                  <ChevronRight className="h-4 w-4 justify-self-end text-slate-400" aria-hidden="true" />
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </section>
       {selectedCourse && (
         <div className="fixed inset-0 z-40">
           <button
@@ -413,3 +430,4 @@ export function CourseListPage() {
     </div>
   );
 }
+

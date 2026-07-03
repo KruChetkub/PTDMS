@@ -1,17 +1,11 @@
 import { z } from 'zod';
+import { trainingTypeOptions, type TrainingTypeValue } from '../../constants/training';
 import { getMonthFromISODate } from '../../utils/thaiDate';
 
 const optionalText = z.string().trim().optional().or(z.literal(''));
 
-export const trainingTypeOptions = [
-  'หลักสูตรพื้นฐานสำหรับบุคลากร',
-  'หลักสูตรด้านภาวะผู้นำ กรมควบคุมโรค',
-  'หลักสูตรด้านนโยบายและยุทธศาสตร์',
-  'หลักสูตรด้านดิจิทัล',
-  'หลักสูตรตามสมรรถนะที่เหมาะสมสำหรับการปฏิบัติงาน (อื่นๆ)',
-] as const;
+export { trainingTypeOptions, type TrainingTypeValue };
 
-export type TrainingTypeValue = (typeof trainingTypeOptions)[number];
 
 export const trainingFormSchema = z.object({
   trainingType: z.enum(trainingTypeOptions, {

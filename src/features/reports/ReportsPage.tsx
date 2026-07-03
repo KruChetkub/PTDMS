@@ -4,12 +4,13 @@ import {
   Search, 
   Calendar, 
   Filter,
-  Users,
-  ChevronRight
+  ExternalLink
 } from 'lucide-react';
 import { PageHeader } from '../../components/ui/PageHeader';
 import { listTrainingRecords, type TrainingRecordRow } from '../../services/training.service';
 import { formatThaiDate, getCurrentThaiFiscalYear } from '../../utils/thaiDate';
+
+const REPORT_PAGE_SIZE = 5;
 
 export function ReportsPage() {
   const [records, setRecords] = useState<TrainingRecordRow[]>([]);
@@ -19,6 +20,7 @@ export function ReportsPage() {
   // Filters
   const [search, setSearch] = useState('');
   const [year, setYear] = useState<number>(getCurrentThaiFiscalYear());
+  const [reportPage, setReportPage] = useState(1);
   
   const years = Array.from({ length: 5 }, (_, i) => getCurrentThaiFiscalYear() - i);
 
@@ -37,42 +39,79 @@ export function ReportsPage() {
     void loadData();
   }, [year]);
 
-  const filteredRecords = records.filter(r => 
-    r.course.toLowerCase().includes(search.toLowerCase()) ||
-    r.personnel_name.toLowerCase().includes(search.toLowerCase()) ||
-    r.department.toLowerCase().includes(search.toLowerCase())
-  );
+  const matchesSearch = (record: TrainingRecordRow) => {
+    const query = search.trim().toLowerCase();
+    if (!query) return true;
 
-  const handleExportCSV = () => {
-    if (filteredRecords.length === 0) return;
+    return (
+      record.course.toLowerCase().includes(query) ||
+      record.personnel_name.toLowerCase().includes(query) ||
+      record.position.toLowerCase().includes(query) ||
+      record.department.toLowerCase().includes(query) ||
+      record.work_group.toLowerCase().includes(query) ||
+      record.category.toLowerCase().includes(query)
+    );
+  };
 
-    const headers = ['ลำดับ', 'ชื่อ-สกุล', 'หน่วยงาน', 'หลักสูตร', 'ประเภท', 'วันที่', 'ปีงบประมาณ', 'ผู้จัด'];
-    const csvContent = [
-      headers.join(','),
-      ...filteredRecords.map((r, i) => [
-        i + 1,
-        `"${r.personnel_name}"`,
-        `"${r.department}"`,
-        `"${r.course}"`,
-        `"${r.category}"`,
-        formatThaiDate(r.date),
-        r.year,
-        `"${r.organizer}"`
-      ].join(','))
-    ].join('\n');
+  const filteredRecords = records.filter(matchesSearch);
+  const totalReportPages = Math.max(1, Math.ceil(filteredRecords.length / REPORT_PAGE_SIZE));
+  const visibleReportPage = Math.min(reportPage, totalReportPages);
+  const reportStartIndex = (visibleReportPage - 1) * REPORT_PAGE_SIZE;
+  const paginatedRecords = filteredRecords.slice(reportStartIndex, reportStartIndex + REPORT_PAGE_SIZE);
 
-    const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = `training_report_${year}.csv`;
-    link.click();
+  useEffect(() => {
+    setReportPage(1);
+  }, [search, year]);
+
+  useEffect(() => {
+    setReportPage((currentPage) => Math.min(currentPage, totalReportPages));
+  }, [totalReportPages]);
+
+  const buildExcelRows = (targetRecords: TrainingRecordRow[]) => targetRecords.map((record, index) => ({
+    'ลำดับที่': index + 1,
+    'ชื่อ-นามสกุล': record.personnel_name,
+    'ตำแหน่ง': record.position,
+    'กลุ่มงาน': record.work_group,
+    'ประเภทหลักสูตร': record.category,
+    'หลักสูตร': record.course,
+    'วันที่': formatThaiDate(record.date),
+    'ปีงบประมาณ': record.year,
+    'ใบประกาศ': record.certificate_name || '',
+    'ลิงก์ใบประกาศ': record.certificate_link || '',
+  }));
+
+  const exportExcel = async (scope: 'all' | 'year') => {
+    const targetRecords = scope === 'year'
+      ? filteredRecords
+      : (await listTrainingRecords()).filter(matchesSearch);
+
+    if (targetRecords.length === 0) return;
+
+    const XLSX = await import('xlsx');
+    const worksheet = XLSX.utils.json_to_sheet(buildExcelRows(targetRecords));
+    worksheet['!cols'] = [
+      { wch: 10 },
+      { wch: 30 },
+      { wch: 28 },
+      { wch: 30 },
+      { wch: 24 },
+      { wch: 46 },
+      { wch: 16 },
+      { wch: 14 },
+      { wch: 28 },
+      { wch: 48 },
+    ];
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Training Report');
+    const fileName = scope === 'year' ? `training_report_${year}.xlsx` : 'training_report_all.xlsx';
+    XLSX.writeFile(workbook, fileName);
   };
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Training Reports"
-        description="สร้างรายงานสรุปการอบรมรายบุคคลและรายหน่วยงาน พร้อมส่งออกข้อมูลเป็น CSV"
+        description="สร้างรายงานสรุปการอบรมรายบุคคลและรายหน่วยงาน พร้อมส่งออกข้อมูลเป็น Excel"
       />
 
       {/* Filters Section */}
@@ -99,11 +138,17 @@ export function ReportsPage() {
             </select>
           </div>
           <button 
-            onClick={handleExportCSV}
+            onClick={() => void exportExcel('all')}
+            className="inline-flex items-center gap-2 rounded-md border border-brand-200 bg-white px-4 py-2 text-sm font-semibold text-brand-700 hover:bg-brand-50"
+          >
+            <FileDown className="h-4 w-4" /> Export Excel ทั้งหมด
+          </button>
+          <button 
+            onClick={() => void exportExcel('year')}
             disabled={filteredRecords.length === 0}
             className="inline-flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <FileDown className="h-4 w-4" /> Export CSV
+            <FileDown className="h-4 w-4" /> Export Excel ตามปีงบประมาณ
           </button>
         </div>
       </div>
@@ -124,46 +169,55 @@ export function ReportsPage() {
 
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
-            <thead>
+            <thead className="bg-slate-50">
               <tr className="border-b border-slate-100 text-xs font-bold uppercase tracking-wider text-slate-500">
-                <th className="px-6 py-4">ชื่อ-สกุล / หน่วยงาน</th>
-                <th className="px-6 py-4">หลักสูตร / ประเภท</th>
-                <th className="px-6 py-4">วันที่ / ปีงบประมาณ</th>
-                <th className="px-6 py-4">ผู้จัด</th>
+                <th className="whitespace-nowrap px-4 py-3 text-left">ลำดับที่</th>
+                <th className="whitespace-nowrap px-4 py-3 text-left">ชื่อ-นามสกุล</th>
+                <th className="whitespace-nowrap px-4 py-3 text-left">ตำแหน่ง</th>
+                <th className="whitespace-nowrap px-4 py-3 text-left">กลุ่มงาน</th>
+                <th className="whitespace-nowrap px-4 py-3 text-left">ประเภทหลักสูตร</th>
+                <th className="min-w-72 px-4 py-3 text-left">หลักสูตร</th>
+                <th className="whitespace-nowrap px-4 py-3 text-left">วันที่</th>
+                <th className="whitespace-nowrap px-4 py-3 text-left">ปีงบประมาณ</th>
+                <th className="whitespace-nowrap px-4 py-3 text-left">ใบประกาศ</th>
+                <th className="min-w-72 px-4 py-3 text-left">ลิงก์ใบประกาศ</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {loading ? (
                 Array.from({ length: 5 }).map((_, i) => (
                   <tr key={i} className="animate-pulse">
-                    <td colSpan={4} className="px-6 py-4"><div className="h-10 bg-slate-100 rounded"></div></td>
+                    <td colSpan={10} className="px-4 py-4"><div className="h-10 bg-slate-100 rounded"></div></td>
                   </tr>
                 ))
               ) : filteredRecords.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="px-6 py-10 text-center text-slate-500">ไม่พบข้อมูลการอบรมตามเงื่อนไขที่ระบุ</td>
+                  <td colSpan={10} className="px-4 py-10 text-center text-slate-500">ไม่พบข้อมูลการอบรมตามเงื่อนไขที่ระบุ</td>
                 </tr>
               ) : (
-                filteredRecords.map((record) => (
+                paginatedRecords.map((record, index) => (
                   <tr key={record.id} className="hover:bg-slate-50/50">
-                    <td className="px-6 py-4">
-                      <div className="font-medium text-slate-900">{record.personnel_name}</div>
-                      <div className="text-xs text-slate-500 flex items-center gap-1 mt-0.5">
-                        <Users className="h-3 w-3" /> {record.department}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="font-medium text-slate-900">{record.course}</div>
-                      <div className="inline-flex mt-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-600 uppercase tracking-tighter">
-                        {record.category}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="text-slate-900">{formatThaiDate(record.date)}</div>
-                      <div className="text-xs text-slate-500">ปี {record.year}</div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className="text-slate-600">{record.organizer}</span>
+                    <td className="whitespace-nowrap px-4 py-3 text-slate-600">{reportStartIndex + index + 1}</td>
+                    <td className="whitespace-nowrap px-4 py-3 font-medium text-slate-900">{record.personnel_name}</td>
+                    <td className="whitespace-nowrap px-4 py-3 text-slate-600">{record.position}</td>
+                    <td className="whitespace-nowrap px-4 py-3 text-slate-600">{record.work_group}</td>
+                    <td className="whitespace-nowrap px-4 py-3 text-slate-600">{record.category}</td>
+                    <td className="min-w-72 px-4 py-3 font-medium text-slate-900">{record.course}</td>
+                    <td className="whitespace-nowrap px-4 py-3 text-slate-600">{formatThaiDate(record.date)}</td>
+                    <td className="whitespace-nowrap px-4 py-3 text-slate-600">{record.year}</td>
+                    <td className="whitespace-nowrap px-4 py-3 text-slate-600">{record.certificate_name || ''}</td>
+                    <td className="min-w-72 px-4 py-3 text-slate-600">
+                      {record.certificate_link ? (
+                        <a
+                          href={record.certificate_link}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1 text-brand-600 hover:underline"
+                        >
+                          {record.certificate_link}
+                          <ExternalLink className="h-3 w-3 shrink-0" aria-hidden="true" />
+                        </a>
+                      ) : null}
                     </td>
                   </tr>
                 ))
@@ -171,6 +225,32 @@ export function ReportsPage() {
             </tbody>
           </table>
         </div>
+
+        {filteredRecords.length > REPORT_PAGE_SIZE && (
+          <div className="flex flex-col gap-3 border-t border-slate-100 px-4 py-3 text-xs text-slate-600 sm:flex-row sm:items-center sm:justify-between">
+            <span>
+              หน้า {visibleReportPage.toLocaleString('th-TH')} / {totalReportPages.toLocaleString('th-TH')} · แสดง {paginatedRecords.length.toLocaleString('th-TH')} จาก {filteredRecords.length.toLocaleString('th-TH')} รายการ
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setReportPage((currentPage) => Math.max(1, currentPage - 1))}
+                disabled={visibleReportPage <= 1}
+                className="rounded-md border border-slate-200 px-3 py-1.5 font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                ก่อนหน้า
+              </button>
+              <button
+                type="button"
+                onClick={() => setReportPage((currentPage) => Math.min(totalReportPages, currentPage + 1))}
+                disabled={visibleReportPage >= totalReportPages}
+                className="rounded-md border border-slate-200 px-3 py-1.5 font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                ถัดไป
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

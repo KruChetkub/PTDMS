@@ -107,7 +107,7 @@ export function SelfServicePage() {
         ) : null}
 
         <div className="rounded-md border border-slate-200 bg-white p-5 shadow-sm">
-          <TrainingForm key={resetKey} onSubmit={onSubmit} isLoading={isSubmitting || !canSubmitForTarget} />
+          <TrainingForm key={resetKey} onSubmit={onSubmit} isLoading={isSubmitting || !canSubmitForTarget} showDevelopmentAnalysis={false} />
           
           <div className="mt-6 border-t border-slate-200 pt-5">
             <p className="text-sm text-slate-500">

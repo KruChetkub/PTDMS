@@ -1,5 +1,6 @@
 import { supabase } from '../lib/supabase';
 import { runSupabaseQuery } from '../lib/supabase-query';
+import { trainingTypeOptions } from '../constants/training';
 import type { CourseCategory, Profile, TrainingRecord } from '../types/database.types';
 
 export type CourseDirectoryAttendee = {
@@ -7,6 +8,7 @@ export type CourseDirectoryAttendee = {
   userId: string;
   fullName: string;
   department: string;
+  workGroup: string;
   date: string;
   course: string;
   category: string;
@@ -36,7 +38,7 @@ export type CourseDirectoryData = {
 };
 
 type CourseRecord = Pick<TrainingRecord, 'id' | 'user_id' | 'course' | 'category' | 'date' | 'organizer' | 'created_at'>;
-type CourseProfile = Pick<Profile, 'user_id' | 'full_name' | 'department'>;
+type CourseProfile = Pick<Profile, 'user_id' | 'full_name' | 'department' | 'work_group'>;
 type CourseCategoryRow = Pick<CourseCategory, 'category' | 'active'>;
 
 type CourseAggregation = {
@@ -72,8 +74,16 @@ export async function listCourseDirectory(): Promise<CourseDirectoryData> {
   const allCategories = new Map<string, boolean>();
   const uniqueUsers = new Set<string>();
 
+  trainingTypeOptions.forEach((category) => {
+    allCategories.set(category, true);
+  });
+
   categories.forEach((category) => {
-    allCategories.set(category.category, (allCategories.get(category.category) || false) || category.active);
+    const categoryName = category.category.trim();
+
+    if (categoryName) {
+      allCategories.set(categoryName, (allCategories.get(categoryName) || false) || category.active);
+    }
   });
 
   for (const record of records) {
@@ -116,7 +126,18 @@ export async function listCourseDirectory(): Promise<CourseDirectoryData> {
       active,
       courses: groupedCourses.get(category) || new Map<string, CourseAggregation>(),
     }))
-    .sort((left, right) => left.category.localeCompare(right.category, 'th'));
+    .sort((left, right) => {
+      const leftIndex = trainingTypeOptions.indexOf(left.category as (typeof trainingTypeOptions)[number]);
+      const rightIndex = trainingTypeOptions.indexOf(right.category as (typeof trainingTypeOptions)[number]);
+
+      if (leftIndex !== -1 || rightIndex !== -1) {
+        if (leftIndex === -1) return 1;
+        if (rightIndex === -1) return -1;
+        return leftIndex - rightIndex;
+      }
+
+      return left.category.localeCompare(right.category, 'th');
+    });
 
   const sections: CourseDirectorySection[] = orderedCategories.map((entry) => {
     const courses = Array.from(entry.courses.values())
@@ -169,7 +190,7 @@ export async function listCourseAttendees(courseName: string): Promise<CourseDir
       'โหลดรายชื่อผู้เรียน',
     ),
     runSupabaseQuery(
-      supabase.from('profiles').select('user_id, full_name, department'),
+      supabase.from('profiles').select('user_id, full_name, department, work_group'),
       'โหลดข้อมูลโปรไฟล์ผู้เรียน',
     ),
   ]);
@@ -185,6 +206,7 @@ export async function listCourseAttendees(courseName: string): Promise<CourseDir
       userId: record.user_id,
       fullName: profile?.full_name || '-',
       department: profile?.department || '-',
+      workGroup: profile?.work_group || '-',
       date: record.date,
       course: record.course,
       category: record.category,

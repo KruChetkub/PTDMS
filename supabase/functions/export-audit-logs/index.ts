@@ -68,6 +68,17 @@ function summarizeByField(logs: AuditLogRow[], field: 'module' | 'action') {
   }, {});
 }
 
+function getRequestIp(req: Request) {
+  const forwardedFor = req.headers.get('x-forwarded-for');
+  const ip = forwardedFor?.split(',')[0]?.trim()
+    || req.headers.get('cf-connecting-ip')
+    || req.headers.get('x-real-ip')
+    || req.headers.get('x-client-ip')
+    || null;
+
+  return ip || null;
+}
+
 function getBearerToken(req: Request) {
   const authorization = req.headers.get('authorization') || '';
   const [scheme, token] = authorization.split(' ');
@@ -121,7 +132,7 @@ async function authorizeExportRequest(req: Request, adminClient: ReturnType<type
   };
 }
 
-async function recordManualExportRequest(adminClient: ReturnType<typeof createClient>, caller: ExportCaller, batchId: string) {
+async function recordManualExportRequest(adminClient: ReturnType<typeof createClient>, caller: ExportCaller, batchId: string, req: Request) {
   if (caller.type !== 'manual' || !caller.userId) {
     return;
   }
@@ -144,6 +155,8 @@ async function recordManualExportRequest(adminClient: ReturnType<typeof createCl
       trigger: 'manual',
       batch_id: batchId,
     },
+    ip_address: getRequestIp(req),
+    user_agent: req.headers.get('user-agent'),
     export_status: 'pending',
   }).then(() => null, () => null);
 }
@@ -189,7 +202,7 @@ serve(async (req) => {
   const startedAt = new Date().toISOString();
   const bangkokDate = getBangkokDateKey();
 
-  await recordManualExportRequest(adminClient, caller, batchId);
+  await recordManualExportRequest(adminClient, caller, batchId, req);
 
   const { data: logs, error: logsError } = await adminClient
     .from('audit_logs')

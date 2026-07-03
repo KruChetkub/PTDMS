@@ -111,8 +111,8 @@ export function RecommendationsPage() {
     <div className="space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <PageHeader
-          title="AI Recommendations"
-          description="คำแนะนำเชิงวิเคราะห์สำหรับ skill gap หลักสูตร และแผนพัฒนารายกลุ่มงาน"
+          title="หลักสูตรสำหรับบุคคลากรกองยุทธศาสตร์และแผนงาน"
+          description="หลักสูตรและแผนพัฒนารายกลุ่มงาน"
         />
         <button
           type="button"

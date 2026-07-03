@@ -72,50 +72,31 @@ function getUserAgent() {
 
 export async function recordAuditLog(input: AuditLogInput) {
   try {
-    const { data: userData, error: userError } = await supabase.auth.getUser();
+    const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+    const accessToken = sessionData.session?.access_token;
 
-    if (userError || !userData.user) {
+    if (sessionError || !accessToken) {
       return { logged: false, reason: 'no_authenticated_user' };
     }
 
-    const user = userData.user;
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('user_id, full_name, role')
-      .eq('user_id', user.id)
-      .maybeSingle();
-
-    const targetType = input.targetType || input.module;
-    const targetId = input.targetId ?? null;
-    const status = input.status || 'success';
-
-    const { error } = await supabase.from('audit_logs').insert({
-      actor_id: user.id,
-      actor_user_id: user.id,
-      actor_email: user.email ?? null,
-      actor_name: profile?.full_name ?? null,
-      actor_role: profile?.role ?? null,
-      module: input.module,
-      action: input.action,
-      route: input.route || getRoute(),
-      resource_type: targetType,
-      resource_id: targetId,
-      target_type: targetType,
-      target_id: targetId,
-      status,
-      error_message: input.errorMessage ?? null,
-      metadata: sanitizeAuditData(input.metadata),
-      before_data: sanitizeAuditData(input.beforeData),
-      after_data: sanitizeAuditData(input.afterData),
-      request_id: input.requestId ?? null,
-      session_id: input.sessionId ?? null,
-      user_agent: getUserAgent(),
-      export_status: 'pending',
+    const { error } = await supabase.functions.invoke('record-audit-log', {
+      body: {
+        ...input,
+        route: input.route || getRoute(),
+        metadata: sanitizeAuditData(input.metadata),
+        beforeData: sanitizeAuditData(input.beforeData),
+        afterData: sanitizeAuditData(input.afterData),
+        userAgent: getUserAgent(),
+      },
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
     });
 
     if (error) {
-      console.warn('Audit log insert failed:', error.message);
-      return { logged: false, reason: error.message };
+      const reason = await getFunctionErrorReason(error);
+      console.warn('Audit log insert failed:', reason || error.message);
+      return { logged: false, reason: reason || error.message };
     }
 
     return { logged: true };

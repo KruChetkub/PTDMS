@@ -7,3 +7,6 @@ verify_jwt = false
 [functions.export-audit-logs]
 verify_jwt = false
 
+
+[functions.record-audit-log]
+verify_jwt = false

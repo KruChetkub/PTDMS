@@ -1,7 +1,7 @@
 import { supabase } from '../lib/supabase';
 import { runSupabaseQuery } from '../lib/supabase-query';
 import type { Profile, TrainingRecord, Certificate, DevelopmentAnalysis } from '../types/database.types';
-import { getMonthFromDate, type TrainingFormValues } from '../features/self-service/training-form.schema';
+import { getMonthFromDate, normalizeTrainingType, type TrainingFormValues } from '../features/self-service/training-form.schema';
 
 export type TrainingRecordFilters = {
   search?: string;
@@ -13,7 +13,12 @@ export type TrainingRecordFilters = {
 
 export type TrainingRecordRow = TrainingRecord & {
   personnel_name: string;
+  employee_code: string | null;
+  position: string;
   department: string;
+  work_group: string;
+  certificate_name: string | null;
+  certificate_link: string | null;
 };
 
 export type CreateTrainingRecordInput = TrainingFormValues & {
@@ -24,6 +29,57 @@ export type CreateTrainingRecordInput = TrainingFormValues & {
 export type UpdateTrainingRecordInput = TrainingFormValues & {
 };
 
+export type TrainingImportInputRow = {
+  recordId?: string;
+  employeeCode?: string;
+  personnelName: string;
+  trainingType: string;
+  courseName: string;
+  organizer: string;
+  date: string;
+  year: number;
+  certificateName?: string;
+  certificateLink?: string;
+};
+
+export type TrainingImportResultItem = {
+  rowNumber: number;
+  status: 'created' | 'updated' | 'skipped' | 'error';
+  personnelName: string;
+  courseName: string;
+  message: string;
+};
+
+export type TrainingImportResult = {
+  created: number;
+  updated: number;
+  skipped: number;
+  failed: number;
+  items: TrainingImportResultItem[];
+};
+
+function normalizeLookup(value: string | null | undefined) {
+  return (value || '').trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+function buildTrainingDedupeKey(userId: string, course: string, date: string, organizer: string) {
+  return [userId, normalizeLookup(course), date, normalizeLookup(organizer)].join('|');
+}
+
+function toTrainingFormValues(row: TrainingImportInputRow): TrainingFormValues {
+  return {
+    trainingType: normalizeTrainingType(row.trainingType),
+    courseName: row.courseName.trim(),
+    organizer: row.organizer.trim(),
+    date: row.date,
+    year: row.year,
+    certificateName: row.certificateName?.trim() || '',
+    certificateLink: row.certificateLink?.trim() || '',
+    developmentArea: '',
+    skillGroup: '',
+    targetDirection: '',
+  };
+}
 function emptyToNull(value: string | undefined) {
   const trimmed = value?.trim();
   return trimmed ? trimmed : null;
@@ -71,22 +127,46 @@ export async function listTrainingRecords(filters: TrainingRecordFilters = {}): 
   const { data: profilesData } = await runSupabaseQuery(
     supabase
       .from('profiles')
-      .select('user_id, full_name, department')
+      .select('user_id, employee_code, full_name, position, department, work_group')
       .in('user_id', userIds),
     'โหลดข้อมูลบุคลากรของรายการอบรม',
   );
 
-  const profiles = (profilesData || []) as Pick<Profile, 'user_id' | 'full_name' | 'department'>[];
+  const profiles = (profilesData || []) as Pick<Profile, 'user_id' | 'employee_code' | 'full_name' | 'position' | 'department' | 'work_group'>[];
   const profileByUser = new Map(profiles.map((profile) => [profile.user_id, profile]));
+  const recordIds = records.map((record) => record.id);
+  const { data: certificatesData } = await runSupabaseQuery(
+    supabase
+      .from('certificates')
+      .select('training_id, certificate_name, certificate_link, file_path, created_at')
+      .in('training_id', recordIds)
+      .order('created_at', { ascending: false }),
+    'โหลดข้อมูลใบประกาศของรายการอบรม',
+  );
+  const certificateByTrainingId = new Map<string, Pick<Certificate, 'certificate_name' | 'certificate_link' | 'file_path'>>();
+
+  ((certificatesData || []) as Pick<Certificate, 'training_id' | 'certificate_name' | 'certificate_link' | 'file_path'>[])
+    .filter(hasCertificateContent)
+    .forEach((certificate) => {
+      if (!certificateByTrainingId.has(certificate.training_id)) {
+        certificateByTrainingId.set(certificate.training_id, certificate);
+      }
+    });
 
   return records
     .map((record) => {
       const profile = profileByUser.get(record.user_id);
+      const certificate = certificateByTrainingId.get(record.id);
 
       return {
         ...record,
         personnel_name: profile?.full_name || '-',
+        employee_code: profile?.employee_code || null,
+        position: profile?.position || '-',
         department: profile?.department || '-',
+        work_group: profile?.work_group || '-',
+        certificate_name: certificate?.certificate_name || null,
+        certificate_link: certificate?.certificate_link || null,
       };
     })
     .filter((record) => {
@@ -354,6 +434,124 @@ export async function updateTrainingRecord(id: string, input: UpdateTrainingReco
   return record;
 }
 
+export async function importTrainingRecordsFromRows(rows: TrainingImportInputRow[], actorId: string): Promise<TrainingImportResult> {
+  const result: TrainingImportResult = {
+    created: 0,
+    updated: 0,
+    skipped: 0,
+    failed: 0,
+    items: [],
+  };
+
+  if (rows.length === 0) {
+    return result;
+  }
+
+  const [{ data: profilesData }, { data: existingRecordsData }] = await Promise.all([
+    runSupabaseQuery(
+      supabase
+        .from('profiles')
+        .select('user_id, employee_code, full_name')
+        .neq('role', 'super_admin'),
+      'โหลดข้อมูลบุคลากรสำหรับนำเข้าอบรม',
+    ),
+    runSupabaseQuery(
+      supabase
+        .from('training_records')
+        .select('id, user_id, course, category, subcategory, organizer, date, month, year, created_by, created_at, updated_at'),
+      'โหลดข้อมูลอบรมเดิมสำหรับนำเข้า',
+    ),
+  ]);
+
+  const profiles = (profilesData || []) as Pick<Profile, 'user_id' | 'employee_code' | 'full_name'>[];
+  const profileById = new Map(profiles.map((profile) => [profile.user_id, profile]));
+  const profileByEmployeeCode = new Map(
+    profiles
+      .filter((profile) => profile.employee_code)
+      .map((profile) => [normalizeLookup(profile.employee_code), profile]),
+  );
+  const profileByName = new Map(profiles.map((profile) => [normalizeLookup(profile.full_name), profile]));
+
+  const existingRecords = (existingRecordsData || []) as TrainingRecord[];
+  const recordById = new Map(existingRecords.map((record) => [record.id, record]));
+  const recordByDedupeKey = new Map(
+    existingRecords.map((record) => [buildTrainingDedupeKey(record.user_id, record.course, record.date, record.organizer), record]),
+  );
+
+  for (let index = 0; index < rows.length; index += 1) {
+    const rowNumber = index + 2;
+    const row = rows[index];
+    const label = row.courseName || '-';
+
+    try {
+      if (!row.courseName.trim() || !row.organizer.trim() || !row.date || !row.year) {
+        throw new Error('กรุณากรอกชื่อหลักสูตร ผู้จัด วันที่อบรม และปีงบประมาณให้ครบ');
+      }
+
+      let existingRecord = row.recordId ? recordById.get(row.recordId.trim()) : undefined;
+      let profile = existingRecord ? profileById.get(existingRecord.user_id) : undefined;
+
+      if (!profile && row.employeeCode?.trim()) {
+        profile = profileByEmployeeCode.get(normalizeLookup(row.employeeCode));
+      }
+
+      if (!profile && row.personnelName.trim()) {
+        profile = profileByName.get(normalizeLookup(row.personnelName));
+      }
+
+      if (!profile) {
+        throw new Error('ไม่พบบุคลากรตามรหัสหรือชื่อที่ระบุ');
+      }
+
+      const values = toTrainingFormValues(row);
+      const dedupeKey = buildTrainingDedupeKey(profile.user_id, values.courseName, values.date, values.organizer);
+      existingRecord = existingRecord || recordByDedupeKey.get(dedupeKey);
+
+      if (existingRecord) {
+        const updatedRecord = await updateTrainingRecord(existingRecord.id, values);
+        recordById.set(updatedRecord.id, updatedRecord);
+        recordByDedupeKey.set(buildTrainingDedupeKey(updatedRecord.user_id, updatedRecord.course, updatedRecord.date, updatedRecord.organizer), updatedRecord);
+        result.updated += 1;
+        result.items.push({
+          rowNumber,
+          status: 'updated',
+          personnelName: profile.full_name,
+          courseName: values.courseName,
+          message: 'อัปเดตข้อมูลเดิมแล้ว',
+        });
+        continue;
+      }
+
+      const createdRecord = await createTrainingRecord({
+        ...values,
+        userId: profile.user_id,
+        actorId,
+      });
+      recordById.set(createdRecord.id, createdRecord);
+      recordByDedupeKey.set(buildTrainingDedupeKey(createdRecord.user_id, createdRecord.course, createdRecord.date, createdRecord.organizer), createdRecord);
+      result.created += 1;
+      result.items.push({
+        rowNumber,
+        status: 'created',
+        personnelName: profile.full_name,
+        courseName: values.courseName,
+        message: 'เพิ่มข้อมูลใหม่แล้ว',
+      });
+    } catch (err) {
+      result.failed += 1;
+      result.items.push({
+        rowNumber,
+        status: 'error',
+        personnelName: row.personnelName || '-',
+        courseName: label,
+        message: err instanceof Error ? err.message : 'ไม่สามารถนำเข้ารายการนี้ได้',
+      });
+    }
+  }
+
+  return result;
+}
 export async function deleteTrainingRecord(id: string): Promise<void> {
   await runSupabaseQuery(supabase.from('training_records').delete().eq('id', id), 'ลบข้อมูลอบรม');
 }
+

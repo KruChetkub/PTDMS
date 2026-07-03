@@ -11,11 +11,13 @@ import {
   Target,
   Download
 } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { PageHeader } from '../../components/ui/PageHeader';
 import { getAnalyticsData, type AnalyticsData } from '../../services/analytics.service';
 import { getDashboardSummary, type DashboardSummary } from '../../services/dashboard.service';
 
 const COLORS = ['#2563eb', '#7c3aed', '#db2777', '#ea580c', '#ca8a04', '#16a34a', '#0891b2'];
+const WORK_GROUP_DETAIL_PAGE_SIZE = 5;
 const RADIAN = Math.PI / 180;
 type ImageFormat = 'png' | 'jpg' | 'svg';
 type ExportKey = 'training-categories' | 'work-groups' | 'monthly-development';
@@ -219,6 +221,8 @@ export function AnalyticsPage() {
   const [selectedWorkGroup, setSelectedWorkGroup] = useState('all');
   const [selectedYear, setSelectedYear] = useState('all');
   const [selectedArea, setSelectedArea] = useState<string | null>(null);
+  const [selectedWorkGroupChart, setSelectedWorkGroupChart] = useState<string | null>(null);
+  const [workGroupDetailPage, setWorkGroupDetailPage] = useState(1);
   const [exportingKey, setExportingKey] = useState<string | null>(null);
   const categoryChartRef = useRef<HTMLDivElement | null>(null);
   const workGroupChartRef = useRef<HTMLDivElement | null>(null);
@@ -315,10 +319,10 @@ export function AnalyticsPage() {
       const workGroups = data?.workGroups || [];
       const total = workGroups.reduce((sum, item) => sum + item.count, 0);
 
-      return workGroups.map((item) => ({
+      return workGroups.map((item, index) => ({
         label: item.workGroup,
         count: item.count,
-        color: '#3b82f6',
+        color: COLORS[index % COLORS.length],
         percent: total > 0 ? Math.round((item.count / total) * 100) : 0,
       }));
     },
@@ -328,11 +332,29 @@ export function AnalyticsPage() {
     const workGroups = data?.workGroups || [];
     const total = workGroups.reduce((sum, item) => sum + item.count, 0);
 
-    return workGroups.map((item) => ({
+    return workGroups.map((item, index) => ({
       ...item,
+      color: COLORS[index % COLORS.length],
       percent: total > 0 ? Math.round((item.count / total) * 100) : 0,
     }));
   }, [data?.workGroups]);
+
+  const selectedWorkGroupResolved = selectedWorkGroupChart && workGroupChartData.some((item) => item.workGroup === selectedWorkGroupChart)
+    ? selectedWorkGroupChart
+    : null;
+  const selectedWorkGroupDetails = useMemo(() => {
+    if (!selectedWorkGroupResolved) return [];
+    return (data?.workGroupTrainingDetails || []).filter((item) => item.workGroup === selectedWorkGroupResolved);
+  }, [data?.workGroupTrainingDetails, selectedWorkGroupResolved]);
+  const workGroupDetailTotalPages = Math.max(1, Math.ceil(selectedWorkGroupDetails.length / WORK_GROUP_DETAIL_PAGE_SIZE));
+  const paginatedWorkGroupDetails = selectedWorkGroupDetails.slice(
+    (workGroupDetailPage - 1) * WORK_GROUP_DETAIL_PAGE_SIZE,
+    workGroupDetailPage * WORK_GROUP_DETAIL_PAGE_SIZE,
+  );
+
+  useEffect(() => {
+    setWorkGroupDetailPage(1);
+  }, [selectedWorkGroupResolved]);
 
   const getExportDetails = (key: ExportKey) => {
     if (key === 'training-categories') {
@@ -573,16 +595,27 @@ export function AnalyticsPage() {
           <div className={`${isMobile ? 'h-[340px]' : 'h-[300px]'} w-full flex items-center justify-center`}>
             {workGroupChartData.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={workGroupChartData} layout="vertical" margin={{ right: 34 }}>
+                <BarChart
+                  data={workGroupChartData}
+                  layout="vertical"
+                  margin={{ right: 40 }}
+                  onClick={(state) => {
+                    const workGroup = state?.activeLabel;
+                    if (typeof workGroup === 'string') {
+                      setSelectedWorkGroupChart((prev) => (prev === workGroup ? null : workGroup));
+                      setWorkGroupDetailPage(1);
+                    }
+                  }}
+                >
                   <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#f1f5f9" />
                   <XAxis type="number" hide />
                   <YAxis 
                     dataKey="workGroup" 
                     type="category" 
-                    width={isMobile ? 92 : 150} 
+                    width={isMobile ? 128 : 230} 
                     axisLine={false} 
                     tickLine={false} 
-                    tick={{ fontSize: isMobile ? 10 : 11, fill: '#64748b' }} 
+                    tick={{ fontSize: isMobile ? 9 : 11, fill: '#64748b' }} 
                   />
                   <Tooltip
                     cursor={{ fill: '#f8fafc' }}
@@ -590,13 +623,109 @@ export function AnalyticsPage() {
                     formatter={(value) => [`${value} รายการ`, 'จำนวน']}
                     labelFormatter={(label) => `กลุ่มงาน: ${label}`}
                   />
-                  <Bar dataKey="count" fill="#3b82f6" radius={[0, 4, 4, 0]} barSize={20}>
+                  <Bar dataKey="count" radius={[0, 4, 4, 0]} barSize={20}>
+                    {workGroupChartData.map((entry) => {
+                      const isSelected = entry.workGroup === selectedWorkGroupResolved;
+                      return (
+                        <Cell
+                          key={`work-group-${entry.workGroup}`}
+                          fill={entry.color}
+                          stroke={isSelected ? '#0f172a' : 'none'}
+                          strokeWidth={isSelected ? 2 : 0}
+                          fillOpacity={isSelected || !selectedWorkGroupResolved ? 1 : 0.35}
+                        />
+                      );
+                    })}
                     <LabelList dataKey="percent" position="right" formatter={(value: number) => `${value}%`} fill="#0f172a" fontSize={11} />
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
             ) : (
               <div className="text-sm text-slate-400 italic">ไม่มีข้อมูลกลุ่มงานที่จะแสดง</div>
+            )}
+          </div>
+          <div className="mt-5 rounded-lg border border-slate-100 bg-slate-50 p-4">
+            <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm font-semibold text-slate-800">
+                  รายการอบรมของกลุ่มงาน: {selectedWorkGroupResolved || 'ยังไม่ได้เลือกกลุ่มงาน'}
+                </p>
+                <p className="text-xs text-slate-500">
+                  {selectedWorkGroupResolved ? `${selectedWorkGroupDetails.length.toLocaleString()} รายการ` : 'คลิกแท่งกราฟเพื่อดูรายการ'}
+                </p>
+              </div>
+              {selectedWorkGroupResolved ? (
+                <button
+                  type="button"
+                  onClick={() => setSelectedWorkGroupChart(null)}
+                  className="self-start rounded-md border border-slate-300 bg-white px-2 py-1 text-xs text-slate-600 hover:bg-slate-50 sm:self-auto"
+                >
+                  ล้างการเลือก
+                </button>
+              ) : null}
+            </div>
+
+            {selectedWorkGroupResolved ? (
+              selectedWorkGroupDetails.length > 0 ? (
+                <>
+                  <div className="overflow-x-auto rounded-md border border-slate-200 bg-white">
+                    <table className="min-w-full divide-y divide-slate-200 text-sm">
+                      <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                        <tr>
+                          <th className="px-3 py-2">ลำดับ</th>
+                          <th className="px-3 py-2">บุคลากร</th>
+                          <th className="px-3 py-2">หลักสูตร</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {paginatedWorkGroupDetails.map((item, index) => (
+                          <tr key={item.id}>
+                            <td className="px-3 py-2 font-medium text-slate-500">
+                              {((workGroupDetailPage - 1) * WORK_GROUP_DETAIL_PAGE_SIZE + index + 1).toLocaleString('th-TH')}
+                            </td>
+                            <td className="px-3 py-2">
+                              <Link
+                                to={`/personnel/${item.userId}`}
+                                className="font-medium text-brand-600 transition hover:text-brand-700 hover:underline"
+                              >
+                                {item.fullName}
+                              </Link>
+                            </td>
+                            <td className="px-3 py-2 text-slate-700">{item.course}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  {workGroupDetailTotalPages > 1 ? (
+                    <div className="mt-3 flex items-center justify-between gap-3 text-xs text-slate-600">
+                      <span>หน้า {workGroupDetailPage.toLocaleString('th-TH')} / {workGroupDetailTotalPages.toLocaleString('th-TH')}</span>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setWorkGroupDetailPage((page) => Math.max(1, page - 1))}
+                          disabled={workGroupDetailPage <= 1}
+                          className="rounded-md border border-slate-300 bg-white px-3 py-1 font-medium text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          ก่อนหน้า
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setWorkGroupDetailPage((page) => Math.min(workGroupDetailTotalPages, page + 1))}
+                          disabled={workGroupDetailPage >= workGroupDetailTotalPages}
+                          className="rounded-md border border-slate-300 bg-white px-3 py-1 font-medium text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          ถัดไป
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
+                </>
+              ) : (
+                <p className="text-sm text-slate-500">ไม่พบรายการอบรมของกลุ่มงานนี้</p>
+              )
+            ) : (
+              <p className="text-sm text-slate-500">คลิกแท่งกราฟเพื่อดูรายการอบรมของกลุ่มงานนั้น</p>
             )}
           </div>
         </div>
@@ -650,7 +779,7 @@ export function AnalyticsPage() {
         </div>
 
         {/* Development Areas - Bar Chart */}
-        <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm lg:col-span-2">
+        <div className="hidden rounded-xl border border-slate-200 bg-white p-6 shadow-sm lg:col-span-2">
           <h3 className="mb-6 flex items-center gap-2 font-bold text-slate-900">
             <Target className="h-5 w-5 text-brand-600" />
             วิเคราะห์จุดเน้นด้านการพัฒนา (Development Areas)
@@ -796,3 +925,4 @@ export function AnalyticsPage() {
     </div>
   );
 }
+

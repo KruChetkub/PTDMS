@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Activity, CalendarCheck, List, RefreshCw, Search, UserCheck, UserCircle, Users } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { PageHeader } from '../../components/ui/PageHeader';
 import { listPersonnel, type PersonnelSummary } from '../../services/personnel.service';
 import { roleLabels } from '../../types/roles';
@@ -13,9 +13,12 @@ function statusStyle(status: PersonnelSummary['status']) {
 }
 
 export function PersonnelListPage() {
+  const location = useLocation();
+  const personnelListState = location.state?.personnelList as { focusUserId?: string; search?: string } | undefined;
+  const restoredFocusRef = useRef(false);
   const [personnel, setPersonnel] = useState<PersonnelSummary[]>([]);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState(personnelListState?.search || '');
   const [error, setError] = useState<string | null>(null);
 
   const loadData = async () => {
@@ -34,6 +37,21 @@ export function PersonnelListPage() {
   useEffect(() => {
     void loadData();
   }, []);
+
+  useEffect(() => {
+    if (loading || restoredFocusRef.current || !personnelListState?.focusUserId) return;
+
+    const targetId = window.matchMedia('(min-width: 1024px)').matches
+      ? `personnel-row-${personnelListState.focusUserId}`
+      : `personnel-card-${personnelListState.focusUserId}`;
+    const target = document.getElementById(targetId);
+    if (!target) return;
+
+    restoredFocusRef.current = true;
+    window.requestAnimationFrame(() => {
+      target.scrollIntoView({ block: 'center' });
+    });
+  }, [loading, personnelListState?.focusUserId]);
 
   const filtered = personnel.filter((p) => {
     const s = search.toLowerCase();
@@ -156,7 +174,9 @@ export function PersonnelListPage() {
             filtered.map((person) => (
               <Link
                 key={person.user_id}
+                id={`personnel-card-${person.user_id}`}
                 to={`/personnel/${person.user_id}`}
+                state={{ personnelList: { focusUserId: person.user_id, search } }}
                 className="group block rounded-md border border-slate-200 bg-white p-4 transition hover:border-brand-300 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2"
               >
                 <div className="flex items-start justify-between gap-3">
@@ -245,13 +265,28 @@ export function PersonnelListPage() {
         ) : filtered.length === 0 ? (
           <div className="py-12 text-center text-slate-500">ไม่พบข้อมูลบุคลากรตามที่ค้นหา</div>
         ) : (
-          <div className="divide-y divide-slate-100">
-            {filtered.map((person) => (
+          <div>
+            <div className="grid grid-cols-[64px_minmax(260px,1.5fr)_minmax(180px,1fr)_minmax(150px,0.8fr)_minmax(110px,0.6fr)_minmax(110px,0.6fr)] items-center gap-4 border-b border-slate-200 bg-slate-50 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <span>ลำดับที่</span>
+              <span>บุคลากร</span>
+              <span>หน่วยงาน / กลุ่มงาน</span>
+              <span>ตำแหน่ง / สิทธิ์</span>
+              <span>อบรมทั้งหมด</span>
+              <span>สถานะ</span>
+            </div>
+            <div className="divide-y divide-slate-100">
+            {filtered.map((person, index) => (
               <Link
                 key={person.user_id}
+                id={`personnel-row-${person.user_id}`}
                 to={`/personnel/${person.user_id}`}
-                className="grid grid-cols-[minmax(260px,1.5fr)_minmax(180px,1fr)_minmax(150px,0.8fr)_minmax(110px,0.6fr)_minmax(110px,0.6fr)] items-center gap-4 px-4 py-4 transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-brand-500"
+                state={{ personnelList: { focusUserId: person.user_id, search } }}
+                className="grid grid-cols-[64px_minmax(260px,1.5fr)_minmax(180px,1fr)_minmax(150px,0.8fr)_minmax(110px,0.6fr)_minmax(110px,0.6fr)] items-center gap-4 px-4 py-4 transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-brand-500"
               >
+                <div className="text-sm font-semibold text-slate-500">
+                  {(index + 1).toLocaleString('th-TH')}
+                </div>
+
                 <div className="flex min-w-0 items-center gap-3">
                   {person.avatar_url ? (
                     <img src={person.avatar_url} alt="" className="h-10 w-10 rounded-full object-cover" />
@@ -289,9 +324,11 @@ export function PersonnelListPage() {
                 </div>
               </Link>
             ))}
+            </div>
           </div>
         )}
       </section>
     </div>
   );
 }
+

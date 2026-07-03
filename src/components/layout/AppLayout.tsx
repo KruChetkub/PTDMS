@@ -11,7 +11,6 @@ import {
   LogOut,
   Megaphone,
   Shield,
-  Sparkles,
   UserCog,
   UserCircle,
   Users,
@@ -43,12 +42,7 @@ const navItems: NavItem[] = [
     icon: BarChart3,
     roles: ['super_admin', 'admin', 'executive', 'hr'],
   },
-  {
-    to: '/recommendations',
-    label: 'Recommendations',
-    icon: Sparkles,
-    roles: ['super_admin', 'admin', 'executive', 'hr'],
-  },
+
   {
     to: '/courses',
     label: 'Course Directory',

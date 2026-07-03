@@ -10,6 +10,18 @@ export type WorkGroupAnalysis = {
   count: number;
 };
 
+export type WorkGroupTrainingDetail = {
+  id: string;
+  userId: string;
+  fullName: string;
+  workGroup: string;
+  course: string;
+  category: string;
+  organizer: string;
+  date: string;
+  year: number | null;
+};
+
 export type DevelopmentStats = {
   label: string;
   count: number;
@@ -19,6 +31,7 @@ export type DevelopmentStats = {
 export type AnalyticsData = {
   categories: CategoryAnalysis[];
   workGroups: WorkGroupAnalysis[];
+  workGroupTrainingDetails: WorkGroupTrainingDetail[];
   developmentAreas: DevelopmentStats[];
   skillGroups: DevelopmentStats[];
   developmentAreaDetails: DevelopmentAreaDetail[];
@@ -52,7 +65,7 @@ function normalizeAnalyticsLabel(value: string | null | undefined) {
 export async function getAnalyticsData(): Promise<AnalyticsData> {
   // ดึงข้อมูลแยกกันเพื่อความเสถียรและป้องกัน Error เรื่อง Ambiguous Join
   const [trainingResult, trainingYearResult, profileResult, analysisResult] = await Promise.all([
-    supabase.from('training_records').select('id, user_id, category'),
+    supabase.from('training_records').select('id, user_id, course, category, organizer, date, year'),
     supabase.from('training_records').select('id, year'),
     supabase.from('profiles').select('user_id, full_name, department, work_group, role'),
     supabase.from('development_analysis').select('training_id, user_id, development_area, skill_group'),
@@ -96,6 +109,23 @@ export async function getAnalyticsData(): Promise<AnalyticsData> {
     acc[group] = (acc[group] || 0) + 1;
     return acc;
   }, {});
+
+  const workGroupTrainingDetails = records
+    .map((record) => {
+      const profile = profileByUser.get(record.user_id);
+      return {
+        id: record.id,
+        userId: record.user_id,
+        fullName: profile?.fullName || record.user_id,
+        workGroup: workGroupsByUser.get(record.user_id) || 'ไม่ระบุ',
+        course: record.course || '-',
+        category: record.category || '-',
+        organizer: record.organizer || '-',
+        date: record.date || '',
+        year: typeof record.year === 'number' ? record.year : null,
+      };
+    })
+    .sort((a, b) => b.date.localeCompare(a.date) || a.fullName.localeCompare(b.fullName, 'th'));
 
   // Development Area Analysis
   const areaStats = analysis.reduce<Record<string, { count: number; users: Set<string> }>>((acc, a) => {
@@ -156,6 +186,7 @@ export async function getAnalyticsData(): Promise<AnalyticsData> {
   return {
     categories: Object.entries(categoryCounts).map(([category, count]) => ({ category, count })).sort((a, b) => b.count - a.count),
     workGroups: Object.entries(workGroupCounts).map(([workGroup, count]) => ({ workGroup, count })).sort((a, b) => b.count - a.count),
+    workGroupTrainingDetails,
     developmentAreas: Object.entries(areaStats)
       .map(([label, value]) => ({ label, count: value.count, personnelCount: value.users.size }))
       .sort((a, b) => b.count - a.count || b.personnelCount - a.personnelCount)
@@ -171,3 +202,4 @@ export async function getAnalyticsData(): Promise<AnalyticsData> {
     },
   };
 }
+
