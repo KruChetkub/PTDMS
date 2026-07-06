@@ -60,6 +60,7 @@ const genderLabels = {
 const educationOptions: EditFormState['education'][] = ['', 'ต่ำกว่าปริญญาตรี', 'ปริญญาตรี', 'ปริญญาโท', 'ปริญญาเอก'];
 const employmentTypeOptions: EditFormState['employment_type'][] = ['', 'ข้าราชการ', 'พนักงานราชการ', 'พนักงานกระทรวงสาธารณสุข', 'ลูกจ้างชั่วคราว', 'จ้างเหมาบริการฯ (พขร.)'];
 const createRoleOptions: UserRole[] = ['personnel', 'hr', 'executive', 'admin'];
+const allRoleOptions: UserRole[] = ['super_admin', ...createRoleOptions];
 const allowedEducationOptions = educationOptions.filter((option): option is Exclude<EditFormState['education'], ''> => option !== '');
 const allowedEmploymentTypeOptions = employmentTypeOptions.filter((option): option is Exclude<EditFormState['employment_type'], ''> => option !== '');
 
@@ -553,8 +554,13 @@ export function UserManagementPage() {
   const canManageRoleAndStatus = currentRole === 'super_admin' || currentRole === 'admin';
   const canCreateUsers = currentRole === 'super_admin' || currentRole === 'admin' || currentRole === 'hr';
   const canManageUsers = currentRole === 'super_admin' || currentRole === 'admin' || currentRole === 'hr';
-  const availableCreateRoleOptions = useMemo<UserRole[]>(
-    () => (currentRole === 'hr' ? ['personnel'] : createRoleOptions),
+  const availableCreateRoleOptions = useMemo<UserRole[]>(() => {
+    if (currentRole === 'super_admin') return allRoleOptions;
+    if (currentRole === 'hr') return ['personnel'];
+    return createRoleOptions;
+  }, [currentRole]);
+  const availableManageRoleOptions = useMemo<UserRole[]>(
+    () => (currentRole === 'super_admin' ? allRoleOptions : createRoleOptions),
     [currentRole],
   );
 
@@ -577,6 +583,10 @@ export function UserManagementPage() {
 
   const handleRoleChange = async (userId: string, newRole: UserRole) => {
     if (!currentUser || !canManageRoleAndStatus) return;
+    if (!availableManageRoleOptions.includes(newRole)) {
+      alert('คุณไม่มีสิทธิ์กำหนด Role ที่สูงกว่าสิทธิ์ของคุณ');
+      return;
+    }
     const targetUser = users.find((user) => user.user_id === userId);
     setUpdating(userId);
     try {
@@ -697,13 +707,19 @@ export function UserManagementPage() {
       return;
     }
 
+    const roleToCreate = currentRole === 'hr' ? 'personnel' : createModal.form.role;
+    if (!availableCreateRoleOptions.includes(roleToCreate)) {
+      setCreateModal((prev) => ({ ...prev, error: 'คุณไม่มีสิทธิ์สร้างผู้ใช้ด้วย Role นี้' }));
+      return;
+    }
+
     setUpdating('create-user');
     try {
       const detailsPayload = buildCreateDetailsPayload(createModal.form, fullName);
       const userId = await createManagedUser({
         fullName,
         email,
-        role: currentRole === 'hr' ? 'personnel' : createModal.form.role,
+        role: roleToCreate,
       });
 
       if (userId) {
@@ -715,7 +731,7 @@ export function UserManagementPage() {
         route: '/admin/users',
         targetType: 'user',
         targetId: userId,
-        metadata: { target_email: email, target_name: fullName, role: currentRole === 'hr' ? 'personnel' : createModal.form.role },
+        metadata: { target_email: email, target_name: fullName, role: roleToCreate },
       });
       setCreateModal((prev) => ({ ...prev, isOpen: false, error: null }));
       await loadUsers();
@@ -1134,8 +1150,8 @@ export function UserManagementPage() {
                         onChange={(e) => handleRoleChange(u.user_id, e.target.value as UserRole)}
                         disabled={!canManageRoleAndStatus}
                       >
-                        {Object.entries(roleLabels).map(([key, label]) => (
-                          <option key={key} value={key}>{label}</option>
+                        {availableManageRoleOptions.map((role) => (
+                          <option key={role} value={role}>{roleLabels[role]}</option>
                         ))}
                       </select>
                     </td>
