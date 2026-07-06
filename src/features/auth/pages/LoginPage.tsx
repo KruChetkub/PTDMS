@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { ConfiguredNotice } from '../../../components/auth/ConfiguredNotice';
+import { LegalFooter } from '../../legal/LegalFooter';
 import { useAuthStore } from '../../../stores/auth.store';
 import { loginSchema, type LoginFormValues } from '../auth.schemas';
 
@@ -127,6 +128,8 @@ export function LoginPage() {
             </Link> */}
           </div>
         </form>
+
+        <LegalFooter variant="dark" />
       </div>
     </div>
   );
