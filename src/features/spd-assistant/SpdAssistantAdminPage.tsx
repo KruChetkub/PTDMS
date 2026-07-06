@@ -74,8 +74,8 @@ export function SpdAssistantAdminPage() {
       const data = await listSpdAssistantKnowledge(term);
       setRecords(data);
     } catch (loadError) {
-      console.error('Failed to load SPD knowledge:', loadError);
-      setError('ไม่สามารถโหลดฐานความรู้ SPD Assistant ได้');
+      console.error('Failed to load DSP knowledge:', loadError);
+      setError('ไม่สามารถโหลดฐานความรู้ DSP Assistant ได้');
     } finally {
       setLoading(false);
     }
@@ -115,7 +115,7 @@ export function SpdAssistantAdminPage() {
       setForm(emptyForm);
       await loadRecords();
     } catch (saveError) {
-      console.error('Failed to save SPD knowledge:', saveError);
+      console.error('Failed to save DSP knowledge:', saveError);
       setError('ไม่สามารถบันทึกฐานความรู้ได้');
     } finally {
       setSaving(false);
@@ -139,8 +139,8 @@ export function SpdAssistantAdminPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="SPD Assistant Knowledge"
-        description="จัดการฐานความรู้ภาษาไทยที่ SPD Assistant ใช้ตอบคำถาม ผู้ช่วยจะตอบจากรายการที่ active และตรงกับสิทธิ์ของผู้ใช้เท่านั้น"
+        title="DSP Assistant Knowledge"
+        description="จัดการฐานความรู้ภาษาไทยที่ DSP Assistant ใช้ตอบคำถาม ผู้ช่วยจะตอบจากรายการที่ active และตรงกับสิทธิ์ของผู้ใช้เท่านั้น"
       />
 
       <div className="grid gap-4 md:grid-cols-3">

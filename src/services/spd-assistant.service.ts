@@ -88,7 +88,7 @@ function isStrongMatch(result: SpdAssistantSearchResult | undefined, route: stri
 }
 
 function logAssistantError(message: string, error: unknown) {
-  console.error(`[SPD Assistant] ${message}`, error);
+  console.error(`[DSP Assistant] ${message}`, error);
 }
 
 function escapeIlikeTerm(value: string) {
@@ -134,7 +134,7 @@ async function askSpdAssistantGemini(payload: AskSpdAssistantPayload & { route: 
   const accessToken = sessionData.session?.access_token;
 
   if (!accessToken) {
-    throw new Error('SPD Assistant Gemini endpoint requires an authenticated session.');
+    throw new Error('DSP Assistant Gemini endpoint requires an authenticated session.');
   }
 
   const response = await fetch('/api/spd-assistant-gemini', {
@@ -153,7 +153,7 @@ async function askSpdAssistantGemini(payload: AskSpdAssistantPayload & { route: 
   });
 
   if (!response.ok) {
-    throw new Error(`SPD Assistant Gemini endpoint failed with status ${response.status}.`);
+    throw new Error(`DSP Assistant Gemini endpoint failed with status ${response.status}.`);
   }
 
   return (await response.json()) as GeminiAssistantResponse;
@@ -378,7 +378,7 @@ export async function saveSpdAssistantKnowledge(payload: SaveSpdAssistantKnowled
   const answer = payload.answer.trim();
 
   if (!title || !module || !question || !answer || payload.related_roles.length === 0) {
-    throw new Error('SPD Assistant knowledge requires title, module, question, answer, and at least one role.');
+    throw new Error('DSP Assistant knowledge requires title, module, question, answer, and at least one role.');
   }
 
   const record = {

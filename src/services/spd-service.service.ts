@@ -92,7 +92,7 @@ const telegramSettingKeys = {
 } as const;
 
 export const defaultSpdServiceTelegramMessageTemplate = [
-  '<b>SPD Service: มีคำขอใหม่</b>',
+  '<b>DSP Service: มีคำขอใหม่</b>',
   'เลขคำขอ: <code>{{ticket_no}}</code>',
   'หัวข้อ: {{subject}}',
   'ประเภท: {{category_name}}',

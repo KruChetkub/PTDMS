@@ -2,8 +2,8 @@ import type { SiteContentState } from '../types/siteContent.types';
 
 export const defaultSiteContent: SiteContentState = {
   brandSettings: {
-    siteName: 'SmartSPD',
-    logoUrl: '/SPDLogo.svg',
+    siteName: 'SmartDSP',
+    logoUrl: '/DSPLogo.svg',
   },
   heroBanner: {
     eyebrow: 'PTDMS Public Center',

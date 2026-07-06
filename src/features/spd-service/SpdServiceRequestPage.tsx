@@ -1,4 +1,4 @@
-﻿import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { AlertCircle, ArrowLeft, CheckCircle2, Headphones, Loader2, Send } from 'lucide-react';
 import { createSpdServiceTicket, getSpdServiceCategories, notifySpdServiceTicketCreated } from '../../services/spd-service.service';
@@ -48,7 +48,7 @@ export function SpdServiceRequestPage() {
         setCategories(data);
         setCategoryId((current) => current || data[0]?.id || otherCategoryId);
       } catch (loadError) {
-        console.error('Failed to load SPD Service categories:', loadError);
+        console.error('Failed to load DSP Service categories:', loadError);
         setError('ไม่สามารถโหลดประเภทบริการได้');
       } finally {
         setIsLoadingCategories(false);
@@ -122,14 +122,14 @@ export function SpdServiceRequestPage() {
           setNotificationWarning('สร้างคำขอสำเร็จ แต่ยังส่ง Telegram ไม่สำเร็จ กรุณาตรวจสอบการตั้งค่า');
         }
       } catch (notificationError) {
-        console.error('Failed to notify SPD Service Telegram:', notificationError);
+        console.error('Failed to notify DSP Service Telegram:', notificationError);
         setNotificationWarning('สร้างคำขอสำเร็จ แต่ยังส่ง Telegram ไม่สำเร็จ กรุณาตรวจสอบ Edge Function และ Bot Token');
       }
 
       setCreatedTicket(ticket);
       resetIssueFields();
     } catch (submitError) {
-      console.error('Failed to create SPD Service ticket:', submitError);
+      console.error('Failed to create DSP Service ticket:', submitError);
       setError('ไม่สามารถสร้างคำขอได้ กรุณาตรวจสอบข้อมูลแล้วลองใหม่');
     } finally {
       setIsSubmitting(false);
@@ -145,7 +145,7 @@ export function SpdServiceRequestPage() {
               <ArrowLeft className="h-4 w-4" aria-hidden="true" />
               กลับ Portal
             </Link>
-            <h1 className="truncate text-2xl font-semibold text-slate-950">แจ้งคำขอรับบริการ SPD Service</h1>
+            <h1 className="truncate text-2xl font-semibold text-slate-950">แจ้งคำขอรับบริการ DSP Service</h1>
           </div>
           <div className="hidden rounded-md bg-teal-50 p-3 text-teal-700 ring-1 ring-teal-100 sm:block">
             <Headphones className="h-6 w-6" aria-hidden="true" />

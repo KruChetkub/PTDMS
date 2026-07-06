@@ -12,7 +12,7 @@ import type { Profile } from '../../types/database.types';
 import { cn } from '../../utils/cn';
 
 const sampleTelegramTemplateValues: Record<string, string> = {
-  ticket_no: 'SPD-2569-0001',
+  ticket_no: 'DSP-2569-0001',
   subject: 'ขอรับบริการระบบคอมพิวเตอร์',
   category_name: 'แจ้งปัญหาระบบ',
   urgency: 'ปกติ',
@@ -71,7 +71,7 @@ export function SpdServiceTelegramSettingsPage() {
       setAdminUsernames(telegramSettings.adminUsernames);
       setMessageTemplate(telegramSettings.messageTemplate);
     } catch (loadError) {
-      console.error('Failed to load SPD Service Telegram settings:', loadError);
+      console.error('Failed to load DSP Service Telegram settings:', loadError);
       setError('ไม่สามารถโหลดการตั้งค่า Telegram ได้');
     } finally {
       setIsLoading(false);
@@ -132,9 +132,9 @@ export function SpdServiceTelegramSettingsPage() {
         updatedBy: profile.user_id,
       });
 
-      setSuccess('บันทึกการตั้งค่า Telegram สำหรับ SPD Service เรียบร้อยแล้ว');
+      setSuccess('บันทึกการตั้งค่า Telegram สำหรับ DSP Service เรียบร้อยแล้ว');
     } catch (saveError) {
-      console.error('Failed to save SPD Service Telegram settings:', saveError);
+      console.error('Failed to save DSP Service Telegram settings:', saveError);
       setError('ไม่สามารถบันทึกการตั้งค่า Telegram ได้');
     } finally {
       setIsSaving(false);
@@ -148,10 +148,10 @@ export function SpdServiceTelegramSettingsPage() {
           <div className="min-w-0">
             <Link to="/spd-service" className="mb-2 inline-flex items-center gap-2 text-sm font-semibold text-teal-700 transition hover:text-teal-900">
               <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-              กลับแดชบอร์ด SPD Service
+              กลับแดชบอร์ด DSP Service
             </Link>
             <h1 className="truncate text-2xl font-semibold text-slate-950">Telegram Notification Settings</h1>
-            <p className="mt-1 text-sm text-slate-500">ตั้งค่าการแจ้งเตือนเฉพาะระบบ SPD Service สำหรับ Super Admin เท่านั้น</p>
+            <p className="mt-1 text-sm text-slate-500">ตั้งค่าการแจ้งเตือนเฉพาะระบบ DSP Service สำหรับ Super Admin เท่านั้น</p>
           </div>
           <button
             type="button"
@@ -223,7 +223,7 @@ export function SpdServiceTelegramSettingsPage() {
                     <div>
                       <h2 className="text-lg font-semibold text-slate-950">เปิดใช้งาน Telegram</h2>
                       <p className="mt-1 text-sm leading-6 text-slate-500">
-                        ใช้สำหรับเก็บค่ากลุ่ม Telegram และรายชื่อ Admin ที่ต้องการให้ระบบ SPD Service แจ้งเตือน
+                        ใช้สำหรับเก็บค่ากลุ่ม Telegram และรายชื่อ Admin ที่ต้องการให้ระบบ DSP Service แจ้งเตือน
                       </p>
                     </div>
                   </div>
@@ -249,7 +249,7 @@ export function SpdServiceTelegramSettingsPage() {
                     className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
                     placeholder="-1001234567890"
                   />
-                  <span className="mt-1 block text-xs text-slate-500">เก็บเฉพาะ Chat ID ของกลุ่ม Telegram สำหรับ SPD Service</span>
+                  <span className="mt-1 block text-xs text-slate-500">เก็บเฉพาะ Chat ID ของกลุ่ม Telegram สำหรับ DSP Service</span>
                 </label>
               </section>
 

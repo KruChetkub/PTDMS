@@ -1,4 +1,4 @@
-﻿import { useState } from 'react';
+import { useState } from 'react';
 import { ArrowRight, CalendarDays, GraduationCap, Headphones, LogOut, Megaphone, Monitor, ShieldCheck, Sparkles } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ConfirmModal } from '../../components/ui/ConfirmModal';
@@ -56,8 +56,8 @@ const assetSystems: PortalCard[] = [
 
 const serviceSystems: PortalCard[] = [
   {
-    title: 'SPD Service Management System',
-    shortTitle: 'SPD Service',
+    title: 'DSP Service Management System',
+    shortTitle: 'DSP Service',
     description: 'ติดตามคำขอรับบริการและงานสนับสนุนด้านสารสนเทศภายในกองยุทธศาสตร์ฯ',
     to: '/spd-service',
     icon: Headphones,

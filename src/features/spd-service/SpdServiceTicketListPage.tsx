@@ -68,7 +68,7 @@ export function SpdServiceTicketListPage() {
       const data = await getSpdServiceTickets();
       setTickets(data);
     } catch (loadError) {
-      console.error('Failed to load SPD Service tickets:', loadError);
+      console.error('Failed to load DSP Service tickets:', loadError);
       setError('ไม่สามารถโหลดรายการคำขอได้');
     } finally {
       setIsLoading(false);
@@ -110,7 +110,7 @@ export function SpdServiceTicketListPage() {
               กลับ Dashboard
             </Link>
             <h1 className="truncate text-2xl font-semibold text-slate-950">รายการคำขอทั้งหมด</h1>
-            <p className="mt-1 text-sm text-slate-500">ค้นหาและกรองสถานะคำขอรับบริการ SPD Service</p>
+            <p className="mt-1 text-sm text-slate-500">ค้นหาและกรองสถานะคำขอรับบริการ DSP Service</p>
           </div>
           <button
             type="button"

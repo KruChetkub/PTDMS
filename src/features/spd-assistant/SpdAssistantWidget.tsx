@@ -16,7 +16,7 @@ function createMessageId() {
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
-const greeting = 'สวัสดีค่ะ ฉันคือ SPD Assistant สามารถตอบคำถามจากฐานความรู้ของระบบเท่านั้น';
+const greeting = 'สวัสดีค่ะ ฉันคือ DSP Assistant สามารถตอบคำถามจากฐานความรู้ของระบบเท่านั้น';
 
 function getInitialMessages(): ChatMessage[] {
   return [
@@ -119,7 +119,7 @@ export function SpdAssistantWidget() {
         },
       ]);
     } catch (error) {
-      console.error('SPD Assistant failed:', error);
+      console.error('DSP Assistant failed:', error);
       setMessages((current) => [
         ...current,
         {
@@ -138,14 +138,14 @@ export function SpdAssistantWidget() {
       {isOpen ? (
         <section
           className="w-[calc(100vw-2rem)] max-w-[420px] overflow-hidden rounded-lg border border-slate-200 bg-white shadow-2xl"
-          aria-label="SPD Assistant"
+          aria-label="DSP Assistant"
         >
           <header className="border-b border-slate-200 bg-slate-950 px-4 py-3 text-white">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <div className="flex items-center gap-2 text-sm font-semibold">
                   <Bot className="h-4 w-4" aria-hidden="true" />
-                  SPD Assistant
+                  DSP Assistant
                 </div>
                 <div className="mt-1 truncate text-xs text-slate-300">
                   {pageNameTh} · {moduleNameTh}
@@ -155,7 +155,7 @@ export function SpdAssistantWidget() {
                 type="button"
                 onClick={() => setIsOpen(false)}
                 className="rounded-md p-1 text-slate-300 transition hover:bg-white/10 hover:text-white"
-                aria-label="ปิด SPD Assistant"
+                aria-label="ปิด DSP Assistant"
                 title="ปิด"
               >
                 <X className="h-4 w-4" aria-hidden="true" />
@@ -231,8 +231,8 @@ export function SpdAssistantWidget() {
         type="button"
         onClick={() => setIsOpen((current) => !current)}
         className="inline-flex h-14 w-14 items-center justify-center rounded-full bg-slate-950 text-white shadow-xl transition hover:-translate-y-0.5 hover:bg-slate-800"
-        aria-label={isOpen ? 'ย่อ SPD Assistant' : 'เปิด SPD Assistant'}
-        title={isOpen ? 'ย่อ SPD Assistant' : 'เปิด SPD Assistant'}
+        aria-label={isOpen ? 'ย่อ DSP Assistant' : 'เปิด DSP Assistant'}
+        title={isOpen ? 'ย่อ DSP Assistant' : 'เปิด DSP Assistant'}
       >
         {isOpen ? <ChevronDown className="h-6 w-6" aria-hidden="true" /> : <MessageCircle className="h-6 w-6" aria-hidden="true" />}
       </button>

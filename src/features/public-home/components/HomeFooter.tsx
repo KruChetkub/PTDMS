@@ -20,7 +20,7 @@ export function HomeFooter() {
 
         <div className="flex flex-col justify-between gap-3 pt-6 sm:flex-row sm:items-center">
           <div>
-            <div className="text-base font-semibold">SmartSPD</div>
+            <div className="text-base font-semibold">SmartDSP</div>
             <p className="mt-1 text-sm text-white/60">กองยุทธศาสตร์และแผนงาน</p>
           </div>
           <p className="text-sm text-white/60">Public Home structure prepared for future Site Manager content.</p>

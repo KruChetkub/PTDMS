@@ -1,4 +1,4 @@
-﻿import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { AlertCircle, ArrowLeft, Eye, Plus, RefreshCw, Search, Star } from 'lucide-react';
 import {
@@ -313,7 +313,7 @@ export function SpdServiceMyRequestsPage() {
       setTickets(ticketData);
       setSurveys(surveyData);
     } catch (loadError) {
-      console.error('Failed to load my SPD Service requests:', loadError);
+      console.error('Failed to load my DSP Service requests:', loadError);
       setError('ไม่สามารถโหลดคำขอของฉันได้');
     } finally {
       setIsLoading(false);
@@ -342,7 +342,7 @@ export function SpdServiceMyRequestsPage() {
       const detail = await getSpdServiceTicketDetail(ticketId);
       setTicketDetail(detail);
     } catch (detailError) {
-      console.error('Failed to load my SPD Service request detail:', detailError);
+      console.error('Failed to load my DSP Service request detail:', detailError);
       setError('ไม่สามารถโหลดรายละเอียดคำขอได้');
     } finally {
       setIsDetailLoading(false);
@@ -369,7 +369,7 @@ export function SpdServiceMyRequestsPage() {
       setSurveys((current) => [survey, ...current]);
       setSatisfactionTicket(null);
     } catch (surveyError) {
-      console.error('Failed to submit SPD Service satisfaction survey:', surveyError);
+      console.error('Failed to submit DSP Service satisfaction survey:', surveyError);
       setError('ไม่สามารถบันทึกคะแนนความพึงพอใจได้ หรืออาจเคยให้คะแนนรายการนี้แล้ว');
     } finally {
       setIsSurveySubmitting(false);
@@ -385,7 +385,7 @@ export function SpdServiceMyRequestsPage() {
               <ArrowLeft className="h-4 w-4" aria-hidden="true" />
               กลับ Portal
             </Link>
-            <h1 className="truncate text-2xl font-semibold text-slate-950">คำขอรับบริการ SPD Service ของฉัน</h1>
+            <h1 className="truncate text-2xl font-semibold text-slate-950">คำขอรับบริการ DSP Service ของฉัน</h1>
             <p className="mt-1 text-sm text-slate-500">ติดตามสถานะคำขอที่คุณแจ้งไว้</p>
           </div>
           <div className="flex flex-wrap gap-2">

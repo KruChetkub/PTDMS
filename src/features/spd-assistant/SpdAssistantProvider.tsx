@@ -80,7 +80,7 @@ export function SpdAssistantProvider({ children }: { children: ReactNode }) {
         setPageContext(context);
       }
     } catch (error) {
-      console.error('Failed to load SPD Assistant page context:', error);
+      console.error('Failed to load DSP Assistant page context:', error);
       if (requestIdRef.current === requestId) {
         setPageContext(null);
       }

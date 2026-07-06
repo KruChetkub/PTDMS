@@ -1,4 +1,4 @@
-﻿import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   AlertCircle,
@@ -486,8 +486,8 @@ export function SpdServiceDashboardPage() {
       setCategories(data.categories);
       setSurveys(data.surveys);
     } catch (loadError) {
-      console.error('Failed to load SPD Service dashboard:', loadError);
-      setError('ไม่สามารถโหลดข้อมูล SPD Service ได้ กรุณาตรวจสอบว่า migration ถูกใช้งานแล้ว');
+      console.error('Failed to load DSP Service dashboard:', loadError);
+      setError('ไม่สามารถโหลดข้อมูล DSP Service ได้ กรุณาตรวจสอบว่า migration ถูกใช้งานแล้ว');
     } finally {
       setIsLoading(false);
     }
@@ -603,7 +603,7 @@ export function SpdServiceDashboardPage() {
       });
       applyTicketUpdate(updatedTicket);
     } catch (workflowError) {
-      console.error('Failed to update SPD Service workflow:', workflowError);
+      console.error('Failed to update DSP Service workflow:', workflowError);
       setError('ไม่สามารถอัปเดตสถานะงานได้');
     } finally {
       setActionTicketId(null);
@@ -657,7 +657,7 @@ export function SpdServiceDashboardPage() {
       const detail = await getSpdServiceTicketDetail(ticketId);
       setTicketDetail(detail);
     } catch (detailError) {
-      console.error('Failed to load SPD Service ticket detail:', detailError);
+      console.error('Failed to load DSP Service ticket detail:', detailError);
       setError('ไม่สามารถโหลดรายละเอียดคำขอได้');
     } finally {
       setIsDetailLoading(false);
@@ -676,7 +676,7 @@ export function SpdServiceDashboardPage() {
       setTickets((current) => current.filter((item) => item.id !== ticket.id));
       setSurveys((current) => current.filter((survey) => survey.ticket_id !== ticket.id));
     } catch (deleteError) {
-      console.error('Failed to delete SPD Service ticket:', deleteError);
+      console.error('Failed to delete DSP Service ticket:', deleteError);
       setError('ไม่สามารถลบคำขอได้ กรุณาตรวจสอบสิทธิ์ Super Admin และ policy ฐานข้อมูล');
     } finally {
       setActionTicketId(null);
@@ -799,7 +799,7 @@ export function SpdServiceDashboardPage() {
               <ArrowLeft className="h-4 w-4" aria-hidden="true" />
               กลับ Portal
             </Link>
-            <h1 className="truncate text-2xl font-semibold text-slate-950">SPD Service Management System</h1>
+            <h1 className="truncate text-2xl font-semibold text-slate-950">DSP Service Management System</h1>
             <p className="mt-1 text-sm text-slate-500">แดชบอร์ดคำขอรับบริการด้านสารสนเทศ</p>
           </div>
           <div className="flex flex-wrap items-center justify-end gap-2">
@@ -841,7 +841,7 @@ export function SpdServiceDashboardPage() {
         ) : (
           <div className="inline-flex items-center gap-2 text-sm font-medium text-emerald-700">
             <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
-            SPD Service
+            DSP Service
           </div>
         )}
 
@@ -1275,7 +1275,7 @@ export function SpdServiceDashboardPage() {
 
             {recentTickets.length === 0 ? (
               <div className="rounded-md border border-dashed border-slate-300 p-8 text-center text-sm text-slate-400">
-                ยังไม่มีข้อมูลคำขอในระบบ SPD Service
+                ยังไม่มีข้อมูลคำขอในระบบ DSP Service
               </div>
             ) : null}
           </div>
@@ -1347,7 +1347,7 @@ export function SpdServiceDashboardPage() {
                 {recentTickets.length === 0 ? (
                   <tr>
                     <td colSpan={canDeleteTickets ? 10 : 9} className="px-2 py-10 text-center text-slate-400">
-                      ยังไม่มีข้อมูลคำขอในระบบ SPD Service
+                      ยังไม่มีข้อมูลคำขอในระบบ DSP Service
                     </td>
                   </tr>
                 ) : null}

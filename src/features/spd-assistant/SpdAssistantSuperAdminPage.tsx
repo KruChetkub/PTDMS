@@ -57,8 +57,8 @@ export function SpdAssistantSuperAdminPage() {
       setConversations(conversationRows as ConversationRow[]);
       setFeedback(feedbackRows as FeedbackRow[]);
     } catch (loadError) {
-      console.error('Failed to load SPD Assistant super admin data:', loadError);
-      setError('ไม่สามารถโหลดข้อมูลควบคุม SPD Assistant ได้');
+      console.error('Failed to load DSP Assistant super admin data:', loadError);
+      setError('ไม่สามารถโหลดข้อมูลควบคุม DSP Assistant ได้');
     } finally {
       setLoading(false);
     }
@@ -71,8 +71,8 @@ export function SpdAssistantSuperAdminPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="SPD Assistant Super Admin"
-        description="ศูนย์ควบคุมระดับสูงสำหรับตรวจสอบฐานความรู้ ประวัติการใช้งาน feedback และข้อกำหนดความปลอดภัยของ SPD Assistant"
+        title="DSP Assistant Super Admin"
+        description="ศูนย์ควบคุมระดับสูงสำหรับตรวจสอบฐานความรู้ ประวัติการใช้งาน feedback และข้อกำหนดความปลอดภัยของ DSP Assistant"
       />
 
       {error ? <div className="rounded-md bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div> : null}
