@@ -1,6 +1,44 @@
+import { useEffect, useState } from 'react';
+import { UsersRound } from 'lucide-react';
+import { getPublicVisitStats, type PublicVisitStats } from '../../../services/public-analytics.service';
 import { homeBrandHighlights } from '../data/publicHome.mock';
 
+const emptyStats: PublicVisitStats = {
+  totalVisitors: 0,
+  todayVisitors: 0,
+  totalPageViews: 0,
+  todayPageViews: 0,
+  updatedAt: null,
+};
+
+function formatCount(value: number) {
+  return new Intl.NumberFormat('th-TH').format(value);
+}
+
 export function HomeFooter() {
+  const [stats, setStats] = useState<PublicVisitStats>(emptyStats);
+
+  useEffect(() => {
+    let isMounted = true;
+    const loadStats = async () => {
+      try {
+        const data = await getPublicVisitStats();
+        if (isMounted) setStats(data);
+      } catch (error) {
+        console.error('Failed to load public visit stats:', error);
+      }
+    };
+
+    void loadStats();
+    window.addEventListener('smartdsp-cookie-consent-updated', loadStats);
+    window.addEventListener('smartdsp-public-analytics-updated', loadStats);
+    return () => {
+      isMounted = false;
+      window.removeEventListener('smartdsp-cookie-consent-updated', loadStats);
+      window.removeEventListener('smartdsp-public-analytics-updated', loadStats);
+    };
+  }, []);
+
   return (
     <footer className="bg-slate-950 text-white">
       <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
@@ -18,12 +56,18 @@ export function HomeFooter() {
           })}
         </div>
 
-        <div className="flex flex-col justify-between gap-3 pt-6 sm:flex-row sm:items-center">
+        <div className="flex flex-col justify-between gap-4 pt-6 sm:flex-row sm:items-center">
           <div>
             <div className="text-base font-semibold">SmartDSP</div>
             <p className="mt-1 text-sm text-white/60">กองยุทธศาสตร์และแผนงาน</p>
           </div>
-          <p className="text-sm text-white/60">Public Home structure prepared for future Site Manager content.</p>
+          <div className="w-full rounded-md bg-white/5 px-3 py-1.5 sm:ml-auto sm:max-w-44">
+            <div className="flex items-center gap-2 text-xs font-medium text-white/55">
+              <UsersRound className="h-4 w-4" aria-hidden="true" />
+              ผู้เข้าชมทั้งหมด
+            </div>
+            <div className="mt-1 text-base font-semibold text-white">{formatCount(stats.totalVisitors)}</div>
+          </div>
         </div>
       </div>
     </footer>

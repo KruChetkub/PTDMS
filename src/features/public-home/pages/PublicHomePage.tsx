@@ -1,4 +1,5 @@
 import { Activity, FileText, HeartPulse, Landmark, Puzzle, ShieldCheck, Target, TrendingUp, UsersRound } from 'lucide-react';
+import { CookieConsentBanner } from '../components/CookieConsentBanner';
 import { HomeFaqSection } from '../components/HomeFaqSection';
 import { HomeFooter } from '../components/HomeFooter';
 import { HomeHeroBanner } from '../components/HomeHeroBanner';
@@ -8,6 +9,7 @@ import { HomeNewsSection } from '../components/HomeNewsSection';
 import { HomePlanSections } from '../components/HomePlanSections';
 import { PublicHomeHeader } from '../components/PublicHomeHeader';
 import { usePublishedSiteContent } from '../../site-content/hooks/useSiteContent';
+import { usePublicPageAnalytics } from '../hooks/usePublicPageAnalytics';
 import {
   homeFaqItems,
   homeHeroBanner,
@@ -53,6 +55,7 @@ function mapVisiblePlanCards(cards: SiteContentPlanCard[]) {
 }
 
 export function PublicHomePage() {
+  usePublicPageAnalytics();
   const siteContent = usePublishedSiteContent();
   const heroBanner = {
     ...homeHeroBanner,
@@ -101,6 +104,7 @@ export function PublicHomePage() {
         </div>
       </main>
       <HomeFooter />
+      <CookieConsentBanner />
     </div>
   );
 }
