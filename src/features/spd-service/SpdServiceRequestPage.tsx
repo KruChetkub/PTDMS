@@ -220,31 +220,6 @@ export function SpdServiceRequestPage() {
             </label>
           </div>
 
-          <div className="mt-4">
-            <span className="text-sm font-medium text-slate-700">ระดับความเร่งด่วน</span>
-            <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-              {urgencyOptions.map((option) => (
-                <label
-                  key={option.value}
-                  className={`cursor-pointer rounded-md border px-3 py-2 transition ${
-                    urgency === option.value ? 'border-teal-500 bg-teal-50 ring-2 ring-teal-100' : 'border-slate-200 bg-white hover:bg-slate-50'
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name="urgency"
-                    value={option.value}
-                    checked={urgency === option.value}
-                    onChange={() => setUrgency(option.value)}
-                    className="sr-only"
-                  />
-                  <span className="block text-sm font-semibold text-slate-950">{option.label}</span>
-                  <span className="mt-1 block text-xs text-slate-500">{option.hint}</span>
-                </label>
-              ))}
-            </div>
-          </div>
-
           <div className="mt-4 grid gap-4">
             {!isOtherCategory ? (
               <label className="block">
@@ -263,6 +238,31 @@ export function SpdServiceRequestPage() {
                 </select>
               </label>
             ) : null}
+
+            <div>
+              <span className="text-sm font-medium text-slate-700">ระดับความเร่งด่วน</span>
+              <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                {urgencyOptions.map((option) => (
+                  <label
+                    key={option.value}
+                    className={`cursor-pointer rounded-md border px-3 py-2 transition ${
+                      urgency === option.value ? 'border-teal-500 bg-teal-50 ring-2 ring-teal-100' : 'border-slate-200 bg-white hover:bg-slate-50'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="urgency"
+                      value={option.value}
+                      checked={urgency === option.value}
+                      onChange={() => setUrgency(option.value)}
+                      className="sr-only"
+                    />
+                    <span className="block text-sm font-semibold text-slate-950">{option.label}</span>
+                    <span className="mt-1 block text-xs text-slate-500">{option.hint}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
 
             <label className="block">
               <span className="text-sm font-medium text-slate-700">รายละเอียด</span>
