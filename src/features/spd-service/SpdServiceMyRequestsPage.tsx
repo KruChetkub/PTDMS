@@ -12,6 +12,7 @@ import { useAuthStore } from '../../stores/auth.store';
 import { useAuditPageAccess } from '../../hooks/useAuditPageAccess';
 import type { SpdServiceSatisfactionSurvey, SpdServiceTicket, SpdServiceTicketStatus } from '../../types/database.types';
 import { cn } from '../../utils/cn';
+import { formatSpdServiceTicketNo } from './spdServiceTicketNo';
 
 const statusLabels: Record<SpdServiceTicketStatus, string> = {
   NEW: 'งานใหม่',
@@ -45,7 +46,7 @@ function formatDateTime(value: string | null) {
 function matchesKeyword(ticket: SpdServiceTicket, keyword: string) {
   if (!keyword) return true;
 
-  return [ticket.ticket_no, ticket.subject, ticket.description, ticket.category_name, ticket.urgency, ticket.status]
+  return [ticket.ticket_no, formatSpdServiceTicketNo(ticket.ticket_no), ticket.subject, ticket.description, ticket.category_name, ticket.urgency, ticket.status]
     .filter(Boolean)
     .join(' ')
     .toLowerCase()
@@ -71,7 +72,7 @@ function TicketDetailModal({
         <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-slate-200 bg-white p-5">
           <div className="min-w-0">
             <p className="text-xs font-semibold uppercase text-teal-700">คำขอของฉัน</p>
-            <h2 className="mt-1 truncate text-xl font-semibold text-slate-950">{ticket ? ticket.ticket_no : 'กำลังโหลดข้อมูล'}</h2>
+            <h2 className="mt-1 truncate text-xl font-semibold text-slate-950">{ticket ? formatSpdServiceTicketNo(ticket.ticket_no) : 'กำลังโหลดข้อมูล'}</h2>
             {ticket ? <p className="mt-1 truncate text-sm text-slate-500">{ticket.subject}</p> : null}
           </div>
           <button type="button" onClick={onClose} className="rounded-md px-3 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-100">
@@ -236,7 +237,7 @@ function SatisfactionModal({ ticket, isSubmitting, onClose, onSubmit }: Satisfac
       <div className="w-full max-w-2xl rounded-md bg-white shadow-2xl">
         <div className="flex items-start justify-between gap-4 border-b border-slate-200 p-5">
           <div className="min-w-0">
-            <p className="text-xs font-semibold uppercase text-amber-700">{ticket.ticket_no}</p>
+            <p className="text-xs font-semibold uppercase text-amber-700">{formatSpdServiceTicketNo(ticket.ticket_no)}</p>
             <h2 className="mt-1 truncate text-xl font-semibold text-slate-950">ประเมินความพึงพอใจ</h2>
             <p className="mt-1 truncate text-sm text-slate-500">{ticket.subject}</p>
           </div>
@@ -475,7 +476,7 @@ export function SpdServiceMyRequestsPage() {
 
                   return (
                     <tr key={ticket.id} className="transition hover:bg-slate-50">
-                      <td className="px-2 py-3 font-mono text-xs font-semibold text-teal-700">{ticket.ticket_no}</td>
+                      <td className="px-2 py-3 font-mono text-xs font-semibold text-teal-700">{formatSpdServiceTicketNo(ticket.ticket_no)}</td>
                       <td className="max-w-[280px] truncate px-2 py-3 font-semibold text-slate-900" title={ticket.subject}>
                         {ticket.subject}
                       </td>

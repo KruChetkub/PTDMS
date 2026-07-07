@@ -5,6 +5,7 @@ import { createSpdServiceTicket, getSpdServiceCategories, notifySpdServiceTicket
 import { useAuditPageAccess } from '../../hooks/useAuditPageAccess';
 import { useAuthStore } from '../../stores/auth.store';
 import type { SpdServiceCategory, SpdServiceTicket, SpdServiceUrgency } from '../../types/database.types';
+import { formatSpdServiceTicketNo } from './spdServiceTicketNo';
 
 const urgencyOptions: Array<{ value: SpdServiceUrgency; label: string; hint: string }> = [
   { value: 'LOW', label: 'LOW', hint: 'ไม่เร่งด่วน' },
@@ -17,7 +18,7 @@ const otherCategoryId = '__other__';
 const otherCategoryName = 'อื่นๆ';
 
 const subjectOptionsByCategory: Record<string, string[]> = {
-  'IT Support': ['แจ้งปัญหาการใช้งานเครื่องคอมพิวเตอร์', 'ขอใช้งาน Internet', 'แจ้ง Reset Password Internet'],
+  'IT Support': ['แจ้งปัญหาการใช้งานเครื่องคอมพิวเตอร์', 'ขอใช้งาน Internet', 'แจ้ง Reset Password Internet','ขอความอนุเคราะห์เจ้าหน้า IT'],
   'Software Support': ['แจ้งใช้งาน AI ChatGPT'],
   'Information System Support': ['แจ้งปัญหาการใช้งานระบบ NAS'],
   'Digital Service': ['ขอใช้งาน Conference', 'ลงข้อมูลหน้า Website', 'ลงข่าวประชาสัมพันธ์'],
@@ -31,7 +32,7 @@ export function SpdServiceRequestPage() {
   const [requesterDepartment, setRequesterDepartment] = useState(profile?.work_group || profile?.department || '');
   const [categoryId, setCategoryId] = useState('');
   const [urgency, setUrgency] = useState<SpdServiceUrgency>('MEDIUM');
-  const [subject, setSubject] = useState('');
+  const [selectedSubjects, setSelectedSubjects] = useState<string[]>([]);
   const [description, setDescription] = useState('');
   const [isLoadingCategories, setIsLoadingCategories] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -77,12 +78,16 @@ export function SpdServiceRequestPage() {
   const selectedCategory = useMemo(() => categoryOptions.find((category) => category.id === categoryId) || null, [categoryOptions, categoryId]);
   const isOtherCategory = selectedCategory?.name === otherCategoryName;
   const subjectOptions = selectedCategory ? subjectOptionsByCategory[selectedCategory.name] || [] : [];
-  const finalSubject = isOtherCategory ? otherCategoryName : subject.trim();
+  const finalSubject = isOtherCategory ? otherCategoryName : selectedSubjects.join(', ');
 
   const resetIssueFields = () => {
     setUrgency('MEDIUM');
-    setSubject('');
+    setSelectedSubjects([]);
     setDescription('');
+  };
+
+  const toggleSubject = (option: string) => {
+    setSelectedSubjects((current) => (current.includes(option) ? current.filter((item) => item !== option) : [...current, option]));
   };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -157,7 +162,7 @@ export function SpdServiceRequestPage() {
         {createdTicket ? (
           <div className="mb-5 rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
             <CheckCircle2 className="mr-2 inline h-4 w-4" aria-hidden="true" />
-            สร้างคำขอสำเร็จ เลขคำขอ <span className="font-mono font-semibold">{createdTicket.ticket_no}</span>
+            สร้างคำขอสำเร็จ เลขคำขอ <span className="font-mono font-semibold">{formatSpdServiceTicketNo(createdTicket.ticket_no)}</span>
             <Link to="/spd-service/my-requests" className="ml-3 font-semibold underline underline-offset-2">
               ดูคำขอของฉัน
             </Link>
@@ -206,7 +211,7 @@ export function SpdServiceRequestPage() {
                 value={categoryId}
                 onChange={(event) => {
                   setCategoryId(event.target.value);
-                  setSubject('');
+                  setSelectedSubjects([]);
                 }}
                 disabled={isLoadingCategories}
                 className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-100 disabled:cursor-not-allowed disabled:bg-slate-50"
@@ -222,21 +227,32 @@ export function SpdServiceRequestPage() {
 
           <div className="mt-4 grid gap-4">
             {!isOtherCategory ? (
-              <label className="block">
+              <div>
                 <span className="text-sm font-medium text-slate-700">หัวข้อ</span>
-                <select
-                  value={subject}
-                  onChange={(event) => setSubject(event.target.value)}
-                  className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
-                >
-                  <option value="">เลือกหัวข้อ</option>
-                  {subjectOptions.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
-                </select>
-              </label>
+                <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                  {subjectOptions.map((option) => {
+                    const isChecked = selectedSubjects.includes(option);
+
+                    return (
+                      <label
+                        key={option}
+                        className={`flex cursor-pointer items-start gap-3 rounded-md border px-3 py-2 text-sm transition ${
+                          isChecked ? 'border-teal-500 bg-teal-50 ring-2 ring-teal-100' : 'border-slate-200 bg-white hover:bg-slate-50'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={() => toggleSubject(option)}
+                          className="mt-0.5 h-4 w-4 rounded border-slate-300 text-teal-700 focus:ring-teal-500"
+                        />
+                        <span className="font-medium text-slate-800">{option}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+                {subjectOptions.length === 0 ? <p className="mt-2 text-sm text-slate-500">ยังไม่มีหัวข้อสำหรับประเภทบริการนี้</p> : null}
+              </div>
             ) : null}
 
             <div>

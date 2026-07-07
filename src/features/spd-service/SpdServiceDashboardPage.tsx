@@ -33,6 +33,7 @@ import {
 import { useAuthStore } from '../../stores/auth.store';
 import type { SpdServiceCategory, SpdServiceSatisfactionSurvey, SpdServiceTicket, SpdServiceTicketStatus } from '../../types/database.types';
 import { cn } from '../../utils/cn';
+import { formatSpdServiceTicketNo } from './spdServiceTicketNo';
 
 const statusLabels: Record<SpdServiceTicketStatus, string> = {
   NEW: 'งานใหม่',
@@ -201,7 +202,7 @@ function TicketDetailModal({ detail, isLoading, onClose }: TicketDetailModalProp
           <div className="min-w-0">
             <p className="text-xs font-semibold uppercase text-teal-700">รายละเอียดคำขอ</p>
             <h2 className="mt-1 truncate text-xl font-semibold text-slate-950">
-              {ticket ? ticket.ticket_no : 'กำลังโหลดข้อมูล'}
+              {ticket ? formatSpdServiceTicketNo(ticket.ticket_no) : 'กำลังโหลดข้อมูล'}
             </h2>
             {ticket ? <p className="mt-1 truncate text-sm text-slate-500">{ticket.subject}</p> : null}
           </div>
@@ -384,7 +385,7 @@ function CompleteTicketModal({ ticket, isSubmitting, onClose, onSubmit }: Comple
       <div className="w-full max-w-2xl rounded-md bg-white shadow-2xl">
         <div className="flex items-start justify-between gap-4 border-b border-slate-200 p-5">
           <div className="min-w-0">
-            <p className="text-xs font-semibold uppercase text-teal-700">{ticket.ticket_no}</p>
+            <p className="text-xs font-semibold uppercase text-teal-700">{formatSpdServiceTicketNo(ticket.ticket_no)}</p>
             <h2 className="mt-1 truncate text-xl font-semibold text-slate-950">ปิดงาน</h2>
             <p className="mt-1 truncate text-sm text-slate-500">{ticket.subject}</p>
           </div>
@@ -705,7 +706,7 @@ export function SpdServiceDashboardPage() {
     setPendingTicketAction(null);
   };
 
-  const pendingActionTicketNo = pendingTicketAction?.ticket.ticket_no || '';
+  const pendingActionTicketNo = pendingTicketAction ? formatSpdServiceTicketNo(pendingTicketAction.ticket.ticket_no) : '';
   const pendingActionSubject = pendingTicketAction?.ticket.subject || '';
   const pendingActionTitle =
     pendingTicketAction?.type === 'accept'
@@ -965,7 +966,7 @@ export function SpdServiceDashboardPage() {
                           onClick={() => void handleOpenTicketDetail(ticket.id)}
                           className="font-mono text-xs font-semibold text-teal-700 transition hover:text-teal-900 hover:underline"
                         >
-                          {ticket.ticket_no}
+                          {formatSpdServiceTicketNo(ticket.ticket_no)}
                         </button>
                       </td>
                       <td className="max-w-[260px] truncate px-2 py-3 font-semibold text-slate-900">{ticket.subject}</td>
@@ -1137,7 +1138,7 @@ export function SpdServiceDashboardPage() {
                           onClick={() => void handleOpenTicketDetail(ticket.id)}
                           className="font-mono text-xs font-semibold text-teal-700 transition hover:text-teal-900 hover:underline"
                         >
-                          {ticket.ticket_no}
+                          {formatSpdServiceTicketNo(ticket.ticket_no)}
                         </button>
                       </td>
                       <td className="px-2 py-3 text-slate-600">{ticket.category_name}</td>
@@ -1224,7 +1225,7 @@ export function SpdServiceDashboardPage() {
               <article key={ticket.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="font-mono text-xs font-semibold text-teal-700">{ticket.ticket_no}</p>
+                    <p className="font-mono text-xs font-semibold text-teal-700">{formatSpdServiceTicketNo(ticket.ticket_no)}</p>
                     <h3 className="mt-1 line-clamp-2 text-base font-semibold text-slate-950">{ticket.subject}</h3>
                   </div>
                   <span className={cn('shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ring-1', statusTones[ticket.status])}>
@@ -1305,7 +1306,7 @@ export function SpdServiceDashboardPage() {
                         onClick={() => void handleOpenTicketDetail(ticket.id)}
                         className="font-mono text-xs font-semibold text-teal-700 transition hover:text-teal-900 hover:underline"
                       >
-                        {ticket.ticket_no}
+                        {formatSpdServiceTicketNo(ticket.ticket_no)}
                       </button>
                     </td>
                     <td className="max-w-[260px] truncate px-2 py-3 font-semibold text-slate-900">{ticket.subject}</td>

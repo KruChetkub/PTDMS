@@ -12,7 +12,7 @@ import type { Profile } from '../../types/database.types';
 import { cn } from '../../utils/cn';
 
 const sampleTelegramTemplateValues: Record<string, string> = {
-  ticket_no: 'DSP-2569-0001',
+  ticket_no: 'DSP-IT-07072569-001',
   subject: 'ขอรับบริการระบบคอมพิวเตอร์',
   category_name: 'แจ้งปัญหาระบบ',
   urgency: 'ปกติ',

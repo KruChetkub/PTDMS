@@ -4,6 +4,7 @@ import { AlertCircle, ArrowLeft, Eye, Filter, RefreshCw, Search, X } from 'lucid
 import { getSpdServiceTickets } from '../../services/spd-service.service';
 import type { SpdServiceTicket, SpdServiceTicketStatus, SpdServiceUrgency } from '../../types/database.types';
 import { cn } from '../../utils/cn';
+import { formatSpdServiceTicketNo } from './spdServiceTicketNo';
 
 const statusLabels: Record<SpdServiceTicketStatus, string> = {
   NEW: 'งานใหม่',
@@ -37,6 +38,7 @@ function matchesKeyword(ticket: SpdServiceTicket, keyword: string) {
 
   return [
     ticket.ticket_no,
+    formatSpdServiceTicketNo(ticket.ticket_no),
     ticket.subject,
     ticket.description,
     ticket.requester_name,
@@ -230,7 +232,7 @@ export function SpdServiceTicketListPage() {
               <tbody className="divide-y divide-slate-100">
                 {filteredTickets.map((ticket) => (
                   <tr key={ticket.id} className="transition hover:bg-slate-50">
-                    <td className="px-2 py-3 font-mono text-xs font-semibold text-teal-700">{ticket.ticket_no}</td>
+                    <td className="px-2 py-3 font-mono text-xs font-semibold text-teal-700">{formatSpdServiceTicketNo(ticket.ticket_no)}</td>
                     <td className="max-w-[280px] truncate px-2 py-3 font-semibold text-slate-900" title={ticket.subject}>
                       {ticket.subject}
                     </td>

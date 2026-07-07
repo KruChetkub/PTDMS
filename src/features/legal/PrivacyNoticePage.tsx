@@ -53,8 +53,9 @@ const privacySections = [
     icon: Mail,
     items: [
       'หากต้องการสอบถาม แก้ไขข้อมูล หรือแจ้งปัญหาเกี่ยวกับข้อมูลส่วนบุคคล กรุณาติดต่อผู้ดูแลระบบ SmartDSP',
-      'ตัวอย่างอีเมลติดต่อ: smartdsp@example.go.th',
-      'ข้อความในหน้านี้เป็นตัวอย่างสำหรับตรวจรูปแบบก่อนใช้งานจริง และควรตรวจทานโดยผู้รับผิดชอบด้านกฎหมาย/คุ้มครองข้อมูลก่อนประกาศใช้',
+      'ที่อยู่ 88/21 อาคาร 4 ชั้น 3 ถนนติวานนท์ ตำบลตลาดขวัญ จังหวัดนนทบุรี',
+      'อีเมลติดต่อ: strategic.ddc2023@gmail.com',
+      'โทรศัพท์ 025903898',
     ],
   },
 ];
@@ -80,7 +81,7 @@ export function PrivacyNoticePage() {
       </header>
 
       <main className="mx-auto max-w-5xl space-y-5 px-4 py-6 sm:px-6 lg:px-8">
-        <section className="rounded-lg border border-slate-200 bg-white px-5 py-5 text-sm leading-7 text-slate-700 shadow-sm">
+        <section className="rounded-lg border border-slate-200 bg-white px-5 py-5 text-sm leading-7 text-slate-1700 shadow-sm">
           <p>
             ด้วยพระราชบัญญัติคุ้มครองข้อมูลส่วนบุคคล พ.ศ. 2562 มีผลบังคับใช้ตั้งแต่วันที่ 1 มิถุนายน 2565 เป็นต้นไป
             เพื่อให้การคุ้มครองข้อมูลส่วนบุคคลที่อยู่ภายใต้การดำเนินงานตามภารกิจของกรมควบคุมโรคเป็นไปด้วยความถูกต้อง
@@ -156,7 +157,7 @@ export function PrivacyNoticePage() {
 
         <div className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-white p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="text-sm font-semibold text-slate-950">ตัวอย่างข้อความยอมรับ</p>
+            <p className="text-sm font-semibold text-slate-950">ข้อความยอมรับ</p>
             <p className="mt-1 text-sm text-slate-600">ข้าพเจ้าได้อ่านและรับทราบ Privacy Notice สำหรับการใช้งานระบบ SmartDSP แล้ว</p>
           </div>
           <Link to="/login" className="inline-flex items-center justify-center rounded-md bg-pink-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-pink-700">
