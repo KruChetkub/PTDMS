@@ -68,4 +68,5 @@ export type SiteContentState = {
   annualGuidelineCards: SiteContentPlanCard[];
   riskManagementPlanCards: SiteContentPlanCard[];
   executivePolicyCards: SiteContentPlanCard[];
+  r2rResearchCards: SiteContentPlanCard[];
 };

@@ -22,6 +22,7 @@ type SiteManagerTab =
   | 'annual-guidelines'
   | 'risk-management'
   | 'executive-policy'
+  | 'r2r-research'
   | 'security';
 
 const siteManagerTabs: Array<{ id: SiteManagerTab; label: string; superAdminOnly?: boolean }> = [
@@ -32,6 +33,7 @@ const siteManagerTabs: Array<{ id: SiteManagerTab; label: string; superAdminOnly
   { id: 'annual-guidelines', label: 'แนวทางประจำปี' },
   { id: 'risk-management', label: 'แผนบริหารความเสี่ยง' },
   { id: 'executive-policy', label: 'นโยบายผู้บริหาร' },
+  { id: 'r2r-research', label: 'งานวิจัยจากงานประจำ R2R' },
   { id: 'security', label: 'ความปลอดภัย', superAdminOnly: true },
 ];
 
@@ -55,7 +57,9 @@ export function SiteManagerPage() {
             ? { title: 'แผนบริหารความเสี่ยง', cards: contentDraft.riskManagementPlanCards }
             : activeTab === 'executive-policy'
               ? { title: 'นโยบายผู้บริหาร', cards: contentDraft.executivePolicyCards }
-              : null;
+              : activeTab === 'r2r-research'
+                ? { title: 'งานวิจัยจากงานประจำ R2R', cards: contentDraft.r2rResearchCards }
+                : null;
 
   const handleTabChange = (tabId: SiteManagerTab) => {
     setActiveTab(tabId);
@@ -219,6 +223,21 @@ export function SiteManagerPage() {
             planCards={contentDraft.executivePolicyCards}
             onPlanCardsChange={(nextPlanCards) => {
               setContentDraft((currentContent) => ({ ...currentContent, executivePolicyCards: nextPlanCards }));
+              setDraftMessage(null);
+            }}
+            onSaveDraft={handleSaveDraft}
+            onResetDraft={handleResetDraft}
+            isSaving={isSaving}
+            canResetDraft={canManageSecurity}
+            focusTarget={planFocusTarget}
+          />
+        ) : activeTab === 'r2r-research' ? (
+          <SiteManagerPlanDocumentsEditor
+            title="จัดการงานวิจัยจากงานประจำ R2R"
+            description="เพิ่ม แก้ไข ใส่ลิงก์ PDF/URL รายละเอียด และภาพหน้าปกสำหรับผลงาน R2R"
+            planCards={contentDraft.r2rResearchCards}
+            onPlanCardsChange={(nextPlanCards) => {
+              setContentDraft((currentContent) => ({ ...currentContent, r2rResearchCards: nextPlanCards }));
               setDraftMessage(null);
             }}
             onSaveDraft={handleSaveDraft}

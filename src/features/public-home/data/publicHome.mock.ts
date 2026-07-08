@@ -141,6 +141,22 @@ export const homePlanSections: HomePlanSection[] = [
       },
     ],
   },
+  {
+    id: 'r2r-research',
+    number: '6',
+    title: 'งานวิจัยจากงานประจำ R2R',
+    tone: 'emerald',
+    cards: [
+      {
+        title: 'งานวิจัยจากงานประจำ R2R',
+        subtitle: 'Routine to Research',
+        description: 'รวบรวมผลงานวิจัยจากงานประจำ',
+        icon: FileText,
+        color: 'bg-emerald-600',
+        actionLabel: 'อ่านเพิ่มเติม',
+      },
+    ],
+  },
 ];
 
 export const homeNewsItems: HomeNewsItem[] = [

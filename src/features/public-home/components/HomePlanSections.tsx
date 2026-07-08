@@ -189,7 +189,7 @@ export function HomePlanSections({ sections, logoUrl }: HomePlanSectionsProps) {
                       {visibleCards.map((card, cardIndex) => {
                         const Icon = card.icon;
                         const coverImageLayout = card.coverImageLayout === 'landscape' ? 'landscape' : 'portrait';
-                        const coverAspectClass = coverImageLayout === 'landscape' ? 'aspect-[16/9]' : 'aspect-[9/16]';
+                        const coverAspectClass = coverImageLayout === 'landscape' ? 'aspect-[19/12]' : 'aspect-[13/20]';
                         const ActionElement = card.pdfUrl ? 'a' : 'button';
                         const absoluteCardIndex = currentPage * cardsPerPage + cardIndex;
 
@@ -202,7 +202,7 @@ export function HomePlanSections({ sections, logoUrl }: HomePlanSectionsProps) {
                               <button
                                 type="button"
                                 onClick={() => setCoverPreview({ title: card.title, imageUrl: card.coverImageUrl || '' })}
-                                className={`group mx-auto ${coverAspectClass} w-full max-w-[112px] overflow-hidden rounded-md border border-slate-200 bg-slate-100 transition hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-400`}
+                                className={`group mx-auto ${coverAspectClass} w-full max-w-[200px] overflow-hidden rounded-md border border-slate-200 bg-slate-100 transition hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-400`}
                                 aria-label={`ดูภาพหน้าปก ${card.title} ขนาดใหญ่`}
                               >
                                 <span className="relative block h-full w-full">

@@ -72,6 +72,7 @@ export function normalizeSiteContent(content: Partial<SiteContentState> | null |
     annualGuidelineCards: normalizePlanCards(content?.annualGuidelineCards, defaultSiteContent.annualGuidelineCards),
     riskManagementPlanCards: normalizePlanCards(content?.riskManagementPlanCards, defaultSiteContent.riskManagementPlanCards),
     executivePolicyCards: normalizePlanCards(content?.executivePolicyCards, defaultSiteContent.executivePolicyCards),
+    r2rResearchCards: normalizePlanCards(content?.r2rResearchCards, defaultSiteContent.r2rResearchCards),
   };
 }
 

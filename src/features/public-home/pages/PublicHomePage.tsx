@@ -37,6 +37,7 @@ const planSectionCardSelectors: Record<string, (content: SiteContentState) => Si
   'annual-guidelines': (content) => content.annualGuidelineCards,
   'risk-management': (content) => content.riskManagementPlanCards,
   'executive-policy': (content) => content.executivePolicyCards,
+  'r2r-research': (content) => content.r2rResearchCards,
 };
 
 function mapVisiblePlanCards(cards: SiteContentPlanCard[]) {

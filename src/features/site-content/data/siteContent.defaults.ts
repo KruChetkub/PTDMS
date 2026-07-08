@@ -181,4 +181,16 @@ export const defaultSiteContent: SiteContentState = {
       status: 'published',
     },
   ],
+  r2rResearchCards: [
+    {
+      title: 'งานวิจัยจากงานประจำ R2R',
+      subtitle: 'Routine to Research',
+      description: 'รวบรวมผลงานวิจัยจากงานประจำ',
+      iconKey: 'file',
+      color: 'bg-emerald-600',
+      actionLabel: 'อ่านเพิ่มเติม',
+      pdfUrl: '',
+      status: 'published',
+    },
+  ],
 };
