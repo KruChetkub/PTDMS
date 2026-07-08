@@ -26,6 +26,7 @@ function normalizePlanCards(cards: SiteContentPlanCard[] | undefined, fallbackCa
       actionLabel: card.actionLabel || fallbackCard.actionLabel,
       pdfUrl: card.pdfUrl ?? '',
       coverImageUrl: card.coverImageUrl ?? fallbackCard.coverImageUrl ?? '',
+      coverImageLayout: card.coverImageLayout === 'landscape' ? 'landscape' : fallbackCard.coverImageLayout || 'portrait',
       status: card.status || fallbackCard.status,
     };
   });

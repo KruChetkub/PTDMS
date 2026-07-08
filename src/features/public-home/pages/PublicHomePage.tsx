@@ -52,6 +52,7 @@ function mapVisiblePlanCards(cards: SiteContentPlanCard[]) {
       actionLabel: card.actionLabel,
       pdfUrl: card.pdfUrl,
       coverImageUrl: card.coverImageUrl,
+      coverImageLayout: card.coverImageLayout,
     }));
 }
 

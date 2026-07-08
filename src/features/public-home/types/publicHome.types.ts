@@ -30,6 +30,7 @@ export type HomePlanCard = {
   actionLabel: string;
   pdfUrl?: string;
   coverImageUrl?: string;
+  coverImageLayout?: 'portrait' | 'landscape';
 };
 
 export type HomePlanSection = {

@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { ChevronDown, CircleHelp, Newspaper } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { ChevronDown, ChevronLeft, ChevronRight, CircleHelp, Newspaper } from 'lucide-react';
 import type { HomeFaqItem, HomeNewsItem, HomePlanSection } from '../types/publicHome.types';
 
 type MobileSectionId = string;
@@ -10,36 +10,42 @@ type HomeMobileSectionLauncherProps = {
   faqs: HomeFaqItem[];
 };
 
-const mobileSectionToneClass: Record<string, { icon: string; panel: string; text: string }> = {
+const mobileSectionToneClass: Record<string, { icon: string; panel: string; text: string; action: string }> = {
   emerald: {
     icon: 'bg-[#087446] text-white',
     panel: 'border-[#7BC5A4] bg-[#EAF5F0]',
     text: 'text-[#087446]',
+    action: 'border-[#7BC5A4] text-[#087446]',
   },
   rose: {
     icon: 'bg-[#F54A85] text-white',
     panel: 'border-[#F7A5C2] bg-[#FDF0F5]',
     text: 'text-[#F54A85]',
+    action: 'border-[#F7A5C2] text-[#F54A85]',
   },
   blue: {
     icon: 'bg-[#2A7DDA] text-white',
     panel: 'border-[#A7C9F0] bg-[#EEF5FD]',
     text: 'text-[#2A7DDA]',
+    action: 'border-[#A7C9F0] text-[#2A7DDA]',
   },
   violet: {
     icon: 'bg-[#6E42C1] text-white',
     panel: 'border-[#C8B4E8] bg-[#F3EFFB]',
     text: 'text-[#6E42C1]',
+    action: 'border-[#C8B4E8] text-[#6E42C1]',
   },
   orange: {
     icon: 'bg-[#F57C00] text-white',
     panel: 'border-[#F9C28A] bg-[#FFF4EC]',
     text: 'text-[#F57C00]',
+    action: 'border-[#F9C28A] text-[#F57C00]',
   },
   slate: {
     icon: 'bg-slate-700 text-white',
     panel: 'border-slate-200 bg-white',
     text: 'text-slate-700',
+    action: 'border-slate-200 text-slate-700',
   },
 };
 
@@ -60,8 +66,60 @@ const twoLineClampStyle = {
   overflow: 'hidden',
 } as const;
 
+function getMobileCardsPerPage(width: number) {
+  return width >= 640 ? 2 : 1;
+}
+
 export function HomeMobileSectionLauncher({ planSections, news, faqs }: HomeMobileSectionLauncherProps) {
   const [activeSectionId, setActiveSectionId] = useState<MobileSectionId | null>(null);
+  const [cardsPerPage, setCardsPerPage] = useState(() =>
+    typeof window === 'undefined' ? 1 : getMobileCardsPerPage(window.innerWidth),
+  );
+  const [sectionPages, setSectionPages] = useState<Record<string, number>>({});
+  const sectionCardCounts = useMemo(
+    () => planSections.map((section) => `${section.id}:${section.cards.length}`).join('|'),
+    [planSections],
+  );
+
+  useEffect(() => {
+    const updateCardsPerPage = () => setCardsPerPage(getMobileCardsPerPage(window.innerWidth));
+
+    updateCardsPerPage();
+    window.addEventListener('resize', updateCardsPerPage);
+
+    return () => window.removeEventListener('resize', updateCardsPerPage);
+  }, []);
+
+  useEffect(() => {
+    setSectionPages((currentPages) => {
+      let changed = false;
+      const nextPages = { ...currentPages };
+
+      planSections.forEach((section) => {
+        const totalPages = Math.max(1, Math.ceil(section.cards.length / cardsPerPage));
+        const currentPage = nextPages[section.id] || 0;
+
+        if (currentPage >= totalPages) {
+          nextPages[section.id] = totalPages - 1;
+          changed = true;
+        }
+      });
+
+      return changed ? nextPages : currentPages;
+    });
+  }, [cardsPerPage, sectionCardCounts, planSections]);
+
+  const goToSectionPage = (sectionId: string, totalPages: number, direction: 'previous' | 'next') => {
+    setSectionPages((currentPages) => {
+      const currentPage = currentPages[sectionId] || 0;
+      const nextPage = direction === 'next'
+        ? Math.min(currentPage + 1, totalPages - 1)
+        : Math.max(currentPage - 1, 0);
+
+      return { ...currentPages, [sectionId]: nextPage };
+    });
+  };
+
   const sectionItems = [
     ...planSections.map((section) => ({
       id: section.id,
@@ -92,6 +150,9 @@ export function HomeMobileSectionLauncher({ planSections, news, faqs }: HomeMobi
     },
   ];
   const activeSection = sectionItems.find((item) => item.id === activeSectionId);
+  const activeTone = activeSection
+    ? mobileSectionToneClass[activeSection.tone] || mobileSectionToneClass.slate
+    : mobileSectionToneClass.slate;
 
   return (
     <section className="bg-slate-50 px-4 py-6 lg:hidden">
@@ -124,10 +185,10 @@ export function HomeMobileSectionLauncher({ planSections, news, faqs }: HomeMobi
         </div>
 
         {activeSection ? (
-          <div className={`mt-4 rounded-md border p-4 ${mobileSectionToneClass[activeSection.tone]?.panel || mobileSectionToneClass.slate.panel}`}>
+          <div className={`mt-4 rounded-md border p-4 ${activeTone.panel}`}>
             <div className="flex items-center justify-between gap-3">
               <h2
-                className={`text-base font-semibold tracking-normal ${mobileSectionToneClass[activeSection.tone]?.text || 'text-slate-800'}`}
+                className={`text-base font-semibold tracking-normal ${activeTone.text}`}
                 style={twoLineClampStyle}
                 title={activeSection.label}
               >
@@ -136,36 +197,78 @@ export function HomeMobileSectionLauncher({ planSections, news, faqs }: HomeMobi
               <ChevronDown className="h-5 w-5 rotate-180 text-slate-500" aria-hidden="true" />
             </div>
 
-            {activeSection.type === 'plan' && activeSection.section ? (
-              <div className="mt-4 grid grid-cols-2 gap-3">
-                {activeSection.section.cards.map((card, cardIndex) => {
-                  const Icon = card.icon;
-                  const ActionElement = card.pdfUrl ? 'a' : 'button';
+            {activeSection.type === 'plan' && activeSection.section ? (() => {
+              const currentPage = sectionPages[activeSection.id] || 0;
+              const totalPages = Math.max(1, Math.ceil(activeSection.section.cards.length / cardsPerPage));
+              const visibleCards = activeSection.section.cards.slice(currentPage * cardsPerPage, currentPage * cardsPerPage + cardsPerPage);
+              const canGoPrevious = currentPage > 0;
+              const canGoNext = currentPage < totalPages - 1;
+              const cardGridStyle = {
+                gridTemplateColumns: `repeat(${Math.max(1, Math.min(cardsPerPage, visibleCards.length))}, minmax(0, 1fr))`,
+              };
 
-                  return (
-                    <ActionElement
-                      key={`${activeSection.id}-${card.title}-${card.subtitle}-${cardIndex}`}
-                      {...(card.pdfUrl
-                        ? { href: card.pdfUrl, target: '_blank', rel: 'noreferrer' }
-                        : { type: 'button' })}
-                      className="flex min-h-36 flex-col items-center justify-start rounded-md border border-white/80 bg-white p-3 text-center text-slate-900 shadow-sm"
-                    >
-                      {card.coverImageUrl ? (
-                        <span className="aspect-[9/16] w-full max-w-[74px] overflow-hidden rounded-md border border-slate-200 bg-slate-100">
-                          <img src={card.coverImageUrl} alt={`ภาพหน้าปก ${card.title}`} className="h-full w-full object-cover" />
-                        </span>
-                      ) : (
-                        <span className={`flex h-11 w-11 items-center justify-center rounded-2xl ${card.color} text-white`}>
-                          <Icon className="h-5 w-5" aria-hidden="true" />
-                        </span>
-                      )}
-                      <span className="mt-3 text-xs font-semibold leading-5">{card.title}</span>
-                      <span className="mt-1 text-[11px] leading-4 text-slate-500">{card.subtitle}</span>
-                    </ActionElement>
-                  );
-                })}
-              </div>
-            ) : null}
+              return (
+                <div className="mt-4">
+                  {totalPages > 1 ? (
+                    <div className="mb-3 flex items-center justify-end gap-2">
+                      <span className={`text-xs font-semibold ${activeTone.text}`}>
+                        {currentPage + 1}/{totalPages}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => goToSectionPage(activeSection.id, totalPages, 'previous')}
+                        disabled={!canGoPrevious}
+                        className={`inline-flex h-8 w-8 items-center justify-center rounded-md border bg-white shadow-sm transition disabled:cursor-not-allowed disabled:opacity-40 ${activeTone.action}`}
+                        aria-label={`ย้อนกลับ ${activeSection.label}`}
+                      >
+                        <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => goToSectionPage(activeSection.id, totalPages, 'next')}
+                        disabled={!canGoNext}
+                        className={`inline-flex h-8 w-8 items-center justify-center rounded-md border bg-white shadow-sm transition disabled:cursor-not-allowed disabled:opacity-40 ${activeTone.action}`}
+                        aria-label={`ถัดไป ${activeSection.label}`}
+                      >
+                        <ChevronRight className="h-4 w-4" aria-hidden="true" />
+                      </button>
+                    </div>
+                  ) : null}
+
+                  <div className="grid gap-3" style={cardGridStyle}>
+                    {visibleCards.map((card, cardIndex) => {
+                      const Icon = card.icon;
+                      const coverImageLayout = card.coverImageLayout === 'landscape' ? 'landscape' : 'portrait';
+                      const coverAspectClass = coverImageLayout === 'landscape' ? 'aspect-[16/9]' : 'aspect-[9/16]';
+                      const ActionElement = card.pdfUrl ? 'a' : 'button';
+                      const absoluteCardIndex = currentPage * cardsPerPage + cardIndex;
+
+                      return (
+                        <ActionElement
+                          key={`${activeSection.id}-${card.title}-${card.subtitle}-${absoluteCardIndex}`}
+                          {...(card.pdfUrl
+                            ? { href: card.pdfUrl, target: '_blank', rel: 'noreferrer' }
+                            : { type: 'button' })}
+                          className="flex min-h-36 flex-col items-center justify-start rounded-md border border-white/80 bg-white p-3 text-center text-slate-900 shadow-sm"
+                        >
+                          {card.coverImageUrl ? (
+                            <span className={`${coverAspectClass} w-full max-w-[74px] overflow-hidden rounded-md border border-slate-200 bg-slate-100`}>
+                              <img src={card.coverImageUrl} alt={`ภาพหน้าปก ${card.title}`} className="h-full w-full object-cover" />
+                            </span>
+                          ) : (
+                            <span className={`flex h-11 w-11 items-center justify-center rounded-2xl ${card.color} text-white`}>
+                              <Icon className="h-5 w-5" aria-hidden="true" />
+                            </span>
+                          )}
+                          <span className="mt-3 text-xs font-semibold leading-5">{card.title}</span>
+                          <span className="mt-1 text-[11px] leading-4 text-slate-500">{card.subtitle}</span>
+                        </ActionElement>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })() : null}
 
             {activeSection.type === 'news' ? (
               <div className="mt-4 grid gap-3">

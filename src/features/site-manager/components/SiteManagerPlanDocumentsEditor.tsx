@@ -119,6 +119,7 @@ export function SiteManagerPlanDocumentsEditor({
         actionLabel: 'รายละเอียด',
         pdfUrl: '',
         coverImageUrl: '',
+        coverImageLayout: 'portrait',
         uploadedFileName: '',
         status: 'published',
       },
@@ -191,6 +192,8 @@ export function SiteManagerPlanDocumentsEditor({
         {planCards.map((card, index) => {
           const isExpanded = expandedPlanIndex === index;
           const isPublished = card.status === 'published';
+          const coverImageLayout = card.coverImageLayout === 'landscape' ? 'landscape' : 'portrait';
+          const coverAspectClass = coverImageLayout === 'landscape' ? 'aspect-[16/9]' : 'aspect-[9/16]';
 
           return (
             <article id={`site-manager-plan-card-${index}`} key={`${card.title}-${index}`} className="scroll-mt-24 rounded-md border border-slate-200 bg-white shadow-sm">
@@ -311,7 +314,7 @@ export function SiteManagerPlanDocumentsEditor({
                         type="button"
                         onClick={() => card.coverImageUrl && setCoverPreview({ title: card.title, imageUrl: card.coverImageUrl })}
                         disabled={!card.coverImageUrl}
-                        className="group aspect-[9/16] w-full overflow-hidden rounded-md border border-slate-200 bg-slate-100 text-slate-400 transition hover:border-brand-300 disabled:cursor-default disabled:hover:border-slate-200"
+                        className={`group ${coverAspectClass} w-full overflow-hidden rounded-md border border-slate-200 bg-slate-100 text-slate-400 transition hover:border-brand-300 disabled:cursor-default disabled:hover:border-slate-200`}
                         title={card.coverImageUrl ? 'ดูภาพหน้าปกขนาดใหญ่' : 'ยังไม่มีภาพหน้าปก'}
                       >
                         {card.coverImageUrl ? (
@@ -329,8 +332,38 @@ export function SiteManagerPlanDocumentsEditor({
                         )}
                       </button>
                       <div className="grid content-start gap-3">
+                        <div className="grid gap-2">
+                          <span className="text-sm font-medium text-slate-700">ขนาดภาพหน้าปก</span>
+                          <div className="grid grid-cols-2 gap-2">
+                            <button
+                              type="button"
+                              onClick={() => updatePlanCard(index, 'coverImageLayout', 'portrait')}
+                              className={`rounded-md border px-3 py-2 text-xs font-semibold transition ${
+                                coverImageLayout === 'portrait'
+                                  ? 'border-brand-500 bg-brand-50 text-brand-700'
+                                  : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                              }`}
+                            >
+                              360 × 640 px
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => updatePlanCard(index, 'coverImageLayout', 'landscape')}
+                              className={`rounded-md border px-3 py-2 text-xs font-semibold transition ${
+                                coverImageLayout === 'landscape'
+                                  ? 'border-brand-500 bg-brand-50 text-brand-700'
+                                  : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                              }`}
+                            >
+                              640 × 360 px
+                            </button>
+                          </div>
+                        </div>
+
                         <label className="block">
-                          <span className="text-sm font-medium text-slate-700">ภาพหน้าปก 360 × 640 px</span>
+                          <span className="text-sm font-medium text-slate-700">
+                            ภาพหน้าปก {coverImageLayout === 'landscape' ? '640 × 360 px' : '360 × 640 px'}
+                          </span>
                           <input
                             className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"
                             value={card.coverImageUrl || ''}

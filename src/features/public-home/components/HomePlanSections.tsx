@@ -1,4 +1,5 @@
-import { ArrowRight } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { ArrowRight, ChevronLeft, ChevronRight } from 'lucide-react';
 import { HomePlanLevelsBanner } from './HomePlanLevelsBanner';
 import { RevealOnScroll } from './RevealOnScroll';
 import type { HomePlanSection } from '../types/publicHome.types';
@@ -51,17 +52,61 @@ type HomePlanSectionsProps = {
   logoUrl: string;
 };
 
-function getPlanCardGridClass(cardCount: number) {
-  if (cardCount <= 1) return 'lg:grid-cols-1';
-  if (cardCount === 2) return 'lg:grid-cols-2';
-  if (cardCount === 3) return 'lg:grid-cols-3';
-  if (cardCount === 4) return 'lg:grid-cols-4';
-  if (cardCount === 5) return 'lg:grid-cols-3 xl:grid-cols-5';
-  if (cardCount === 6) return 'lg:grid-cols-3 xl:grid-cols-6';
-  return 'lg:grid-cols-4 xl:grid-cols-7';
+function getCardsPerPage(width: number) {
+  if (width >= 1024) return 4;
+  if (width >= 640) return 2;
+  return 1;
 }
 
 export function HomePlanSections({ sections, logoUrl }: HomePlanSectionsProps) {
+  const [cardsPerPage, setCardsPerPage] = useState(() =>
+    typeof window === 'undefined' ? 4 : getCardsPerPage(window.innerWidth),
+  );
+  const [sectionPages, setSectionPages] = useState<Record<string, number>>({});
+  const sectionCardCounts = useMemo(
+    () => sections.map((section) => `${section.id}:${section.cards.length}`).join('|'),
+    [sections],
+  );
+
+  useEffect(() => {
+    const updateCardsPerPage = () => setCardsPerPage(getCardsPerPage(window.innerWidth));
+
+    updateCardsPerPage();
+    window.addEventListener('resize', updateCardsPerPage);
+
+    return () => window.removeEventListener('resize', updateCardsPerPage);
+  }, []);
+
+  useEffect(() => {
+    setSectionPages((currentPages) => {
+      let changed = false;
+      const nextPages = { ...currentPages };
+
+      sections.forEach((section) => {
+        const totalPages = Math.max(1, Math.ceil(section.cards.length / cardsPerPage));
+        const currentPage = nextPages[section.id] || 0;
+
+        if (currentPage >= totalPages) {
+          nextPages[section.id] = totalPages - 1;
+          changed = true;
+        }
+      });
+
+      return changed ? nextPages : currentPages;
+    });
+  }, [cardsPerPage, sectionCardCounts, sections]);
+
+  const goToSectionPage = (sectionId: string, totalPages: number, direction: 'previous' | 'next') => {
+    setSectionPages((currentPages) => {
+      const currentPage = currentPages[sectionId] || 0;
+      const nextPage = direction === 'next'
+        ? Math.min(currentPage + 1, totalPages - 1)
+        : Math.max(currentPage - 1, 0);
+
+      return { ...currentPages, [sectionId]: nextPage };
+    });
+  };
+
   return (
     <section className="bg-slate-50 py-12 sm:py-16">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
@@ -70,6 +115,15 @@ export function HomePlanSections({ sections, logoUrl }: HomePlanSectionsProps) {
         <div className="mt-8 grid gap-5">
           {sections.map((section, sectionIndex) => {
             const tone = sectionToneClass[section.tone] || sectionToneClass.emerald;
+            const currentPage = sectionPages[section.id] || 0;
+            const totalPages = Math.max(1, Math.ceil(section.cards.length / cardsPerPage));
+            const visibleCards = section.cards.slice(currentPage * cardsPerPage, currentPage * cardsPerPage + cardsPerPage);
+            const canGoPrevious = currentPage > 0;
+            const canGoNext = currentPage < totalPages - 1;
+            const visibleColumnCount = Math.max(1, Math.min(cardsPerPage, visibleCards.length));
+            const cardGridStyle = {
+              gridTemplateColumns: `repeat(${visibleColumnCount}, minmax(0, 1fr))`,
+            };
 
             return (
               <RevealOnScroll key={section.id} delayMs={sectionIndex * 140}>
@@ -78,48 +132,80 @@ export function HomePlanSections({ sections, logoUrl }: HomePlanSectionsProps) {
                   className={`scroll-mt-24 rounded-md p-[2px] ${tone.border} ${tone.shadow}`}
                 >
                   <div className={`rounded-md p-4 sm:p-5 ${tone.body}`}>
-                  <div className="flex flex-wrap items-center gap-3">
-                    <span className={`flex h-10 w-10 items-center justify-center rounded-full bg-white text-lg font-bold shadow-sm ring-1 ${tone.badge}`}>
-                      {section.number}
-                    </span>
-                    <h3 className="text-xl font-semibold tracking-normal">{section.title}</h3>
-                  </div>
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div className="flex min-w-0 items-center gap-3">
+                        <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-lg font-bold shadow-sm ring-1 ${tone.badge}`}>
+                          {section.number}
+                        </span>
+                        <h3 className="text-xl font-semibold tracking-normal">{section.title}</h3>
+                      </div>
 
-                  <div className={`mt-5 grid gap-4 sm:grid-cols-2 ${getPlanCardGridClass(section.cards.length)}`}>
-                    {section.cards.map((card, cardIndex) => {
-                      const Icon = card.icon;
-                      const ActionElement = card.pdfUrl ? 'a' : 'button';
-                      return (
-                        <div
-                          key={`${section.id}-${card.title}-${card.subtitle}-${cardIndex}`}
-                          className={`flex min-h-64 flex-col rounded-md border bg-white p-4 text-center text-slate-900 shadow-sm ${tone.card}`}
-                        >
-                          {card.coverImageUrl ? (
-                            <div className="mx-auto aspect-[9/16] w-full max-w-[112px] overflow-hidden rounded-md border border-slate-200 bg-slate-100">
-                              <img src={card.coverImageUrl} alt={`ภาพหน้าปก ${card.title}`} className="h-full w-full object-cover" />
-                            </div>
-                          ) : (
-                            <div className={`mx-auto flex h-14 w-14 items-center justify-center rounded-full ${card.color} text-white`}>
-                              <Icon className="h-7 w-7" aria-hidden="true" />
-                            </div>
-                          )}
-                          <h4 className="mt-4 text-sm font-semibold leading-6 tracking-normal">{card.title}</h4>
-                          <p className="mt-2 text-sm text-slate-600">{card.subtitle}</p>
-                          {card.description ? <p className="mt-1 text-xs text-slate-500">{card.description}</p> : null}
-                          <ActionElement
-                            {...(card.pdfUrl
-                              ? { href: card.pdfUrl, target: '_blank', rel: 'noreferrer' }
-                              : { type: 'button' })}
-                            className={`mt-auto inline-flex items-center justify-center gap-2 rounded-md border px-3 py-2 text-sm font-semibold transition ${tone.action}`}
+                      {totalPages > 1 ? (
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-semibold text-current/70">
+                            {currentPage + 1}/{totalPages}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => goToSectionPage(section.id, totalPages, 'previous')}
+                            disabled={!canGoPrevious}
+                            className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-white/70 bg-white text-current shadow-sm transition hover:bg-white/80 disabled:cursor-not-allowed disabled:opacity-40"
+                            aria-label={`ย้อนกลับ ${section.title}`}
                           >
-                            {card.actionLabel}
-                            <ArrowRight className="h-4 w-4" aria-hidden="true" />
-                          </ActionElement>
+                            <ChevronLeft className="h-5 w-5" aria-hidden="true" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => goToSectionPage(section.id, totalPages, 'next')}
+                            disabled={!canGoNext}
+                            className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-white/70 bg-white text-current shadow-sm transition hover:bg-white/80 disabled:cursor-not-allowed disabled:opacity-40"
+                            aria-label={`ถัดไป ${section.title}`}
+                          >
+                            <ChevronRight className="h-5 w-5" aria-hidden="true" />
+                          </button>
                         </div>
-                      );
-                    })}
+                      ) : null}
+                    </div>
+
+                    <div className="mt-5 grid gap-4" style={cardGridStyle}>
+                      {visibleCards.map((card, cardIndex) => {
+                        const Icon = card.icon;
+                        const coverImageLayout = card.coverImageLayout === 'landscape' ? 'landscape' : 'portrait';
+                        const coverAspectClass = coverImageLayout === 'landscape' ? 'aspect-[16/9]' : 'aspect-[9/16]';
+                        const ActionElement = card.pdfUrl ? 'a' : 'button';
+                        const absoluteCardIndex = currentPage * cardsPerPage + cardIndex;
+
+                        return (
+                          <div
+                            key={`${section.id}-${card.title}-${card.subtitle}-${absoluteCardIndex}`}
+                            className={`flex min-h-64 flex-col rounded-md border bg-white p-4 text-center text-slate-900 shadow-sm ${tone.card}`}
+                          >
+                            {card.coverImageUrl ? (
+                              <div className={`mx-auto ${coverAspectClass} w-full max-w-[112px] overflow-hidden rounded-md border border-slate-200 bg-slate-100`}>
+                                <img src={card.coverImageUrl} alt={`ภาพหน้าปก ${card.title}`} className="h-full w-full object-cover" />
+                              </div>
+                            ) : (
+                              <div className={`mx-auto flex h-14 w-14 items-center justify-center rounded-full ${card.color} text-white`}>
+                                <Icon className="h-7 w-7" aria-hidden="true" />
+                              </div>
+                            )}
+                            <h4 className="mt-4 text-sm font-semibold leading-6 tracking-normal">{card.title}</h4>
+                            <p className="mt-2 text-sm text-slate-600">{card.subtitle}</p>
+                            {card.description ? <p className="mt-1 text-xs text-slate-500">{card.description}</p> : null}
+                            <ActionElement
+                              {...(card.pdfUrl
+                                ? { href: card.pdfUrl, target: '_blank', rel: 'noreferrer' }
+                                : { type: 'button' })}
+                              className={`mt-auto inline-flex items-center justify-center gap-2 rounded-md border px-3 py-2 text-sm font-semibold transition ${tone.action}`}
+                            >
+                              {card.actionLabel}
+                              <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                            </ActionElement>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
                 </article>
               </RevealOnScroll>
             );

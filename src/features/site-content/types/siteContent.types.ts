@@ -1,4 +1,5 @@
 export type SiteContentStatus = 'published' | 'draft' | 'scheduled';
+export type SiteContentPlanCoverLayout = 'portrait' | 'landscape';
 
 export type SiteContentHeroBanner = {
   eyebrow: string;
@@ -46,6 +47,7 @@ export type SiteContentPlanCard = {
   actionLabel: string;
   pdfUrl: string;
   coverImageUrl?: string;
+  coverImageLayout?: SiteContentPlanCoverLayout;
   uploadedFileName?: string;
   status: SiteContentStatus;
 };
