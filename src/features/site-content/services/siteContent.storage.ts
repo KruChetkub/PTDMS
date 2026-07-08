@@ -25,6 +25,7 @@ function normalizePlanCards(cards: SiteContentPlanCard[] | undefined, fallbackCa
       color: card.color || fallbackCard.color,
       actionLabel: card.actionLabel || fallbackCard.actionLabel,
       pdfUrl: card.pdfUrl ?? '',
+      coverImageUrl: card.coverImageUrl ?? fallbackCard.coverImageUrl ?? '',
       status: card.status || fallbackCard.status,
     };
   });

@@ -45,6 +45,7 @@ export type SiteContentPlanCard = {
   color: string;
   actionLabel: string;
   pdfUrl: string;
+  coverImageUrl?: string;
   uploadedFileName?: string;
   status: SiteContentStatus;
 };

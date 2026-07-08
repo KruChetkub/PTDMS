@@ -1,16 +1,18 @@
+import { useState } from 'react';
 import { PageHeader } from '../../../components/ui/PageHeader';
 import { useAuthStore } from '../../../stores/auth.store';
 import { useSiteContentDraft } from '../../site-content/hooks/useSiteContent';
 import { SiteManagerBannerPreview } from '../components/SiteManagerBannerPreview';
 import { SiteManagerBrandingEditor } from '../components/SiteManagerBrandingEditor';
 import { SiteManagerContentEditor } from '../components/SiteManagerContentEditor';
-import { SiteManagerEditableAreas } from '../components/SiteManagerEditableAreas';
 import { SiteManagerPlanDocumentsEditor } from '../components/SiteManagerPlanDocumentsEditor';
+import { SiteManagerPlanPreview } from '../components/SiteManagerPlanPreview';
 import { SiteManagerSecuritySettings } from '../components/SiteManagerSecuritySettings';
-import { SiteManagerSummaryGrid } from '../components/SiteManagerSummaryGrid';
-import { SiteManagerWorkflowPanel } from '../components/SiteManagerWorkflowPanel';
-import { siteManagerEditableAreas, siteManagerSummaryItems } from '../data/siteManager.mock';
-import { useState } from 'react';
+
+type PlanFocusTarget = {
+  index: number;
+  requestId: number;
+};
 
 type SiteManagerTab =
   | 'branding'
@@ -39,8 +41,30 @@ export function SiteManagerPage() {
   const [draftMessage, setDraftMessage] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [activeTab, setActiveTab] = useState<SiteManagerTab>('branding');
+  const [planFocusTarget, setPlanFocusTarget] = useState<PlanFocusTarget | null>(null);
   const canManageSecurity = profile?.role === 'super_admin';
   const visibleTabs = siteManagerTabs.filter((tab) => !tab.superAdminOnly || canManageSecurity);
+  const activePlanPreview =
+    activeTab === 'plan-documents'
+      ? { title: 'แผนระดับต่าง ๆ', cards: contentDraft.planLevelCards }
+      : activeTab === 'disease-control-plan'
+        ? { title: 'แผนงานควบคุมโรค', cards: contentDraft.diseaseControlPlanCards }
+        : activeTab === 'annual-guidelines'
+          ? { title: 'แนวทางประจำปี', cards: contentDraft.annualGuidelineCards }
+          : activeTab === 'risk-management'
+            ? { title: 'แผนบริหารความเสี่ยง', cards: contentDraft.riskManagementPlanCards }
+            : activeTab === 'executive-policy'
+              ? { title: 'นโยบายผู้บริหาร', cards: contentDraft.executivePolicyCards }
+              : null;
+
+  const handleTabChange = (tabId: SiteManagerTab) => {
+    setActiveTab(tabId);
+    setPlanFocusTarget(null);
+  };
+
+  const handlePlanPreviewSelect = (index: number) => {
+    setPlanFocusTarget((currentTarget) => ({ index, requestId: (currentTarget?.requestId ?? 0) + 1 }));
+  };
 
   const handleSaveDraft = async () => {
     setIsSaving(true);
@@ -62,7 +86,7 @@ export function SiteManagerPage() {
     <div className="space-y-6">
       <PageHeader
         title="จัดการหน้าเว็บไซต์"
-        description="พื้นที่สำหรับ SuperAdmin และ Admin จัดการ Home banner ข่าวประชาสัมพันธ์ ปุ่มนำทาง และหมวดเอกสารของหน้า public"
+        description="สำหรับ Admin จัดการ Home banner ข่าวประชาสัมพันธ์ ปุ่มนำทาง และหมวดเอกสารของหน้า public"
       />
 
       {draftMessage ? (
@@ -72,15 +96,13 @@ export function SiteManagerPage() {
       ) : null}
 
       <div className="space-y-6">
-        <SiteManagerBannerPreview banner={contentDraft.heroBanner} />
-
         <section className="rounded-md border border-slate-200 bg-white p-2 shadow-sm">
           <div className="flex gap-2 overflow-x-auto pb-1 sm:flex-wrap sm:overflow-visible sm:pb-0">
             {visibleTabs.map((tab) => (
               <button
                 key={tab.id}
                 type="button"
-                onClick={() => setActiveTab(tab.id)}
+                onClick={() => handleTabChange(tab.id)}
                 className={`min-w-max rounded-md px-3 py-2 text-sm font-semibold transition ${
                   activeTab === tab.id ? 'bg-brand-50 text-brand-700' : 'text-slate-600 hover:bg-slate-50'
                 }`}
@@ -90,6 +112,11 @@ export function SiteManagerPage() {
             ))}
           </div>
         </section>
+
+        {activeTab === 'home-content' ? <SiteManagerBannerPreview banner={contentDraft.heroBanner} /> : null}
+        {activePlanPreview ? (
+          <SiteManagerPlanPreview title={activePlanPreview.title} cards={activePlanPreview.cards} onCardSelect={handlePlanPreviewSelect} />
+        ) : null}
 
         {activeTab === 'branding' ? (
           <SiteManagerBrandingEditor
@@ -130,6 +157,7 @@ export function SiteManagerPage() {
             onSaveDraft={handleSaveDraft}
             onResetDraft={handleResetDraft}
             isSaving={isSaving}
+            focusTarget={planFocusTarget}
           />
         ) : activeTab === 'disease-control-plan' ? (
           <SiteManagerPlanDocumentsEditor
@@ -143,6 +171,7 @@ export function SiteManagerPage() {
             onSaveDraft={handleSaveDraft}
             onResetDraft={handleResetDraft}
             isSaving={isSaving}
+            focusTarget={planFocusTarget}
           />
         ) : activeTab === 'annual-guidelines' ? (
           <SiteManagerPlanDocumentsEditor
@@ -156,6 +185,7 @@ export function SiteManagerPage() {
             onSaveDraft={handleSaveDraft}
             onResetDraft={handleResetDraft}
             isSaving={isSaving}
+            focusTarget={planFocusTarget}
           />
         ) : activeTab === 'risk-management' ? (
           <SiteManagerPlanDocumentsEditor
@@ -169,6 +199,7 @@ export function SiteManagerPage() {
             onSaveDraft={handleSaveDraft}
             onResetDraft={handleResetDraft}
             isSaving={isSaving}
+            focusTarget={planFocusTarget}
           />
         ) : activeTab === 'executive-policy' ? (
           <SiteManagerPlanDocumentsEditor
@@ -182,6 +213,7 @@ export function SiteManagerPage() {
             onSaveDraft={handleSaveDraft}
             onResetDraft={handleResetDraft}
             isSaving={isSaving}
+            focusTarget={planFocusTarget}
           />
         ) : canManageSecurity ? (
           <SiteManagerSecuritySettings />
@@ -197,10 +229,6 @@ export function SiteManagerPage() {
             isSaving={isSaving}
           />
         )}
-
-        <SiteManagerEditableAreas areas={siteManagerEditableAreas} />
-        <SiteManagerWorkflowPanel />
-        <SiteManagerSummaryGrid items={siteManagerSummaryItems} />
 
         {loadingSource ? (
           <div className="rounded-md border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600">

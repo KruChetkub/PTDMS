@@ -150,9 +150,15 @@ export function HomeMobileSectionLauncher({ planSections, news, faqs }: HomeMobi
                         : { type: 'button' })}
                       className="flex min-h-36 flex-col items-center justify-start rounded-md border border-white/80 bg-white p-3 text-center text-slate-900 shadow-sm"
                     >
-                      <span className={`flex h-11 w-11 items-center justify-center rounded-2xl ${card.color} text-white`}>
-                        <Icon className="h-5 w-5" aria-hidden="true" />
-                      </span>
+                      {card.coverImageUrl ? (
+                        <span className="aspect-[9/16] w-full max-w-[74px] overflow-hidden rounded-md border border-slate-200 bg-slate-100">
+                          <img src={card.coverImageUrl} alt={`ภาพหน้าปก ${card.title}`} className="h-full w-full object-cover" />
+                        </span>
+                      ) : (
+                        <span className={`flex h-11 w-11 items-center justify-center rounded-2xl ${card.color} text-white`}>
+                          <Icon className="h-5 w-5" aria-hidden="true" />
+                        </span>
+                      )}
                       <span className="mt-3 text-xs font-semibold leading-5">{card.title}</span>
                       <span className="mt-1 text-[11px] leading-4 text-slate-500">{card.subtitle}</span>
                     </ActionElement>

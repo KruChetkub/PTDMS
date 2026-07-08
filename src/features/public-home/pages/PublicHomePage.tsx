@@ -42,7 +42,7 @@ const planSectionCardSelectors: Record<string, (content: SiteContentState) => Si
 
 function mapVisiblePlanCards(cards: SiteContentPlanCard[]) {
   return cards
-    .filter((card) => card.status !== 'scheduled')
+    .filter((card) => card.status === 'published')
     .map((card) => ({
       title: card.title,
       subtitle: card.subtitle,
@@ -51,6 +51,7 @@ function mapVisiblePlanCards(cards: SiteContentPlanCard[]) {
       color: card.color,
       actionLabel: card.actionLabel,
       pdfUrl: card.pdfUrl,
+      coverImageUrl: card.coverImageUrl,
     }));
 }
 

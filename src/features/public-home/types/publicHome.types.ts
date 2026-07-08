@@ -29,6 +29,7 @@ export type HomePlanCard = {
   color: string;
   actionLabel: string;
   pdfUrl?: string;
+  coverImageUrl?: string;
 };
 
 export type HomePlanSection = {

@@ -94,9 +94,15 @@ export function HomePlanSections({ sections, logoUrl }: HomePlanSectionsProps) {
                           key={`${section.id}-${card.title}-${card.subtitle}-${cardIndex}`}
                           className={`flex min-h-64 flex-col rounded-md border bg-white p-4 text-center text-slate-900 shadow-sm ${tone.card}`}
                         >
-                          <div className={`mx-auto flex h-14 w-14 items-center justify-center rounded-full ${card.color} text-white`}>
-                            <Icon className="h-7 w-7" aria-hidden="true" />
-                          </div>
+                          {card.coverImageUrl ? (
+                            <div className="mx-auto aspect-[9/16] w-full max-w-[112px] overflow-hidden rounded-md border border-slate-200 bg-slate-100">
+                              <img src={card.coverImageUrl} alt={`ภาพหน้าปก ${card.title}`} className="h-full w-full object-cover" />
+                            </div>
+                          ) : (
+                            <div className={`mx-auto flex h-14 w-14 items-center justify-center rounded-full ${card.color} text-white`}>
+                              <Icon className="h-7 w-7" aria-hidden="true" />
+                            </div>
+                          )}
                           <h4 className="mt-4 text-sm font-semibold leading-6 tracking-normal">{card.title}</h4>
                           <p className="mt-2 text-sm text-slate-600">{card.subtitle}</p>
                           {card.description ? <p className="mt-1 text-xs text-slate-500">{card.description}</p> : null}
