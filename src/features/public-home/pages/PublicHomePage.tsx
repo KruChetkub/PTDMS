@@ -11,7 +11,6 @@ import { PublicHomeHeader } from '../components/PublicHomeHeader';
 import { usePublishedSiteContent } from '../../site-content/hooks/useSiteContent';
 import { usePublicPageAnalytics } from '../hooks/usePublicPageAnalytics';
 import {
-  homeFaqItems,
   homeHeroBanner,
   homePlanSections,
 } from '../data/publicHome.mock';
@@ -80,6 +79,9 @@ export function PublicHomePage() {
     ],
   };
   const visibleNews = siteContent.newsItems.filter((item) => item.status === 'published');
+  const visibleFaqs = siteContent.faqItems
+    .filter((item) => item.status === 'published')
+    .map((item) => ({ question: item.question, answer: item.answer }));
   const planSections = homePlanSections.map((section) => {
     const selectCards = planSectionCardSelectors[section.id];
     if (!selectCards) return section;
@@ -98,11 +100,11 @@ export function PublicHomePage() {
         <div className="bg-slate-50 px-4 pt-6 lg:hidden">
           <HomePlanLevelsBanner logoUrl={siteContent.brandSettings.logoUrl} />
         </div>
-        <HomeMobileSectionLauncher planSections={planSections} news={visibleNews} faqs={homeFaqItems} />
+        <HomeMobileSectionLauncher planSections={planSections} news={visibleNews} faqs={visibleFaqs} />
         <div className="hidden lg:block">
           <HomePlanSections sections={planSections} logoUrl={siteContent.brandSettings.logoUrl} />
           <HomeNewsSection news={visibleNews} />
-          <HomeFaqSection faqs={homeFaqItems} />
+          <HomeFaqSection faqs={visibleFaqs} />
         </div>
       </main>
       <HomeFooter />

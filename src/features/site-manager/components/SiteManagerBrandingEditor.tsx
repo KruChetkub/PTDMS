@@ -9,6 +9,7 @@ type SiteManagerBrandingEditorProps = {
   onSaveDraft: () => void;
   onResetDraft: () => void;
   isSaving?: boolean;
+  canResetDraft?: boolean;
 };
 
 export function SiteManagerBrandingEditor({
@@ -17,6 +18,7 @@ export function SiteManagerBrandingEditor({
   onSaveDraft,
   onResetDraft,
   isSaving = false,
+  canResetDraft = false,
 }: SiteManagerBrandingEditorProps) {
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -46,13 +48,15 @@ export function SiteManagerBrandingEditor({
         </div>
 
         <div className="grid w-full gap-2 sm:w-auto sm:grid-flow-col">
-          <button
-            type="button"
-            onClick={onResetDraft}
-            className="inline-flex w-full items-center justify-center rounded-md border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 sm:w-fit"
-          >
-            คืนค่าเริ่มต้น
-          </button>
+          {canResetDraft ? (
+            <button
+              type="button"
+              onClick={onResetDraft}
+              className="inline-flex w-full items-center justify-center rounded-md border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 sm:w-fit"
+            >
+              คืนค่าเริ่มต้น
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={onSaveDraft}

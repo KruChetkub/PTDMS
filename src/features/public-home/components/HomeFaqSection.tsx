@@ -11,9 +11,6 @@ export function HomeFaqSection({ faqs }: HomeFaqSectionProps) {
         <div>
           <p className="text-sm font-semibold text-brand-700">FAQ</p>
           <h2 className="mt-2 text-3xl font-semibold tracking-normal text-slate-950">คำถามที่พบบ่อย</h2>
-          <p className="mt-3 text-sm leading-6 text-slate-600">
-            ส่วนนี้เตรียมไว้สำหรับข้อมูลช่วยเหลือผู้ใช้งานหน้า Home และช่องทางเข้าสู่ระบบ
-          </p>
         </div>
 
         <div className="grid gap-3">

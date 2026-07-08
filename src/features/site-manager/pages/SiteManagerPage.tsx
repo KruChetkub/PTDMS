@@ -72,7 +72,7 @@ export function SiteManagerPage() {
     setIsSaving(false);
     setDraftMessage(
       saveTarget === 'supabase'
-        ? 'บันทึกข้อมูลลง Supabase เรียบร้อย หน้า Home จะใช้ข้อมูลชุดนี้'
+        ? 'บันทึกข้อมูลเรียบร้อย'
         : 'บันทึกแบบ fallback ลงเครื่องนี้เรียบร้อย ยังไม่สามารถบันทึก Supabase ได้',
     );
   };
@@ -128,11 +128,13 @@ export function SiteManagerPage() {
             onSaveDraft={handleSaveDraft}
             onResetDraft={handleResetDraft}
             isSaving={isSaving}
+            canResetDraft={canManageSecurity}
           />
         ) : activeTab === 'home-content' ? (
           <SiteManagerContentEditor
             banner={contentDraft.heroBanner}
             newsDrafts={contentDraft.newsItems}
+            faqDrafts={contentDraft.faqItems}
             onBannerChange={(nextBanner) => {
               setContentDraft((currentContent) => ({ ...currentContent, heroBanner: nextBanner }));
               setDraftMessage(null);
@@ -141,9 +143,14 @@ export function SiteManagerPage() {
               setContentDraft((currentContent) => ({ ...currentContent, newsItems: nextNewsDrafts }));
               setDraftMessage(null);
             }}
+            onFaqChange={(nextFaqDrafts) => {
+              setContentDraft((currentContent) => ({ ...currentContent, faqItems: nextFaqDrafts }));
+              setDraftMessage(null);
+            }}
             onSaveDraft={handleSaveDraft}
             onResetDraft={handleResetDraft}
             isSaving={isSaving}
+            canResetDraft={canManageSecurity}
           />
         ) : activeTab === 'plan-documents' ? (
           <SiteManagerPlanDocumentsEditor
@@ -157,6 +164,7 @@ export function SiteManagerPage() {
             onSaveDraft={handleSaveDraft}
             onResetDraft={handleResetDraft}
             isSaving={isSaving}
+            canResetDraft={canManageSecurity}
             focusTarget={planFocusTarget}
           />
         ) : activeTab === 'disease-control-plan' ? (
@@ -171,6 +179,7 @@ export function SiteManagerPage() {
             onSaveDraft={handleSaveDraft}
             onResetDraft={handleResetDraft}
             isSaving={isSaving}
+            canResetDraft={canManageSecurity}
             focusTarget={planFocusTarget}
           />
         ) : activeTab === 'annual-guidelines' ? (
@@ -185,6 +194,7 @@ export function SiteManagerPage() {
             onSaveDraft={handleSaveDraft}
             onResetDraft={handleResetDraft}
             isSaving={isSaving}
+            canResetDraft={canManageSecurity}
             focusTarget={planFocusTarget}
           />
         ) : activeTab === 'risk-management' ? (
@@ -199,6 +209,7 @@ export function SiteManagerPage() {
             onSaveDraft={handleSaveDraft}
             onResetDraft={handleResetDraft}
             isSaving={isSaving}
+            canResetDraft={canManageSecurity}
             focusTarget={planFocusTarget}
           />
         ) : activeTab === 'executive-policy' ? (
@@ -213,6 +224,7 @@ export function SiteManagerPage() {
             onSaveDraft={handleSaveDraft}
             onResetDraft={handleResetDraft}
             isSaving={isSaving}
+            canResetDraft={canManageSecurity}
             focusTarget={planFocusTarget}
           />
         ) : canManageSecurity ? (
@@ -227,6 +239,7 @@ export function SiteManagerPage() {
             onSaveDraft={handleSaveDraft}
             onResetDraft={handleResetDraft}
             isSaving={isSaving}
+            canResetDraft={canManageSecurity}
           />
         )}
 

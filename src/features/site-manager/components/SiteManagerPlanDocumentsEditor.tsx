@@ -21,6 +21,7 @@ type SiteManagerPlanDocumentsEditorProps = {
   onResetDraft: () => void;
   isSaving?: boolean;
   focusTarget?: PlanFocusTarget | null;
+  canResetDraft?: boolean;
 };
 
 type CoverPreviewState = {
@@ -60,6 +61,7 @@ export function SiteManagerPlanDocumentsEditor({
   onResetDraft,
   isSaving = false,
   focusTarget = null,
+  canResetDraft = false,
 }: SiteManagerPlanDocumentsEditorProps) {
   const [uploadingCoverIndex, setUploadingCoverIndex] = useState<number | null>(null);
   const [coverUploadError, setCoverUploadError] = useState<string | null>(null);
@@ -168,13 +170,15 @@ export function SiteManagerPlanDocumentsEditor({
             <FilePlus className="h-4 w-4" aria-hidden="true" />
             เพิ่มรายการ
           </button>
-          <button
-            type="button"
-            onClick={onResetDraft}
-            className="inline-flex w-full items-center justify-center gap-2 rounded-md border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 sm:w-fit"
-          >
-            คืนค่าเริ่มต้น
-          </button>
+          {canResetDraft ? (
+            <button
+              type="button"
+              onClick={onResetDraft}
+              className="inline-flex w-full items-center justify-center gap-2 rounded-md border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 sm:w-fit"
+            >
+              คืนค่าเริ่มต้น
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={onSaveDraft}

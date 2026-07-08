@@ -28,6 +28,12 @@ export type SiteContentNewsItem = {
   status: SiteContentStatus;
 };
 
+export type SiteContentFaqItem = {
+  question: string;
+  answer: string;
+  status: SiteContentStatus;
+};
+
 export type SiteContentPlanIconKey =
   | 'landmark'
   | 'goal'
@@ -56,6 +62,7 @@ export type SiteContentState = {
   brandSettings: SiteContentBrandSettings;
   heroBanner: SiteContentHeroBanner;
   newsItems: SiteContentNewsItem[];
+  faqItems: SiteContentFaqItem[];
   planLevelCards: SiteContentPlanCard[];
   diseaseControlPlanCards: SiteContentPlanCard[];
   annualGuidelineCards: SiteContentPlanCard[];

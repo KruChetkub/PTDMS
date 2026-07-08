@@ -1,5 +1,5 @@
 import { defaultSiteContent } from '../data/siteContent.defaults';
-import type { SiteContentPlanCard, SiteContentState } from '../types/siteContent.types';
+import type { SiteContentFaqItem, SiteContentPlanCard, SiteContentState } from '../types/siteContent.types';
 
 const SITE_CONTENT_STORAGE_KEY = 'ptdms.siteContent.v1';
 export const SITE_CONTENT_UPDATED_EVENT = 'ptdms-site-content-updated';
@@ -32,6 +32,23 @@ function normalizePlanCards(cards: SiteContentPlanCard[] | undefined, fallbackCa
   });
 }
 
+function normalizeFaqItems(items: SiteContentFaqItem[] | undefined) {
+  if (!Array.isArray(items) || items.length === 0) {
+    return defaultSiteContent.faqItems;
+  }
+
+  return items.map((item, index) => {
+    const fallbackItem = defaultSiteContent.faqItems[index] || defaultSiteContent.faqItems[0];
+
+    return {
+      ...fallbackItem,
+      ...item,
+      question: item.question || fallbackItem.question,
+      answer: item.answer || fallbackItem.answer,
+      status: item.status || fallbackItem.status,
+    };
+  });
+}
 export function normalizeSiteContent(content: Partial<SiteContentState> | null | undefined): SiteContentState {
   const imageOverlayOpacity =
     typeof content?.heroBanner?.imageOverlayOpacity === 'number'
@@ -49,6 +66,7 @@ export function normalizeSiteContent(content: Partial<SiteContentState> | null |
       imageOverlayOpacity,
     },
     newsItems: Array.isArray(content?.newsItems) && content.newsItems.length > 0 ? content.newsItems : defaultSiteContent.newsItems,
+    faqItems: normalizeFaqItems(content?.faqItems),
     planLevelCards: normalizePlanCards(content?.planLevelCards, defaultSiteContent.planLevelCards),
     diseaseControlPlanCards: normalizePlanCards(content?.diseaseControlPlanCards, defaultSiteContent.diseaseControlPlanCards),
     annualGuidelineCards: normalizePlanCards(content?.annualGuidelineCards, defaultSiteContent.annualGuidelineCards),

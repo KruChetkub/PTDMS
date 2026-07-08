@@ -43,6 +43,23 @@ export const defaultSiteContent: SiteContentState = {
       status: 'published',
     },
   ],
+  faqItems: [
+    {
+      question: 'ผู้ใช้งานเข้าสู่ระบบได้จากที่ไหน',
+      answer: 'กดปุ่มเข้าสู่ระบบ PTDMS ที่ส่วนบนของหน้า Home หรือเมนูด้านบน',
+      status: 'published',
+    },
+    {
+      question: 'ใครสามารถแก้ไขป้ายประชาสัมพันธ์ได้',
+      answer: 'กำหนดให้ SuperAdmin และ Admin จัดการผ่านโมดูล Site Manager ในระยะถัดไป',
+      status: 'published',
+    },
+    {
+      question: 'เอกสารในหน้า Home จะจัดการอย่างไร',
+      answer: 'แยกเป็นหมวดหมู่ เช่น แผนระดับต่าง ๆ แนวทางประจำปี และนโยบายผู้บริหาร เพื่อค้นหาได้ง่าย',
+      status: 'published',
+    },
+  ],
   planLevelCards: [
     {
       title: 'ยุทธศาสตร์ชาติ 20 ปี',
