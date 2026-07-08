@@ -1,4 +1,4 @@
-import { zodResolver } from '@hookform/resolvers/zod';
+﻿import { zodResolver } from '@hookform/resolvers/zod';
 import { Eye, EyeOff, Lock, LogIn, Mail } from 'lucide-react';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
@@ -55,7 +55,7 @@ export function LoginPage() {
 
       <div className="relative w-full max-w-md space-y-5">
         <div className="text-center text-white">
-          <div className="text-xl font-bold tracking-wide sm:text-2xl">Smart Strategy and Planning Division (DSP)</div>
+          <div className="text-xl font-bold tracking-wide sm:text-2xl">Smart Division Strategy and Planning (Smart DSP)</div>
           <h1 className="mt-5 text-3xl font-semibold">เข้าสู่ระบบ</h1>
           <p className="mt-2 text-sm text-pink-50">กองยุทธศาสตร์และแผนงาน กรมควบคุมโรค</p>
         </div>

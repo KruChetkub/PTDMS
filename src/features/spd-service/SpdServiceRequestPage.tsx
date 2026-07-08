@@ -1,7 +1,7 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, PointerEvent, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { AlertCircle, ArrowLeft, CheckCircle2, Headphones, Loader2, Send } from 'lucide-react';
-import { createSpdServiceTicket, getSpdServiceCategories, notifySpdServiceTicketCreated } from '../../services/spd-service.service';
+import { AlertCircle, ArrowLeft, CheckCircle2, Headphones, ImageIcon, Loader2, Send, X, ZoomIn } from 'lucide-react';
+import { createSpdServiceTicket, getSpdServiceCategories, getSpdServiceDigitalGuideSettings, notifySpdServiceTicketCreated, type SpdServiceDigitalGuide } from '../../services/spd-service.service';
 import { useAuditPageAccess } from '../../hooks/useAuditPageAccess';
 import { useAuthStore } from '../../stores/auth.store';
 import type { SpdServiceCategory, SpdServiceTicket, SpdServiceUrgency } from '../../types/database.types';
@@ -18,16 +18,30 @@ const otherCategoryId = '__other__';
 const otherCategoryName = 'อื่นๆ';
 
 const subjectOptionsByCategory: Record<string, string[]> = {
-  'IT Support': ['แจ้งปัญหาการใช้งานเครื่องคอมพิวเตอร์', 'ขอใช้งาน Internet', 'แจ้ง Reset Password Internet','ขอความอนุเคราะห์เจ้าหน้า IT'],
+  'IT Support': ['แจ้งปัญหาการใช้งานเครื่องคอมพิวเตอร์', 'ขอใช้งาน Internet', 'แจ้ง Reset Password Internet', 'ขอความอนุเคราะห์เจ้าหน้า IT'],
   'Software Support': ['แจ้งใช้งาน AI ChatGPT'],
   'Information System Support': ['แจ้งปัญหาการใช้งานระบบ NAS'],
   'Digital Service': ['ขอใช้งาน Conference', 'ลงข้อมูลหน้า Website', 'ลงข่าวประชาสัมพันธ์'],
+};
+
+type GuideImagePreview = {
+  subject: string;
+  imageUrl: string;
+};
+
+type GuideImageDragState = {
+  pointerId: number;
+  startX: number;
+  startY: number;
+  originX: number;
+  originY: number;
 };
 
 export function SpdServiceRequestPage() {
   useAuditPageAccess({ module: 'spd_service', action: 'spd_service_access', route: '/spd-service/request' });
   const { profile, user } = useAuthStore();
   const [categories, setCategories] = useState<SpdServiceCategory[]>([]);
+  const [digitalGuides, setDigitalGuides] = useState<SpdServiceDigitalGuide[]>([]);
   const [requesterName, setRequesterName] = useState(profile?.full_name || '');
   const [requesterDepartment, setRequesterDepartment] = useState(profile?.work_group || profile?.department || '');
   const [categoryId, setCategoryId] = useState('');
@@ -39,15 +53,19 @@ export function SpdServiceRequestPage() {
   const [error, setError] = useState<string | null>(null);
   const [notificationWarning, setNotificationWarning] = useState<string | null>(null);
   const [createdTicket, setCreatedTicket] = useState<SpdServiceTicket | null>(null);
+  const [selectedGuideImage, setSelectedGuideImage] = useState<GuideImagePreview | null>(null);
+  const [guideImagePan, setGuideImagePan] = useState({ x: 0, y: 0 });
+  const [guideImageDrag, setGuideImageDrag] = useState<GuideImageDragState | null>(null);
 
   useEffect(() => {
     void (async () => {
       try {
         setIsLoadingCategories(true);
         setError(null);
-        const data = await getSpdServiceCategories();
-        setCategories(data);
-        setCategoryId((current) => current || data[0]?.id || otherCategoryId);
+        const [categoryData, guideData] = await Promise.all([getSpdServiceCategories(), getSpdServiceDigitalGuideSettings()]);
+        setCategories(categoryData);
+        setDigitalGuides(guideData);
+        setCategoryId((current) => current || categoryData[0]?.id || otherCategoryId);
       } catch (loadError) {
         console.error('Failed to load DSP Service categories:', loadError);
         setError('ไม่สามารถโหลดประเภทบริการได้');
@@ -78,6 +96,13 @@ export function SpdServiceRequestPage() {
   const selectedCategory = useMemo(() => categoryOptions.find((category) => category.id === categoryId) || null, [categoryOptions, categoryId]);
   const isOtherCategory = selectedCategory?.name === otherCategoryName;
   const subjectOptions = selectedCategory ? subjectOptionsByCategory[selectedCategory.name] || [] : [];
+  const selectedDigitalGuides = useMemo(
+    () =>
+      selectedCategory?.name === 'Digital Service'
+        ? digitalGuides.filter((guide) => guide.enabled && guide.signedImageUrl && selectedSubjects.includes(guide.subject))
+        : [],
+    [digitalGuides, selectedCategory?.name, selectedSubjects],
+  );
   const finalSubject = isOtherCategory ? otherCategoryName : selectedSubjects.join(', ');
 
   const resetIssueFields = () => {
@@ -88,6 +113,46 @@ export function SpdServiceRequestPage() {
 
   const toggleSubject = (option: string) => {
     setSelectedSubjects((current) => (current.includes(option) ? current.filter((item) => item !== option) : [...current, option]));
+  };
+
+  const openGuideImage = (guide: SpdServiceDigitalGuide) => {
+    setSelectedGuideImage({ subject: guide.subject, imageUrl: guide.signedImageUrl });
+    setGuideImagePan({ x: 0, y: 0 });
+    setGuideImageDrag(null);
+  };
+
+  const closeGuideImage = () => {
+    setSelectedGuideImage(null);
+    setGuideImageDrag(null);
+  };
+
+  const handleGuideImagePointerDown = (event: PointerEvent<HTMLDivElement>) => {
+    event.currentTarget.setPointerCapture(event.pointerId);
+    setGuideImageDrag({
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      originX: guideImagePan.x,
+      originY: guideImagePan.y,
+    });
+  };
+
+  const handleGuideImagePointerMove = (event: PointerEvent<HTMLDivElement>) => {
+    if (!guideImageDrag || guideImageDrag.pointerId !== event.pointerId) {
+      return;
+    }
+
+    setGuideImagePan({
+      x: guideImageDrag.originX + event.clientX - guideImageDrag.startX,
+      y: guideImageDrag.originY + event.clientY - guideImageDrag.startY,
+    });
+  };
+
+  const handleGuideImagePointerEnd = (event: PointerEvent<HTMLDivElement>) => {
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    setGuideImageDrag(null);
   };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -255,6 +320,31 @@ export function SpdServiceRequestPage() {
               </div>
             ) : null}
 
+            {selectedDigitalGuides.length > 0 ? (
+              <div className="grid gap-4">
+                {selectedDigitalGuides.map((guide) => (
+                  <section key={guide.subject} className="overflow-hidden rounded-md border border-teal-100 bg-teal-50/40">
+                    <div className="flex items-center gap-2 border-b border-teal-100 bg-white px-4 py-3 text-sm font-semibold text-teal-800">
+                      <ImageIcon className="h-4 w-4" aria-hidden="true" />
+                      {guide.subject}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => openGuideImage(guide)}
+                      className="group relative block w-full bg-white focus:outline-none focus:ring-2 focus:ring-inset focus:ring-teal-500"
+                      aria-label={`เปิดภาพคำแนะนำ ${guide.subject} แบบขนาดใหญ่`}
+                    >
+                      <img src={guide.signedImageUrl} alt={`คำแนะนำ ${guide.subject}`} className="max-h-[560px] w-full object-contain" />
+                      <span className="absolute right-3 top-3 inline-flex items-center gap-1.5 rounded-md bg-slate-950/75 px-2.5 py-1.5 text-xs font-semibold text-white opacity-100 shadow-sm transition group-hover:bg-slate-950 sm:opacity-0 sm:group-hover:opacity-100">
+                        <ZoomIn className="h-3.5 w-3.5" aria-hidden="true" />
+                        ดูภาพใหญ่
+                      </span>
+                    </button>
+                  </section>
+                ))}
+              </div>
+            ) : null}
+
             <div>
               <span className="text-sm font-medium text-slate-700">ระดับความเร่งด่วน</span>
               <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
@@ -309,6 +399,38 @@ export function SpdServiceRequestPage() {
           </div>
         </form>
       </main>
+
+      {selectedGuideImage ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4" onClick={closeGuideImage}>
+          <div className="flex max-h-[94vh] w-full max-w-6xl flex-col overflow-hidden rounded-md bg-white shadow-2xl" onClick={(event) => event.stopPropagation()}>
+            <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
+              <div className="min-w-0">
+                <p className="text-xs font-semibold uppercase text-teal-700">ภาพคำแนะนำ</p>
+                <h2 className="truncate text-base font-semibold text-slate-950">{selectedGuideImage.subject}</h2>
+              </div>
+              <button type="button" onClick={closeGuideImage} className="rounded-md p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-900">
+                <X className="h-5 w-5" aria-hidden="true" />
+              </button>
+            </div>
+            <div
+              className={`min-h-0 flex-1 overflow-hidden bg-slate-100 p-3 ${guideImageDrag ? 'cursor-grabbing' : 'cursor-grab'}`}
+              onPointerDown={handleGuideImagePointerDown}
+              onPointerMove={handleGuideImagePointerMove}
+              onPointerUp={handleGuideImagePointerEnd}
+              onPointerCancel={handleGuideImagePointerEnd}
+              style={{ touchAction: 'none' }}
+            >
+              <img
+                src={selectedGuideImage.imageUrl}
+                alt={`คำแนะนำ ${selectedGuideImage.subject}`}
+                draggable={false}
+                className="mx-auto h-auto max-w-none select-none rounded bg-white object-contain shadow-sm"
+                style={{ transform: `translate(${guideImagePan.x}px, ${guideImagePan.y}px)` }}
+              />
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

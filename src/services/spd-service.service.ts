@@ -77,6 +77,20 @@ export type SaveSpdServiceTelegramSettingsValues = SpdServiceTelegramSettings & 
   updatedBy: string;
 };
 
+export type SpdServiceDigitalGuideSubject = 'ลงข้อมูลหน้า Website' | 'ลงข่าวประชาสัมพันธ์';
+
+export type SpdServiceDigitalGuide = {
+  subject: SpdServiceDigitalGuideSubject;
+  enabled: boolean;
+  imagePath: string;
+  signedImageUrl: string;
+};
+
+export type SaveSpdServiceDigitalGuideSettingsValues = {
+  guides: SpdServiceDigitalGuide[];
+  updatedBy: string;
+};
+
 export type SpdServiceTelegramNotifyResult = {
   sent: boolean;
   skipped?: boolean;
@@ -90,6 +104,17 @@ const telegramSettingKeys = {
   adminUsernames: 'telegram_admin_usernames',
   messageTemplate: 'telegram_ticket_created_template',
 } as const;
+
+const requestGuideSettingKeys = {
+  digitalGuides: 'digital_service_request_guides',
+} as const;
+
+const SPD_SERVICE_REQUEST_GUIDES_BUCKET = 'spd-service-request-guides';
+
+export const defaultSpdServiceDigitalGuides: SpdServiceDigitalGuide[] = [
+  { subject: 'ลงข้อมูลหน้า Website', enabled: true, imagePath: '', signedImageUrl: '' },
+  { subject: 'ลงข่าวประชาสัมพันธ์', enabled: true, imagePath: '', signedImageUrl: '' },
+];
 
 export const defaultSpdServiceTelegramMessageTemplate = [
   '<b>DSP Service: มีคำขอใหม่</b>',
@@ -119,6 +144,14 @@ function parseAdminRecipientIds(value: string | null | undefined) {
   } catch {
     return [];
   }
+}
+
+function sanitizeStorageFileName(fileName: string) {
+  return fileName
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '');
 }
 
 function parseAdminUsernames(value: string | null | undefined) {
@@ -435,6 +468,117 @@ export async function getSpdServiceTelegramSettings(): Promise<SpdServiceTelegra
     adminUsernames: parseAdminUsernames(settingsByKey.get(telegramSettingKeys.adminUsernames)?.setting_value),
     messageTemplate: settingsByKey.get(telegramSettingKeys.messageTemplate)?.setting_value || defaultSpdServiceTelegramMessageTemplate,
   };
+}
+
+function parseDigitalGuideSettings(value: string | null | undefined): SpdServiceDigitalGuide[] {
+  if (!value) {
+    return defaultSpdServiceDigitalGuides;
+  }
+
+  try {
+    const parsed = JSON.parse(value);
+    if (!Array.isArray(parsed)) {
+      return defaultSpdServiceDigitalGuides;
+    }
+
+    return defaultSpdServiceDigitalGuides.map((defaultGuide) => {
+      const savedGuide = parsed.find((item) => item?.subject === defaultGuide.subject);
+      return {
+        subject: defaultGuide.subject,
+        enabled: typeof savedGuide?.enabled === 'boolean' ? savedGuide.enabled : defaultGuide.enabled,
+        imagePath: typeof savedGuide?.imagePath === 'string' ? savedGuide.imagePath : typeof savedGuide?.imageUrl === 'string' ? savedGuide.imageUrl : defaultGuide.imagePath,
+        signedImageUrl: '',
+      };
+    });
+  } catch {
+    return defaultSpdServiceDigitalGuides;
+  }
+}
+
+export async function getSpdServiceDigitalGuideSettings(): Promise<SpdServiceDigitalGuide[]> {
+  const { data, error } = await supabase
+    .from('spd_service_notification_settings')
+    .select('*')
+    .eq('setting_key', requestGuideSettingKeys.digitalGuides)
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  const guides = parseDigitalGuideSettings((data as SpdServiceNotificationSettings | null)?.setting_value);
+
+  return Promise.all(
+    guides.map(async (guide) => {
+      if (!guide.imagePath) {
+        return guide;
+      }
+
+      const { data: signedData, error: signedError } = await supabase.storage
+        .from(SPD_SERVICE_REQUEST_GUIDES_BUCKET)
+        .createSignedUrl(guide.imagePath, 60 * 30);
+
+      if (signedError) {
+        console.error('Failed to sign DSP Service guide image:', signedError);
+        return { ...guide, signedImageUrl: '' };
+      }
+
+      return { ...guide, signedImageUrl: signedData.signedUrl };
+    }),
+  );
+}
+
+export async function uploadSpdServiceDigitalGuideImage(file: File): Promise<Pick<SpdServiceDigitalGuide, 'imagePath' | 'signedImageUrl'>> {
+  const extension = file.name.split('.').pop() || 'png';
+  const safeName = sanitizeStorageFileName(file.name) || `guide.${extension}`;
+  const filePath = `digital-service/${Date.now()}-${safeName}`;
+
+  const { error } = await supabase.storage.from(SPD_SERVICE_REQUEST_GUIDES_BUCKET).upload(filePath, file, {
+    cacheControl: '3600',
+    upsert: true,
+  });
+
+  if (error) {
+    throw new Error(`อัปโหลดรูปภาพไม่สำเร็จ: ${error.message}`);
+  }
+
+  const { data: signedData, error: signedError } = await supabase.storage
+    .from(SPD_SERVICE_REQUEST_GUIDES_BUCKET)
+    .createSignedUrl(filePath, 60 * 30);
+
+  if (signedError) {
+    throw new Error(`สร้างลิงก์รูปภาพชั่วคราวไม่สำเร็จ: ${signedError.message}`);
+  }
+
+  return { imagePath: filePath, signedImageUrl: signedData.signedUrl };
+}
+
+export async function saveSpdServiceDigitalGuideSettings(values: SaveSpdServiceDigitalGuideSettingsValues): Promise<void> {
+  const normalizedGuides = defaultSpdServiceDigitalGuides.map((defaultGuide) => {
+    const guide = values.guides.find((item) => item.subject === defaultGuide.subject);
+    return {
+      subject: defaultGuide.subject,
+      enabled: guide?.enabled ?? defaultGuide.enabled,
+      imagePath: guide?.imagePath?.trim() || '',
+    };
+  });
+
+  const { error } = await supabase
+    .from('spd_service_notification_settings')
+    .upsert(
+      {
+        setting_key: requestGuideSettingKeys.digitalGuides,
+        setting_value: JSON.stringify(normalizedGuides),
+        is_secret: false,
+        is_active: true,
+        updated_by: values.updatedBy,
+      },
+      { onConflict: 'setting_key' },
+    );
+
+  if (error) {
+    throw error;
+  }
 }
 
 export async function saveSpdServiceTelegramSettings(values: SaveSpdServiceTelegramSettingsValues): Promise<void> {

@@ -1,9 +1,11 @@
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import { useState } from 'react';
 
+type FilterOption = string | { value: string; label: string };
+
 type ItAssetFilterSectionProps = {
   title: string;
-  options: string[];
+  options: FilterOption[];
   selected: string[];
   onToggle: (value: string) => void;
   defaultOpen?: boolean;
@@ -26,17 +28,22 @@ export function ItAssetFilterSection({ title, options, selected, onToggle, defau
       {isOpen ? (
         <div className="mt-3 max-h-48 space-y-2 overflow-y-auto pr-1">
           {options.length > 0 ? (
-            options.map((option) => (
-              <label key={option} className="flex cursor-pointer items-start gap-2 text-sm text-slate-600">
-                <input
-                  type="checkbox"
-                  checked={selected.includes(option)}
-                  onChange={() => onToggle(option)}
-                  className="mt-0.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                />
-                <span className="min-w-0 break-words">{option}</span>
-              </label>
-            ))
+            options.map((option) => {
+              const value = typeof option === 'string' ? option : option.value;
+              const label = typeof option === 'string' ? option : option.label;
+
+              return (
+                <label key={value} className="flex cursor-pointer items-start gap-2 text-sm text-slate-600">
+                  <input
+                    type="checkbox"
+                    checked={selected.includes(value)}
+                    onChange={() => onToggle(value)}
+                    className="mt-0.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <span className="min-w-0 break-words">{label}</span>
+                </label>
+              );
+            })
           ) : (
             <p className="text-xs text-slate-400">ไม่พบข้อมูลตัวเลือก</p>
           )}

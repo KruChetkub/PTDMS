@@ -186,6 +186,10 @@ export const router = createBrowserRouter([
         element: <SpdServiceTicketListPage />,
       },
       {
+        path: '/spd-service/settings',
+        element: <SpdServiceTelegramSettingsPage />,
+      },
+      {
         path: '/spd-service/settings/telegram',
         element: <SpdServiceTelegramSettingsPage />,
       },

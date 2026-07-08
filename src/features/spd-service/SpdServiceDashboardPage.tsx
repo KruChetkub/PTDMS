@@ -475,7 +475,7 @@ export function SpdServiceDashboardPage() {
   const [pendingTicketAction, setPendingTicketAction] = useState<PendingTicketAction>(null);
   const [error, setError] = useState<string | null>(null);
   const canManageWorkflow = profile?.role === 'super_admin' || profile?.role === 'admin';
-  const canViewTelegramSettings = profile?.role === 'super_admin' || profile?.role === 'admin' || profile?.role === 'executive';
+  const canViewSettings = profile?.role === 'super_admin' || profile?.role === 'admin' || profile?.role === 'executive';
   const canDeleteTickets = profile?.role === 'super_admin';
 
   const loadDashboard = async () => {
@@ -804,13 +804,13 @@ export function SpdServiceDashboardPage() {
             <p className="mt-1 text-sm text-slate-500">แดชบอร์ดคำขอรับบริการด้านสารสนเทศ</p>
           </div>
           <div className="flex flex-wrap items-center justify-end gap-2">
-            {canViewTelegramSettings ? (
+            {canViewSettings ? (
               <Link
-                to="/spd-service/settings/telegram"
+                to="/spd-service/settings"
                 className="inline-flex items-center gap-2 rounded-md border border-teal-200 bg-teal-50 px-4 py-2 text-sm font-semibold text-teal-700 shadow-sm transition hover:bg-teal-100"
               >
                 <BellRing className="h-4 w-4" aria-hidden="true" />
-                ตั้งค่า Telegram
+                ตั้งค่า
               </Link>
             ) : null}
             <Link

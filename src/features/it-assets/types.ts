@@ -93,5 +93,7 @@ export type ItAssetFilters = {
   graphics: string[];
   disk1Type: string[];
   disk2Type: string[];
+  assetAge: string[];
   workGroup: string[];
 };
+

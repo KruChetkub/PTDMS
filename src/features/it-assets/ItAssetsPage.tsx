@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Activity, AlertCircle, ArrowLeft, CheckCircle2, HardDrive, Monitor, PencilLine, RefreshCw, Search, Server, X } from 'lucide-react';
 import { Bar, BarChart, CartesianGrid, Cell, LabelList, Legend, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
@@ -21,6 +21,7 @@ const emptyFilters: ItAssetFilters = {
   graphics: [],
   disk1Type: [],
   disk2Type: [],
+  assetAge: [],
   workGroup: [],
 };
 
@@ -30,8 +31,17 @@ function uniqueOptions(values: Array<string | number | null | undefined>) {
   );
 }
 
+const assetAgeFilterThresholds = {
+  over5: 5,
+  over7: 7,
+} as const;
+
 function matchesFilter(selected: string[], value: string | number | null | undefined) {
   return selected.length === 0 || selected.includes(cleanFilterValue(value) || '');
+}
+
+function matchesAssetAgeFilter(selected: string[], ageYears: number) {
+  return selected.length === 0 || selected.some((value) => ageYears > assetAgeFilterThresholds[value as keyof typeof assetAgeFilterThresholds]);
 }
 
 export function ItAssetsPage() {
@@ -78,7 +88,7 @@ export function ItAssetsPage() {
     [assets],
   );
 
-  const filteredAssets = useMemo(() => {
+  const baseFilteredAssets = useMemo(() => {
     const keyword = searchTerm.trim().toLowerCase();
 
     return assets.filter((asset) => {
@@ -99,7 +109,25 @@ export function ItAssetsPage() {
         matchesFilter(filters.workGroup, asset.work_group)
       );
     });
-  }, [assets, filters, searchTerm]);
+  }, [assets, filters.assetType, filters.cpu, filters.disk1Type, filters.disk2Type, filters.graphics, filters.memory, filters.operatingSystem, filters.workGroup, searchTerm]);
+
+  const ageFilterOptions = useMemo(
+    () => [
+      {
+        value: 'over5',
+        label: `มากกว่า 5 ปี (${baseFilteredAssets.filter((asset) => asset.ageYears > assetAgeFilterThresholds.over5).length.toLocaleString()})`,
+      },
+      {
+        value: 'over7',
+        label: `มากกว่า 7 ปี (${baseFilteredAssets.filter((asset) => asset.ageYears > assetAgeFilterThresholds.over7).length.toLocaleString()})`,
+      },
+    ],
+    [baseFilteredAssets],
+  );
+
+  const filteredAssets = useMemo(() => {
+    return baseFilteredAssets.filter((asset) => matchesAssetAgeFilter(filters.assetAge, asset.ageYears));
+  }, [baseFilteredAssets, filters.assetAge]);
 
   const latestDataUpdatedAt = useMemo(() => {
     return assets
@@ -206,6 +234,7 @@ export function ItAssetsPage() {
             <ItAssetFilterSection title="Graphics" options={options.graphics} selected={filters.graphics} onToggle={(value) => toggleFilter('graphics', value)} />
             <ItAssetFilterSection title="Disk 1" options={options.disk1Type} selected={filters.disk1Type} onToggle={(value) => toggleFilter('disk1Type', value)} />
             <ItAssetFilterSection title="Disk 2" options={options.disk2Type} selected={filters.disk2Type} onToggle={(value) => toggleFilter('disk2Type', value)} />
+            <ItAssetFilterSection title="อายุการใช้งาน" options={ageFilterOptions} selected={filters.assetAge} onToggle={(value) => toggleFilter('assetAge', value)} />
           </div>
           <button
             type="button"

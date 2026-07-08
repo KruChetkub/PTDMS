@@ -1,11 +1,16 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { AlertCircle, ArrowLeft, BellRing, CheckCircle2, RefreshCw, Save } from 'lucide-react';
+import { AlertCircle, ArrowLeft, BellRing, CheckCircle2, ImageIcon, RefreshCw, Save, Upload } from 'lucide-react';
 import {
   defaultSpdServiceTelegramMessageTemplate,
   getSpdServiceAdminRecipients,
+  getSpdServiceDigitalGuideSettings,
   getSpdServiceTelegramSettings,
+  saveSpdServiceDigitalGuideSettings,
   saveSpdServiceTelegramSettings,
+  uploadSpdServiceDigitalGuideImage,
+  type SpdServiceDigitalGuide,
+  type SpdServiceDigitalGuideSubject,
 } from '../../services/spd-service.service';
 import { useAuthStore } from '../../stores/auth.store';
 import type { Profile } from '../../types/database.types';
@@ -25,6 +30,8 @@ const sampleTelegramTemplateValues: Record<string, string> = {
   description: 'รายละเอียดตัวอย่างสำหรับตรวจสอบข้อความที่ส่งเข้า Telegram',
 };
 
+type SettingsTab = 'notification' | 'message' | 'request';
+
 function renderTelegramTemplatePreview(template: string) {
   return Object.entries(sampleTelegramTemplateValues).reduce(
     (message, [key, value]) => message.split(`{{${key}}}`).join(value),
@@ -34,14 +41,17 @@ function renderTelegramTemplatePreview(template: string) {
 
 export function SpdServiceTelegramSettingsPage() {
   const { profile } = useAuthStore();
-  const canEditSettings = profile?.role === 'super_admin';
-  const [activeTab, setActiveTab] = useState<'notification' | 'message'>('notification');
+  const canEditTelegramSettings = profile?.role === 'super_admin';
+  const canEditRequestSettings = profile?.role === 'super_admin' || profile?.role === 'admin';
+  const [activeTab, setActiveTab] = useState<SettingsTab>('notification');
   const [admins, setAdmins] = useState<Profile[]>([]);
   const [enabled, setEnabled] = useState(false);
   const [chatId, setChatId] = useState('');
   const [adminRecipientIds, setAdminRecipientIds] = useState<string[]>([]);
   const [adminUsernames, setAdminUsernames] = useState<Record<string, string>>({});
   const [messageTemplate, setMessageTemplate] = useState(defaultSpdServiceTelegramMessageTemplate);
+  const [digitalGuides, setDigitalGuides] = useState<SpdServiceDigitalGuide[]>([]);
+  const [uploadingSubject, setUploadingSubject] = useState<SpdServiceDigitalGuideSubject | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -52,6 +62,7 @@ export function SpdServiceTelegramSettingsPage() {
     [adminRecipientIds, admins],
   );
   const messagePreview = useMemo(() => renderTelegramTemplatePreview(messageTemplate), [messageTemplate]);
+  const canSaveActiveTab = activeTab === 'request' ? canEditRequestSettings : canEditTelegramSettings;
 
   const loadSettings = async () => {
     try {
@@ -59,9 +70,10 @@ export function SpdServiceTelegramSettingsPage() {
       setError(null);
       setSuccess(null);
 
-      const [adminData, telegramSettings] = await Promise.all([
+      const [adminData, telegramSettings, guideSettings] = await Promise.all([
         getSpdServiceAdminRecipients(),
         getSpdServiceTelegramSettings(),
+        getSpdServiceDigitalGuideSettings(),
       ]);
 
       setAdmins(adminData);
@@ -70,9 +82,10 @@ export function SpdServiceTelegramSettingsPage() {
       setAdminRecipientIds(telegramSettings.adminRecipientIds);
       setAdminUsernames(telegramSettings.adminUsernames);
       setMessageTemplate(telegramSettings.messageTemplate);
+      setDigitalGuides(guideSettings);
     } catch (loadError) {
-      console.error('Failed to load DSP Service Telegram settings:', loadError);
-      setError('ไม่สามารถโหลดการตั้งค่า Telegram ได้');
+      console.error('Failed to load DSP Service settings:', loadError);
+      setError('ไม่สามารถโหลดการตั้งค่า DSP Service ได้');
     } finally {
       setIsLoading(false);
     }
@@ -95,6 +108,29 @@ export function SpdServiceTelegramSettingsPage() {
     }));
   };
 
+  const updateDigitalGuide = (subject: SpdServiceDigitalGuideSubject, updates: Partial<Omit<SpdServiceDigitalGuide, 'subject'>>) => {
+    setDigitalGuides((current) => current.map((guide) => (guide.subject === subject ? { ...guide, ...updates } : guide)));
+  };
+
+  const handleGuideImageUpload = async (subject: SpdServiceDigitalGuideSubject, file: File | null) => {
+    if (!file) {
+      return;
+    }
+
+    try {
+      setUploadingSubject(subject);
+      setError(null);
+      const image = await uploadSpdServiceDigitalGuideImage(file);
+      updateDigitalGuide(subject, image);
+      setSuccess('อัปโหลดรูปภาพแล้ว กรุณากดบันทึกการตั้งค่าเพื่อใช้งาน');
+    } catch (uploadError) {
+      console.error('Failed to upload DSP Service guide image:', uploadError);
+      setError('ไม่สามารถอัปโหลดรูปภาพได้');
+    } finally {
+      setUploadingSubject(null);
+    }
+  };
+
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
@@ -103,7 +139,28 @@ export function SpdServiceTelegramSettingsPage() {
       return;
     }
 
-    if (!canEditSettings) {
+    if (activeTab === 'request') {
+      if (!canEditRequestSettings) {
+        setError('เฉพาะ Super Admin และ Admin เท่านั้นที่บันทึกการตั้งค่าคำขอรับบริการได้');
+        return;
+      }
+
+      try {
+        setIsSaving(true);
+        setError(null);
+        setSuccess(null);
+        await saveSpdServiceDigitalGuideSettings({ guides: digitalGuides, updatedBy: profile.user_id });
+        setSuccess('บันทึกการตั้งค่าแจ้งคำขอรับบริการเรียบร้อยแล้ว');
+      } catch (saveError) {
+        console.error('Failed to save DSP Service request guide settings:', saveError);
+        setError('ไม่สามารถบันทึกการตั้งค่าแจ้งคำขอรับบริการได้');
+      } finally {
+        setIsSaving(false);
+      }
+      return;
+    }
+
+    if (!canEditTelegramSettings) {
       setError('เฉพาะ Super Admin เท่านั้นที่บันทึกการตั้งค่า Telegram ได้');
       return;
     }
@@ -150,8 +207,8 @@ export function SpdServiceTelegramSettingsPage() {
               <ArrowLeft className="h-4 w-4" aria-hidden="true" />
               กลับแดชบอร์ด DSP Service
             </Link>
-            <h1 className="truncate text-2xl font-semibold text-slate-950">Telegram Notification Settings</h1>
-            <p className="mt-1 text-sm text-slate-500">ตั้งค่าการแจ้งเตือนเฉพาะระบบ DSP Service สำหรับ Super Admin เท่านั้น</p>
+            <h1 className="truncate text-2xl font-semibold text-slate-950">ตั้งค่า DSP Service</h1>
+            <p className="mt-1 text-sm text-slate-500">ตั้งค่าการแจ้งเตือนและคำแนะนำในฟอร์มแจ้งคำขอรับบริการ</p>
           </div>
           <button
             type="button"
@@ -180,35 +237,42 @@ export function SpdServiceTelegramSettingsPage() {
           </div>
         ) : null}
 
-        {!canEditSettings ? (
+        {!canEditTelegramSettings && activeTab !== 'request' ? (
           <div className="rounded-md border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-medium text-blue-700">
-            หน้านี้เป็นโหมดดูข้อมูลสำหรับ Admin/Executive เฉพาะ Super Admin เท่านั้นที่แก้ไขและบันทึกการตั้งค่าได้
+            การตั้งค่า Telegram เป็นโหมดดูข้อมูล เฉพาะ Super Admin เท่านั้นที่แก้ไขและบันทึกได้
+          </div>
+        ) : null}
+
+        {!canEditRequestSettings && activeTab === 'request' ? (
+          <div className="rounded-md border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-medium text-blue-700">
+            เฉพาะ Super Admin และ Admin เท่านั้นที่แก้ไขการตั้งค่าแจ้งคำขอรับบริการได้
           </div>
         ) : null}
 
         <form onSubmit={handleSubmit} className="space-y-5">
           <div className="rounded-md border border-slate-200 bg-white p-2 shadow-sm">
-            <div className="grid gap-2 sm:grid-cols-2">
-              <button
-                type="button"
-                onClick={() => setActiveTab('notification')}
-                className={cn(
-                  'rounded-md px-4 py-2 text-sm font-semibold transition',
-                  activeTab === 'notification' ? 'bg-teal-700 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-50',
-                )}
-              >
-                ตั้งค่าการแจ้งเตือน
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveTab('message')}
-                className={cn(
-                  'rounded-md px-4 py-2 text-sm font-semibold transition',
-                  activeTab === 'message' ? 'bg-teal-700 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-50',
-                )}
-              >
-                ตั้งค่าข้อความที่ส่ง
-              </button>
+            <div className="grid gap-2 md:grid-cols-3">
+              {[
+                { value: 'notification', label: 'ตั้งค่าการแจ้งเตือน' },
+                { value: 'message', label: 'ตั้งค่าข้อความที่ส่ง' },
+                { value: 'request', label: 'แจ้งคำขอรับบริการ' },
+              ].map((tab) => (
+                <button
+                  key={tab.value}
+                  type="button"
+                  onClick={() => {
+                    setActiveTab(tab.value as SettingsTab);
+                    setError(null);
+                    setSuccess(null);
+                  }}
+                  className={cn(
+                    'rounded-md px-4 py-2 text-sm font-semibold transition',
+                    activeTab === tab.value ? 'bg-teal-700 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-50',
+                  )}
+                >
+                  {tab.label}
+                </button>
+              ))}
             </div>
           </div>
 
@@ -233,7 +297,7 @@ export function SpdServiceTelegramSettingsPage() {
                       type="checkbox"
                       checked={enabled}
                       onChange={(event) => setEnabled(event.target.checked)}
-                      disabled={!canEditSettings}
+                      disabled={!canEditTelegramSettings}
                       className="sr-only"
                     />
                     <span className={cn('rounded-full px-3 py-1.5 transition', enabled && 'bg-teal-700 text-white shadow-sm')}>เปิด</span>
@@ -245,7 +309,7 @@ export function SpdServiceTelegramSettingsPage() {
                   <input
                     value={chatId}
                     onChange={(event) => setChatId(event.target.value)}
-                    readOnly={!canEditSettings}
+                    readOnly={!canEditTelegramSettings}
                     className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
                     placeholder="-1001234567890"
                   />
@@ -285,7 +349,7 @@ export function SpdServiceTelegramSettingsPage() {
                               type="checkbox"
                               checked={checked}
                               onChange={() => toggleAdminRecipient(admin.user_id)}
-                              disabled={!canEditSettings}
+                              disabled={!canEditTelegramSettings}
                               className="mt-1 h-4 w-4 rounded border-slate-300 text-teal-700 focus:ring-teal-500"
                             />
                             <span className="min-w-0">
@@ -302,7 +366,7 @@ export function SpdServiceTelegramSettingsPage() {
                               <input
                                 value={adminUsernames[admin.user_id] || ''}
                                 onChange={(event) => updateAdminUsername(admin.user_id, event.target.value)}
-                                readOnly={!canEditSettings}
+                                readOnly={!canEditTelegramSettings}
                                 className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
                                 placeholder="@username"
                               />
@@ -320,7 +384,9 @@ export function SpdServiceTelegramSettingsPage() {
                 </div>
               </section>
             </>
-          ) : (
+          ) : null}
+
+          {activeTab === 'message' ? (
             <section className="rounded-md border border-slate-200 bg-white p-5 shadow-sm">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                 <div>
@@ -332,8 +398,8 @@ export function SpdServiceTelegramSettingsPage() {
                 <button
                   type="button"
                   onClick={() => setMessageTemplate(defaultSpdServiceTelegramMessageTemplate)}
-                  disabled={!canEditSettings}
-                  className="rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                  disabled={!canEditTelegramSettings}
+                  className="rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   คืนค่าเริ่มต้น
                 </button>
@@ -344,7 +410,7 @@ export function SpdServiceTelegramSettingsPage() {
                 <textarea
                   value={messageTemplate}
                   onChange={(event) => setMessageTemplate(event.target.value)}
-                  readOnly={!canEditSettings}
+                  readOnly={!canEditTelegramSettings}
                   className="mt-1 min-h-96 w-full rounded-md border border-slate-300 px-3 py-2 font-mono text-sm outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
                 />
                 <span className="mt-1 block text-xs text-slate-500">
@@ -383,7 +449,82 @@ export function SpdServiceTelegramSettingsPage() {
                 <p className="mt-3 text-xs text-slate-500">รองรับ Telegram HTML เช่น &lt;b&gt;...&lt;/b&gt; และ &lt;code&gt;...&lt;/code&gt;</p>
               </div>
             </section>
-          )}
+          ) : null}
+
+          {activeTab === 'request' ? (
+            <section className="rounded-md border border-slate-200 bg-white p-5 shadow-sm">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <h2 className="text-lg font-semibold text-slate-950">คำแนะนำสำหรับ Digital Service</h2>
+                  <p className="mt-1 text-sm leading-6 text-slate-500">
+                    ตั้งค่ารูปภาพที่จะปรากฏในหน้าแจ้งคำขอ เมื่อผู้ใช้เลือกประเภทบริการ Digital Service และติ๊กหัวข้อที่กำหนด
+                  </p>
+                </div>
+                <Link
+                  to="/spd-service/request"
+                  className="inline-flex items-center justify-center rounded-md border border-teal-200 bg-teal-50 px-3 py-2 text-sm font-semibold text-teal-700 transition hover:bg-teal-100"
+                >
+                  เปิดหน้าฟอร์ม
+                </Link>
+              </div>
+
+              <div className="mt-5 grid gap-4">
+                {digitalGuides.map((guide) => (
+                  <div key={guide.subject} className="rounded-md border border-slate-200 p-4">
+                    <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                      <label className="flex cursor-pointer items-start gap-3">
+                        <input
+                          type="checkbox"
+                          checked={guide.enabled}
+                          onChange={(event) => updateDigitalGuide(guide.subject, { enabled: event.target.checked })}
+                          disabled={!canEditRequestSettings}
+                          className="mt-1 h-4 w-4 rounded border-slate-300 text-teal-700 focus:ring-teal-500"
+                        />
+                        <span>
+                          <span className="block text-base font-semibold text-slate-950">{guide.subject}</span>
+                          <span className="mt-1 block text-sm text-slate-500">เปิด/ปิดการแสดงรูปภาพคำแนะนำสำหรับหัวข้อนี้</span>
+                        </span>
+                      </label>
+
+                      <label className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50">
+                        <Upload className="h-4 w-4" aria-hidden="true" />
+                        {uploadingSubject === guide.subject ? 'กำลังอัปโหลด...' : 'อัปโหลดรูปภาพ'}
+                        <input
+                          type="file"
+                          accept="image/png,image/jpeg,image/webp"
+                          className="sr-only"
+                          disabled={!canEditRequestSettings || uploadingSubject === guide.subject}
+                          onChange={(event) => void handleGuideImageUpload(guide.subject, event.target.files?.[0] || null)}
+                        />
+                      </label>
+                    </div>
+
+                    <label className="mt-4 block">
+                      <span className="text-sm font-medium text-slate-700">ตำแหน่งไฟล์รูปภาพ</span>
+                      <input
+                        value={guide.imagePath}
+                        onChange={(event) => updateDigitalGuide(guide.subject, { imagePath: event.target.value })}
+                        readOnly={!canEditRequestSettings}
+                        className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
+                        placeholder="อัปโหลดรูปภาพเพื่อสร้าง path ใน private bucket"
+                      />
+                    </label>
+
+                    {guide.signedImageUrl ? (
+                      <div className="mt-4 overflow-hidden rounded-md border border-slate-200 bg-slate-50">
+                        <img src={guide.signedImageUrl} alt={`คำแนะนำ ${guide.subject}`} className="max-h-96 w-full object-contain" />
+                      </div>
+                    ) : (
+                      <div className="mt-4 flex min-h-36 items-center justify-center rounded-md border border-dashed border-slate-300 bg-slate-50 text-sm text-slate-400">
+                        <ImageIcon className="mr-2 h-5 w-5" aria-hidden="true" />
+                        ยังไม่มีรูปภาพ
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </section>
+          ) : null}
 
           <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
             <Link
@@ -394,7 +535,7 @@ export function SpdServiceTelegramSettingsPage() {
             </Link>
             <button
               type="submit"
-              disabled={isLoading || isSaving || !canEditSettings}
+              disabled={isLoading || isSaving || !canSaveActiveTab}
               className="inline-flex items-center justify-center gap-2 rounded-md bg-teal-700 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-60"
             >
               <Save className="h-4 w-4" aria-hidden="true" />
