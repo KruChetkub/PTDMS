@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowRight, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ArrowRight, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { HomePlanLevelsBanner } from './HomePlanLevelsBanner';
 import { RevealOnScroll } from './RevealOnScroll';
 import type { HomePlanSection } from '../types/publicHome.types';
@@ -52,6 +52,11 @@ type HomePlanSectionsProps = {
   logoUrl: string;
 };
 
+type CoverPreviewState = {
+  title: string;
+  imageUrl: string;
+};
+
 function getCardsPerPage(width: number) {
   if (width >= 1024) return 4;
   if (width >= 640) return 2;
@@ -63,6 +68,7 @@ export function HomePlanSections({ sections, logoUrl }: HomePlanSectionsProps) {
     typeof window === 'undefined' ? 4 : getCardsPerPage(window.innerWidth),
   );
   const [sectionPages, setSectionPages] = useState<Record<string, number>>({});
+  const [coverPreview, setCoverPreview] = useState<CoverPreviewState | null>(null);
   const sectionCardCounts = useMemo(
     () => sections.map((section) => `${section.id}:${section.cards.length}`).join('|'),
     [sections],
@@ -76,6 +82,18 @@ export function HomePlanSections({ sections, logoUrl }: HomePlanSectionsProps) {
 
     return () => window.removeEventListener('resize', updateCardsPerPage);
   }, []);
+
+  useEffect(() => {
+    if (!coverPreview) return;
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setCoverPreview(null);
+    };
+
+    document.addEventListener('keydown', handleEscape);
+
+    return () => document.removeEventListener('keydown', handleEscape);
+  }, [coverPreview]);
 
   useEffect(() => {
     setSectionPages((currentPages) => {
@@ -181,9 +199,19 @@ export function HomePlanSections({ sections, logoUrl }: HomePlanSectionsProps) {
                             className={`flex min-h-64 flex-col rounded-md border bg-white p-4 text-center text-slate-900 shadow-sm ${tone.card}`}
                           >
                             {card.coverImageUrl ? (
-                              <div className={`mx-auto ${coverAspectClass} w-full max-w-[112px] overflow-hidden rounded-md border border-slate-200 bg-slate-100`}>
-                                <img src={card.coverImageUrl} alt={`ภาพหน้าปก ${card.title}`} className="h-full w-full object-cover" />
-                              </div>
+                              <button
+                                type="button"
+                                onClick={() => setCoverPreview({ title: card.title, imageUrl: card.coverImageUrl || '' })}
+                                className={`group mx-auto ${coverAspectClass} w-full max-w-[112px] overflow-hidden rounded-md border border-slate-200 bg-slate-100 transition hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-400`}
+                                aria-label={`ดูภาพหน้าปก ${card.title} ขนาดใหญ่`}
+                              >
+                                <span className="relative block h-full w-full">
+                                  <img src={card.coverImageUrl} alt={`ภาพหน้าปก ${card.title}`} className="h-full w-full object-cover" />
+                                  <span className="absolute inset-0 flex items-center justify-center bg-slate-950/0 text-xs font-semibold text-white opacity-0 transition group-hover:bg-slate-950/35 group-hover:opacity-100">
+                                    ดูภาพ
+                                  </span>
+                                </span>
+                              </button>
                             ) : (
                               <div className={`mx-auto flex h-14 w-14 items-center justify-center rounded-full ${card.color} text-white`}>
                                 <Icon className="h-7 w-7" aria-hidden="true" />
@@ -212,6 +240,35 @@ export function HomePlanSections({ sections, logoUrl }: HomePlanSectionsProps) {
           })}
         </div>
       </div>
+
+      {coverPreview ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/85 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label={`ภาพหน้าปก ${coverPreview.title}`}
+          onClick={() => setCoverPreview(null)}
+        >
+          <div className="relative flex max-h-full max-w-full flex-col items-center gap-3" onClick={(event) => event.stopPropagation()}>
+            <div className="flex w-full max-w-[96vw] items-center justify-between gap-3 text-white">
+              <h3 className="truncate text-sm font-semibold sm:text-base">{coverPreview.title}</h3>
+              <button
+                type="button"
+                onClick={() => setCoverPreview(null)}
+                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-white/10 text-white transition hover:bg-white/20"
+                aria-label="ปิดภาพหน้าปก"
+              >
+                <X className="h-5 w-5" aria-hidden="true" />
+              </button>
+            </div>
+            <img
+              src={coverPreview.imageUrl}
+              alt={`ภาพหน้าปก ${coverPreview.title}`}
+              className="max-h-[88vh] max-w-[96vw] rounded-md bg-white object-contain shadow-2xl"
+            />
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }

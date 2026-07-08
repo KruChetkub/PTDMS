@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ChevronDown, ChevronLeft, ChevronRight, CircleHelp, Newspaper } from 'lucide-react';
+import { ChevronDown, ChevronLeft, ChevronRight, CircleHelp, Newspaper, X } from 'lucide-react';
 import type { HomeFaqItem, HomeNewsItem, HomePlanSection } from '../types/publicHome.types';
 
 type MobileSectionId = string;
@@ -8,6 +8,11 @@ type HomeMobileSectionLauncherProps = {
   planSections: HomePlanSection[];
   news: HomeNewsItem[];
   faqs: HomeFaqItem[];
+};
+
+type CoverPreviewState = {
+  title: string;
+  imageUrl: string;
 };
 
 const mobileSectionToneClass: Record<string, { icon: string; panel: string; text: string; action: string }> = {
@@ -76,6 +81,7 @@ export function HomeMobileSectionLauncher({ planSections, news, faqs }: HomeMobi
     typeof window === 'undefined' ? 1 : getMobileCardsPerPage(window.innerWidth),
   );
   const [sectionPages, setSectionPages] = useState<Record<string, number>>({});
+  const [coverPreview, setCoverPreview] = useState<CoverPreviewState | null>(null);
   const sectionCardCounts = useMemo(
     () => planSections.map((section) => `${section.id}:${section.cards.length}`).join('|'),
     [planSections],
@@ -89,6 +95,18 @@ export function HomeMobileSectionLauncher({ planSections, news, faqs }: HomeMobi
 
     return () => window.removeEventListener('resize', updateCardsPerPage);
   }, []);
+
+  useEffect(() => {
+    if (!coverPreview) return;
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setCoverPreview(null);
+    };
+
+    document.addEventListener('keydown', handleEscape);
+
+    return () => document.removeEventListener('keydown', handleEscape);
+  }, [coverPreview]);
 
   useEffect(() => {
     setSectionPages((currentPages) => {
@@ -244,25 +262,34 @@ export function HomeMobileSectionLauncher({ planSections, news, faqs }: HomeMobi
                       const absoluteCardIndex = currentPage * cardsPerPage + cardIndex;
 
                       return (
-                        <ActionElement
+                        <div
                           key={`${activeSection.id}-${card.title}-${card.subtitle}-${absoluteCardIndex}`}
-                          {...(card.pdfUrl
-                            ? { href: card.pdfUrl, target: '_blank', rel: 'noreferrer' }
-                            : { type: 'button' })}
                           className="flex min-h-36 flex-col items-center justify-start rounded-md border border-white/80 bg-white p-3 text-center text-slate-900 shadow-sm"
                         >
                           {card.coverImageUrl ? (
-                            <span className={`${coverAspectClass} w-full max-w-[74px] overflow-hidden rounded-md border border-slate-200 bg-slate-100`}>
+                            <button
+                              type="button"
+                              onClick={() => setCoverPreview({ title: card.title, imageUrl: card.coverImageUrl || '' })}
+                              className={`${coverAspectClass} w-full max-w-[74px] overflow-hidden rounded-md border border-slate-200 bg-slate-100 transition hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-400`}
+                              aria-label={`ดูภาพหน้าปก ${card.title} ขนาดใหญ่`}
+                            >
                               <img src={card.coverImageUrl} alt={`ภาพหน้าปก ${card.title}`} className="h-full w-full object-cover" />
-                            </span>
+                            </button>
                           ) : (
                             <span className={`flex h-11 w-11 items-center justify-center rounded-2xl ${card.color} text-white`}>
                               <Icon className="h-5 w-5" aria-hidden="true" />
                             </span>
                           )}
-                          <span className="mt-3 text-xs font-semibold leading-5">{card.title}</span>
-                          <span className="mt-1 text-[11px] leading-4 text-slate-500">{card.subtitle}</span>
-                        </ActionElement>
+                          <ActionElement
+                            {...(card.pdfUrl
+                              ? { href: card.pdfUrl, target: '_blank', rel: 'noreferrer' }
+                              : { type: 'button' })}
+                            className="mt-3 grid w-full justify-items-center gap-1 rounded-md px-2 py-1 text-center transition hover:bg-slate-50"
+                          >
+                            <span className="text-xs font-semibold leading-5">{card.title}</span>
+                            <span className="text-[11px] leading-4 text-slate-500">{card.subtitle}</span>
+                          </ActionElement>
+                        </div>
                       );
                     })}
                   </div>
@@ -300,6 +327,35 @@ export function HomeMobileSectionLauncher({ planSections, news, faqs }: HomeMobi
           </div>
         ) : null}
       </div>
+
+      {coverPreview ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/85 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label={`ภาพหน้าปก ${coverPreview.title}`}
+          onClick={() => setCoverPreview(null)}
+        >
+          <div className="relative flex max-h-full max-w-full flex-col items-center gap-3" onClick={(event) => event.stopPropagation()}>
+            <div className="flex w-full max-w-[96vw] items-center justify-between gap-3 text-white">
+              <h3 className="truncate text-sm font-semibold">{coverPreview.title}</h3>
+              <button
+                type="button"
+                onClick={() => setCoverPreview(null)}
+                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-white/10 text-white transition hover:bg-white/20"
+                aria-label="ปิดภาพหน้าปก"
+              >
+                <X className="h-5 w-5" aria-hidden="true" />
+              </button>
+            </div>
+            <img
+              src={coverPreview.imageUrl}
+              alt={`ภาพหน้าปก ${coverPreview.title}`}
+              className="max-h-[88vh] max-w-[96vw] rounded-md bg-white object-contain shadow-2xl"
+            />
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }
