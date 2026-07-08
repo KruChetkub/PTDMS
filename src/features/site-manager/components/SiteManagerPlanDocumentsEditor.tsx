@@ -196,7 +196,7 @@ export function SiteManagerPlanDocumentsEditor({
           const coverAspectClass = coverImageLayout === 'landscape' ? 'aspect-[16/9]' : 'aspect-[9/16]';
 
           return (
-            <article id={`site-manager-plan-card-${index}`} key={`${card.title}-${index}`} className="scroll-mt-24 rounded-md border border-slate-200 bg-white shadow-sm">
+            <article id={`site-manager-plan-card-${index}`} key={`plan-card-${index}`} className="scroll-mt-24 rounded-md border border-slate-200 bg-white shadow-sm">
               <div className="grid gap-3 px-4 py-3 lg:grid-cols-[1fr_auto] lg:items-center">
                 <div className="flex min-w-0 items-center gap-3">
                   <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-slate-100 text-sm font-bold text-slate-700">
