@@ -58,6 +58,11 @@ export function SpdServiceRequestPage() {
   const [guideImageDrag, setGuideImageDrag] = useState<GuideImageDragState | null>(null);
 
   useEffect(() => {
+    setRequesterName(profile?.full_name || '');
+    setRequesterDepartment(profile?.work_group || profile?.department || '');
+  }, [profile?.full_name, profile?.work_group, profile?.department]);
+
+  useEffect(() => {
     void (async () => {
       try {
         setIsLoadingCategories(true);
@@ -254,8 +259,9 @@ export function SpdServiceRequestPage() {
               <span className="text-sm font-medium text-slate-700">ชื่อผู้แจ้ง</span>
               <input
                 value={requesterName}
-                onChange={(event) => setRequesterName(event.target.value)}
-                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
+                readOnly
+                aria-readonly="true"
+                className="mt-1 w-full cursor-not-allowed rounded-md border border-slate-300 bg-slate-100 px-3 py-2 text-sm text-slate-700 outline-none"
                 placeholder="ชื่อ-สกุล"
               />
             </label>
@@ -264,8 +270,9 @@ export function SpdServiceRequestPage() {
               <span className="text-sm font-medium text-slate-700">หน่วยงาน / กลุ่มงาน</span>
               <input
                 value={requesterDepartment}
-                onChange={(event) => setRequesterDepartment(event.target.value)}
-                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
+                readOnly
+                aria-readonly="true"
+                className="mt-1 w-full cursor-not-allowed rounded-md border border-slate-300 bg-slate-100 px-3 py-2 text-sm text-slate-700 outline-none"
                 placeholder="หน่วยงานหรือกลุ่มงาน"
               />
             </label>
