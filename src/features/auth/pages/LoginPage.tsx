@@ -1,4 +1,4 @@
-﻿import { zodResolver } from '@hookform/resolvers/zod';
+import { zodResolver } from '@hookform/resolvers/zod';
 import { Eye, EyeOff, Lock, LogIn, Mail } from 'lucide-react';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
@@ -6,7 +6,9 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { ConfiguredNotice } from '../../../components/auth/ConfiguredNotice';
 import { LegalFooter } from '../../legal/LegalFooter';
 import { useAuthStore } from '../../../stores/auth.store';
+import { usePublishedSiteContent } from '../../site-content/hooks/useSiteContent';
 import { loginSchema, type LoginFormValues } from '../auth.schemas';
+
 
 export function LoginPage() {
   const navigate = useNavigate();
@@ -14,6 +16,17 @@ export function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const from = (location.state as { from?: Location } | null)?.from?.pathname || '/portal';
   const { signIn, loading, error, clearError } = useAuthStore();
+  const siteContent = usePublishedSiteContent();
+  const loginSideImage = siteContent.loginPage.status === 'published' ? siteContent.loginPage.sideImageUrl : '';
+  const loginSideImageAlt = siteContent.loginPage.sideImageAlt || 'ภาพประกอบหน้าเข้าสู่ระบบ SmartDSP';
+  const loginBackgroundImage = siteContent.loginPage.backgroundImageUrl || '/SmartDSP.png';
+  const loginBackgroundImageEnabled = siteContent.loginPage.backgroundImageEnabled !== false;
+  const loginBackgroundOverlayValue = Math.min(90, Math.max(0, siteContent.loginPage.backgroundOverlayOpacity));
+  const loginBackgroundOverlayOpacity = loginBackgroundOverlayValue / 100;
+  const loginBackgroundBrightness = 1 + ((90 - loginBackgroundOverlayValue) / 90) * 0.35;
+  const loginPanelStyle = siteContent.loginPage.loginPanelGradientEnabled
+    ? { background: `linear-gradient(135deg, ${siteContent.loginPage.loginPanelGradientFrom}, ${siteContent.loginPage.loginPanelGradientTo})` }
+    : undefined;
   const {
     register,
     handleSubmit,
@@ -31,7 +44,7 @@ export function LoginPage() {
     try {
       await signIn(values.email, values.password);
       const profile = useAuthStore.getState().profile;
-      
+
       if (profile?.status === 'pending') {
         navigate('/pending-approval', { replace: true });
       } else if (from === '/' || from === '/login' || from === '/dashboard' || from === '/self-service' || from === '/profile') {
@@ -46,91 +59,114 @@ export function LoginPage() {
   };
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-gradient-to-br from-fuchsia-500 via-pink-500 to-rose-300 px-4 py-10">
-      <div className="pointer-events-none absolute inset-0 opacity-25">
-        <div className="absolute -left-24 top-16 h-80 w-80 rotate-6 rounded-[3rem] bg-white/20 blur-2xl" />
-        <div className="absolute right-8 top-4 h-72 w-72 rotate-12 rounded-[2.5rem] bg-white/15 blur-2xl" />
-        <div className="absolute bottom-4 left-1/3 h-72 w-72 -rotate-6 rounded-[2.5rem] bg-white/10 blur-2xl" />
-      </div>
+    <div className="relative min-h-screen overflow-hidden bg-slate-950 px-4 py-8 text-white sm:px-6 lg:px-8">
+      {loginBackgroundImageEnabled ? (
+        <div
+          className="absolute inset-0 bg-cover bg-center"
+          style={{
+            backgroundImage: `url(${loginBackgroundImage})`,
+            filter: `brightness(${loginBackgroundBrightness})`,
+          }}
+          aria-hidden="true"
+        />
+      ) : null}
+      <div
+        className="absolute inset-0"
+        style={{
+          background: `linear-gradient(135deg, rgba(8, 47, 73, ${loginBackgroundOverlayOpacity * 0.86}), rgba(23, 37, 84, ${loginBackgroundOverlayOpacity * 0.8}), rgba(2, 6, 23, ${loginBackgroundOverlayOpacity}))`,
+        }}
+        aria-hidden="true"
+      />
 
-      <div className="relative w-full max-w-md space-y-5">
-        <div className="text-center text-white">
-          <div className="text-xl font-bold tracking-wide sm:text-2xl">Smart Division Strategy and Planning (Smart DSP)</div>
-          <h1 className="mt-5 text-3xl font-semibold">เข้าสู่ระบบ</h1>
-          <p className="mt-2 text-sm text-pink-50">กองยุทธศาสตร์และแผนงาน กรมควบคุมโรค</p>
-        </div>
-
-        <ConfiguredNotice />
-
-        <form
-          onSubmit={handleSubmit(onSubmit)}
-          className="space-y-4 rounded-2xl border border-white/50 bg-white/85 p-6 shadow-2xl backdrop-blur-sm"
-        >
-          {error ? <div className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div> : null}
-
-          <label className="block">
-            <span className="text-sm font-medium text-slate-700">Email</span>
-            <div className="mt-1 flex items-center rounded-lg border border-slate-300 bg-white px-3 focus-within:border-pink-500 focus-within:ring-2 focus-within:ring-pink-100">
-              <Mail className="h-4 w-4 text-slate-500" aria-hidden="true" />
-              <input
-                type="email"
-                autoComplete="email"
-                placeholder="smartdsp@mail.com"
-                className="w-full bg-transparent px-2 py-2.5 text-sm text-slate-900 outline-none"
-                {...register('email')}
-              />
+      <main className="relative mx-auto grid min-h-[calc(100vh-4rem)] w-full max-w-7xl items-center gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(22rem,28rem)]">
+        <section className="hidden min-h-[34rem] items-center justify-center lg:flex">
+          {loginSideImage ? (
+            <div className="w-full max-w-2xl overflow-hidden rounded-md border border-white/25 bg-white/10 p-3 shadow-2xl backdrop-blur-sm">
+              <img src={loginSideImage} alt={loginSideImageAlt} className="max-h-[70vh] w-full rounded-md object-cover" />
             </div>
-            {errors.email ? <span className="mt-1 block text-xs text-red-600">{errors.email.message}</span> : null}
-          </label>
+          ) : (
+            <div className="max-w-xl rounded-md border border-white/20 bg-white/10 p-8 shadow-2xl backdrop-blur-sm">
+              <p className="text-sm font-semibold uppercase tracking-normal text-cyan-200">Smart DSP</p>
+              <h2 className="mt-3 text-3xl font-bold leading-tight tracking-normal text-white">Smart Division Strategy and Planning</h2>
+              <p className="mt-4 text-sm leading-6 text-cyan-50/85">ระบบสนับสนุนงานยุทธศาสตร์ แผนงาน บริการดิจิทัล และการจัดการข้อมูลภายในกองยุทธศาสตร์และแผนงาน</p>
+            </div>
+          )}
+        </section>
 
-          <div>
-            <span className="text-sm font-medium text-slate-700">Password</span>
-            <div className="mt-1 flex items-center rounded-lg border border-slate-300 bg-white px-3 focus-within:border-pink-500 focus-within:ring-2 focus-within:ring-pink-100">
-              <Lock className="h-4 w-4 text-slate-500" aria-hidden="true" />
-              <input
-                type={showPassword ? 'text' : 'password'}
-                autoComplete="current-password"
-                className="w-full bg-transparent px-2 py-2.5 text-sm text-slate-900 outline-none"
-                {...register('password')}
-              />
+        <section className="mx-auto w-full max-w-md lg:mx-0 lg:justify-self-end">
+          <div className="rounded-md border border-white/25 bg-slate-950/35 p-4 shadow-2xl backdrop-blur-md sm:p-5" style={loginPanelStyle}>
+            <div className="mb-5 text-center">
+              <div className="text-lg font-bold leading-7 tracking-normal text-white sm:text-xl">Smart Division Strategy and Planning</div>
+              <div className="text-sm font-semibold text-cyan-100">(Smart DSP)</div>
+              <h1 className="mt-4 text-3xl font-bold tracking-normal text-white">เข้าสู่ระบบ</h1>
+              <p className="mt-2 text-sm text-cyan-50/85">กองยุทธศาสตร์และแผนงาน กรมควบคุมโรค</p>
+            </div>
+
+            <ConfiguredNotice />
+
+            <form onSubmit={handleSubmit(onSubmit)} className="mt-5 space-y-4 rounded-md border border-white/70 bg-white/90 p-5 text-slate-900 shadow-xl sm:p-6">
+              {error ? <div className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div> : null}
+
+              <label className="block">
+                <span className="text-sm font-medium text-slate-700">Email</span>
+                <div className="mt-1 flex items-center rounded-md border border-slate-300 bg-white px-3 focus-within:border-cyan-600 focus-within:ring-2 focus-within:ring-cyan-100">
+                  <Mail className="h-4 w-4 text-slate-500" aria-hidden="true" />
+                  <input
+                    type="email"
+                    autoComplete="email"
+                    placeholder="smartdsp@mail.com"
+                    className="w-full bg-transparent px-2 py-2.5 text-sm text-slate-900 outline-none"
+                    {...register('email')}
+                  />
+                </div>
+                {errors.email ? <span className="mt-1 block text-xs text-red-600">{errors.email.message}</span> : null}
+              </label>
+
+              <div>
+                <span className="text-sm font-medium text-slate-700">Password</span>
+                <div className="mt-1 flex items-center rounded-md border border-slate-300 bg-white px-3 focus-within:border-cyan-600 focus-within:ring-2 focus-within:ring-cyan-100">
+                  <Lock className="h-4 w-4 text-slate-500" aria-hidden="true" />
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    autoComplete="current-password"
+                    className="w-full bg-transparent px-2 py-2.5 text-sm text-slate-900 outline-none"
+                    {...register('password')}
+                  />
+                  <button
+                    type="button"
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-500 transition hover:bg-slate-100 hover:text-cyan-700 focus:outline-none focus:ring-2 focus:ring-cyan-200"
+                    aria-label={showPassword ? 'ซ่อนรหัสผ่าน' : 'แสดงรหัสผ่าน'}
+                    aria-pressed={showPassword}
+                    onClick={() => setShowPassword((current) => !current)}
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" aria-hidden="true" /> : <Eye className="h-4 w-4" aria-hidden="true" />}
+                  </button>
+                </div>
+                {errors.password ? <span className="mt-1 block text-xs text-red-600">{errors.password.message}</span> : null}
+              </div>
+
               <button
-                type="button"
-                className="inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-500 transition hover:bg-slate-100 hover:text-pink-600 focus:outline-none focus:ring-2 focus:ring-pink-200"
-                aria-label={showPassword ? 'ซ่อนรหัสผ่าน' : 'แสดงรหัสผ่าน'}
-                aria-pressed={showPassword}
-                onClick={() => setShowPassword((current) => !current)}
+                type="submit"
+                disabled={loading}
+                className="inline-flex w-full items-center justify-center gap-2 rounded-md bg-[#17718C] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#0F5D77] disabled:cursor-not-allowed disabled:opacity-70"
               >
-                {showPassword ? (
-                  <EyeOff className="h-4 w-4" aria-hidden="true" />
-                ) : (
-                  <Eye className="h-4 w-4" aria-hidden="true" />
-                )}
+                <LogIn className="h-4 w-4" aria-hidden="true" />
+                {loading ? 'กำลังเข้าสู่ระบบ...' : 'Login'}
               </button>
+
+              <div className="flex items-center justify-between text-sm">
+                <Link className="font-medium text-[#17718C] hover:text-[#0F5D77]" to="/forgot-password">
+                  ลืมรหัสผ่าน
+                </Link>
+              </div>
+            </form>
+
+            <div className="mt-5">
+              <LegalFooter variant="dark" />
             </div>
-            {errors.password ? <span className="mt-1 block text-xs text-red-600">{errors.password.message}</span> : null}
           </div>
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-fuchsia-600 to-pink-500 px-4 py-3 text-sm font-semibold text-white transition hover:from-fuchsia-700 hover:to-pink-600 disabled:cursor-not-allowed disabled:opacity-70"
-          >
-            <LogIn className="h-4 w-4" aria-hidden="true" />
-            {loading ? 'กำลังเข้าสู่ระบบ...' : 'Login'}
-          </button>
-
-          <div className="flex items-center justify-between text-sm">
-           <Link className="font-medium text-pink-700 hover:text-pink-600" to="/forgot-password">
-              ลืมรหัสผ่าน
-            </Link>
-         {/*    <Link className="font-medium text-pink-700 hover:text-pink-600" to="/register">
-              register
-            </Link> */}
-          </div>
-        </form>
-
-        <LegalFooter variant="dark" />
-      </div>
+        </section>
+      </main>
     </div>
   );
 }

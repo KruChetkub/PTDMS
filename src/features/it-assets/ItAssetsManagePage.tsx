@@ -39,6 +39,9 @@ const emptyFormValues: ItAssetFormValues = {
   work_group: '',
   received_date: null,
   received_date_raw: '',
+  ups_asset_code: '',
+  ups_received_date: null,
+  ups_received_date_raw: '',
   source_asset_code: '',
 };
 
@@ -203,11 +206,17 @@ const fieldGroups: Array<{ title: string; fields: FieldConfig[] }> = [
   {
     title: 'ข้อมูลครุภัณฑ์',
     fields: [
-      { key: 'source_row_number', label: 'ลำดับที่', type: 'number' },
       { key: 'asset_code', label: 'รหัสครุภัณฑ์', required: true },
       { key: 'computer_name', label: 'ชื่อเครื่อง' },
       { key: 'machine_brand_model', label: 'ยี่ห้อ/รุ่นเครื่อง' },
       { key: 'asset_type', label: 'ลักษณะเครื่อง', type: 'select', options: assetTypeOptions },
+    ],
+  },
+  {
+    title: 'เครื่องสำรองไฟฟ้า (UPS)',
+    fields: [
+      { key: 'ups_asset_code', label: 'รหัสครุภัณฑ์ เครื่องสำรองไฟฟ้า (UPS)' },
+      { key: 'ups_received_date_raw', label: 'วันที่รับเครื่อง (วัน/เดือน/ปี พ.ศ.)' },
     ],
   },
   {
@@ -331,6 +340,9 @@ function toFormValues(asset: ItAsset): ItAssetFormValues {
     work_group: asset.work_group,
     received_date: asset.received_date,
     received_date_raw: asset.received_date_raw || formatThaiDateInput(asset.received_date),
+    ups_asset_code: asset.ups_asset_code,
+    ups_received_date: asset.ups_received_date,
+    ups_received_date_raw: asset.ups_received_date_raw || formatThaiDateInput(asset.ups_received_date),
     source_asset_code: asset.source_asset_code,
   };
 }
@@ -347,6 +359,7 @@ function normalizeFormValues(values: ItAssetFormValues): ItAssetFormValues {
   });
 
   next.received_date = parseThaiDateInput(next.received_date_raw);
+  next.ups_received_date = parseThaiDateInput(next.ups_received_date_raw);
 
   return next;
 }
@@ -415,7 +428,7 @@ function FieldInput({
         value={inputValue}
         required={field.required}
         step={field.type === 'number' ? 'any' : undefined}
-        placeholder={field.key === 'received_date_raw' ? '04/01/2566' : undefined}
+        placeholder={field.key === 'received_date_raw' || field.key === 'ups_received_date_raw' ? '04/01/2566' : undefined}
         onChange={(event) => {
           if (field.type === 'number') {
             onChange(field.key, event.target.value === '' ? null : Number(event.target.value));
@@ -624,6 +637,11 @@ export function ItAssetsManagePage() {
       return;
     }
 
+    if (formValues.ups_received_date_raw && !payload.ups_received_date) {
+      setError('กรุณากรอกวันที่รับเครื่อง UPS เป็นรูปแบบ วัน/เดือน/ปี พ.ศ. เช่น 04/01/2566');
+      return;
+    }
+
     setError(null);
     setStatusMessage(null);
     setIsSaveModalOpen(true);
@@ -768,6 +786,7 @@ export function ItAssetsManagePage() {
               <table className="w-full min-w-[720px] border-collapse text-left text-sm">
                 <thead>
                   <tr className="border-b border-slate-200 text-xs font-semibold uppercase text-slate-500">
+                    <th className="px-2 pb-3">ลำดับ</th>
                     <th className="px-2 pb-3">รหัสครุภัณฑ์</th>
                     <th className="px-2 pb-3">ชื่อเครื่อง</th>
                     <th className="px-2 pb-3">ผู้ใช้งาน</th>
@@ -775,8 +794,9 @@ export function ItAssetsManagePage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {filteredAssets.map((asset) => (
+                  {filteredAssets.map((asset, index) => (
                     <tr key={asset.id} className={selectedAsset?.id === asset.id ? 'bg-blue-50/70' : 'hover:bg-slate-50'}>
+                      <td className="px-2 py-3 text-slate-600">{index + 1}</td>
                       <td className="px-2 py-3 font-mono text-xs font-semibold text-blue-700">{asset.asset_code}</td>
                       <td className="px-2 py-3">{asset.computer_name || '-'}</td>
                       <td className="px-2 py-3">{asset.user_name || '-'}</td>
@@ -794,7 +814,7 @@ export function ItAssetsManagePage() {
                   ))}
                   {filteredAssets.length === 0 ? (
                     <tr>
-                      <td colSpan={4} className="px-2 py-10 text-center text-slate-400">ไม่พบข้อมูล</td>
+                      <td colSpan={5} className="px-2 py-10 text-center text-slate-400">ไม่พบข้อมูล</td>
                     </tr>
                   ) : null}
                 </tbody>

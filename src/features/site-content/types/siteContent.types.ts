@@ -28,6 +28,17 @@ export type SiteContentNewsItem = {
   status: SiteContentStatus;
 };
 
+export type SiteContentLoginPage = {
+  sideImageUrl: string;
+  sideImageAlt: string;
+  backgroundImageUrl: string;
+  backgroundImageEnabled: boolean;
+  backgroundOverlayOpacity: number;
+  loginPanelGradientEnabled: boolean;
+  loginPanelGradientFrom: string;
+  loginPanelGradientTo: string;
+  status: SiteContentStatus;
+};
 export type SiteContentFaqItem = {
   question: string;
   answer: string;
@@ -61,6 +72,7 @@ export type SiteContentPlanCard = {
 export type SiteContentState = {
   brandSettings: SiteContentBrandSettings;
   heroBanner: SiteContentHeroBanner;
+  loginPage: SiteContentLoginPage;
   newsItems: SiteContentNewsItem[];
   faqItems: SiteContentFaqItem[];
   planLevelCards: SiteContentPlanCard[];

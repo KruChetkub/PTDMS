@@ -1,4 +1,4 @@
-﻿import type { ProfileStatus, UserRole } from './roles';
+import type { ProfileStatus, UserRole } from './roles';
 
 export type Profile = {
   user_id: string;
@@ -218,6 +218,9 @@ export type ItAsset = {
   work_group: string | null;
   received_date: string | null;
   received_date_raw: string | null;
+  ups_asset_code: string | null;
+  ups_received_date: string | null;
+  ups_received_date_raw: string | null;
   source_asset_code: string | null;
   created_at: string;
   updated_at: string;
@@ -576,6 +579,9 @@ export type Database = {
           work_group?: string | null;
           received_date?: string | null;
           received_date_raw?: string | null;
+          ups_asset_code?: string | null;
+          ups_received_date?: string | null;
+          ups_received_date_raw?: string | null;
           source_asset_code?: string | null;
           created_at?: string;
           updated_at?: string;

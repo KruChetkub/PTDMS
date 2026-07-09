@@ -5,6 +5,7 @@ import { useSiteContentDraft } from '../../site-content/hooks/useSiteContent';
 import { SiteManagerBannerPreview } from '../components/SiteManagerBannerPreview';
 import { SiteManagerBrandingEditor } from '../components/SiteManagerBrandingEditor';
 import { SiteManagerContentEditor } from '../components/SiteManagerContentEditor';
+import { SiteManagerLoginPageEditor } from '../components/SiteManagerLoginPageEditor';
 import { SiteManagerPlanDocumentsEditor } from '../components/SiteManagerPlanDocumentsEditor';
 import { SiteManagerPlanPreview } from '../components/SiteManagerPlanPreview';
 import { SiteManagerSecuritySettings } from '../components/SiteManagerSecuritySettings';
@@ -23,6 +24,7 @@ type SiteManagerTab =
   | 'risk-management'
   | 'executive-policy'
   | 'r2r-research'
+  | 'login-page'
   | 'security';
 
 const siteManagerTabs: Array<{ id: SiteManagerTab; label: string; superAdminOnly?: boolean }> = [
@@ -34,6 +36,7 @@ const siteManagerTabs: Array<{ id: SiteManagerTab; label: string; superAdminOnly
   { id: 'risk-management', label: 'แผนบริหารความเสี่ยง' },
   { id: 'executive-policy', label: 'นโยบายผู้บริหาร' },
   { id: 'r2r-research', label: 'งานวิจัยจากงานประจำ R2R' },
+  { id: 'login-page', label: 'จัดการภาพหน้า login' },
   { id: 'security', label: 'ความปลอดภัย', superAdminOnly: true },
 ];
 
@@ -245,6 +248,18 @@ export function SiteManagerPage() {
             isSaving={isSaving}
             canResetDraft={canManageSecurity}
             focusTarget={planFocusTarget}
+          />
+        ) : activeTab === 'login-page' ? (
+          <SiteManagerLoginPageEditor
+            loginPage={contentDraft.loginPage}
+            onLoginPageChange={(nextLoginPage) => {
+              setContentDraft((currentContent) => ({ ...currentContent, loginPage: nextLoginPage }));
+              setDraftMessage(null);
+            }}
+            onSaveDraft={handleSaveDraft}
+            onResetDraft={handleResetDraft}
+            isSaving={isSaving}
+            canResetDraft={canManageSecurity}
           />
         ) : canManageSecurity ? (
           <SiteManagerSecuritySettings />

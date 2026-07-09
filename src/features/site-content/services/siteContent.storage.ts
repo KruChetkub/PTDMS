@@ -54,6 +54,10 @@ export function normalizeSiteContent(content: Partial<SiteContentState> | null |
     typeof content?.heroBanner?.imageOverlayOpacity === 'number'
       ? Math.min(100, Math.max(0, content.heroBanner.imageOverlayOpacity))
       : defaultSiteContent.heroBanner.imageOverlayOpacity;
+  const loginBackgroundOverlayOpacity =
+    typeof content?.loginPage?.backgroundOverlayOpacity === 'number'
+      ? Math.min(90, Math.max(0, content.loginPage.backgroundOverlayOpacity))
+      : defaultSiteContent.loginPage.backgroundOverlayOpacity;
 
   return {
     brandSettings: {
@@ -64,6 +68,17 @@ export function normalizeSiteContent(content: Partial<SiteContentState> | null |
       ...defaultSiteContent.heroBanner,
       ...content?.heroBanner,
       imageOverlayOpacity,
+    },
+    loginPage: {
+      ...defaultSiteContent.loginPage,
+      ...content?.loginPage,
+      backgroundImageUrl: content?.loginPage?.backgroundImageUrl || defaultSiteContent.loginPage.backgroundImageUrl,
+      backgroundImageEnabled: content?.loginPage?.backgroundImageEnabled ?? defaultSiteContent.loginPage.backgroundImageEnabled,
+      backgroundOverlayOpacity: loginBackgroundOverlayOpacity,
+      loginPanelGradientEnabled: content?.loginPage?.loginPanelGradientEnabled ?? defaultSiteContent.loginPage.loginPanelGradientEnabled,
+      loginPanelGradientFrom: content?.loginPage?.loginPanelGradientFrom || defaultSiteContent.loginPage.loginPanelGradientFrom,
+      loginPanelGradientTo: content?.loginPage?.loginPanelGradientTo || defaultSiteContent.loginPage.loginPanelGradientTo,
+      status: content?.loginPage?.status || defaultSiteContent.loginPage.status,
     },
     newsItems: Array.isArray(content?.newsItems) && content.newsItems.length > 0 ? content.newsItems : defaultSiteContent.newsItems,
     faqItems: normalizeFaqItems(content?.faqItems),
