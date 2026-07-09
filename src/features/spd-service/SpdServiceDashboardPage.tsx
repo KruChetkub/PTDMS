@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, type RefObject, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   AlertCircle,
@@ -31,7 +31,7 @@ import {
   updateSpdServiceTicketWorkflow,
 } from '../../services/spd-service.service';
 import { useAuthStore } from '../../stores/auth.store';
-import type { SpdServiceCategory, SpdServiceSatisfactionSurvey, SpdServiceTicket, SpdServiceTicketStatus } from '../../types/database.types';
+import type { SpdServiceCategory, SpdServiceSatisfactionSurvey, SpdServiceTicket, SpdServiceTicketStatus, SpdServiceUrgency } from '../../types/database.types';
 import { cn } from '../../utils/cn';
 import { formatSpdServiceTicketNo } from './spdServiceTicketNo';
 
@@ -54,9 +54,23 @@ const statusTones: Record<SpdServiceTicketStatus, string> = {
 };
 
 const chartColors = ['#0f766e', '#2563eb', '#d97706', '#dc2626', '#7c3aed', '#475569'];
+const urgencyOrder: SpdServiceUrgency[] = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
+const urgencyColors: Record<SpdServiceUrgency, string> = {
+  LOW: '#16a34a',
+  MEDIUM: '#2563eb',
+  HIGH: '#d97706',
+  CRITICAL: '#dc2626',
+};
+const urgencyDescriptions: Record<SpdServiceUrgency, string> = {
+  LOW: 'ต่ำ',
+  MEDIUM: 'ปานกลาง',
+  HIGH: 'สูง',
+  CRITICAL: 'วิกฤต',
+};
 const openStatuses: SpdServiceTicketStatus[] = ['NEW', 'ASSIGNED', 'IN_PROGRESS', 'WAITING'];
 const recentTicketsPageSize = 10;
 const subjectDetailPageSize = 5;
+const urgencyDetailPageSize = 5;
 const chartDetailPageSize = 5;
 
 function isToday(dateValue: string) {
@@ -105,6 +119,14 @@ function countBySubject(tickets: SpdServiceTicket[]) {
   return [...buckets.entries()]
     .map(([name, value]) => ({ name, value }))
     .sort((left, right) => right.value - left.value || left.name.localeCompare(right.name, 'th'));
+}
+function countByUrgency(tickets: SpdServiceTicket[]) {
+  return urgencyOrder.map((urgency) => ({
+    name: urgency,
+    description: urgencyDescriptions[urgency],
+    value: tickets.filter((ticket) => ticket.urgency === urgency).length,
+    fill: urgencyColors[urgency],
+  }));
 }
 
 function countByTicketField(tickets: SpdServiceTicket[], getValue: (ticket: SpdServiceTicket) => string | null) {
@@ -472,11 +494,22 @@ export function SpdServiceDashboardPage() {
   const [chartDetailPage, setChartDetailPage] = useState(1);
   const [selectedSubject, setSelectedSubject] = useState<string | null>(null);
   const [subjectDetailPage, setSubjectDetailPage] = useState(1);
+  const [selectedUrgency, setSelectedUrgency] = useState<SpdServiceUrgency | null>(null);
+  const [urgencyDetailPage, setUrgencyDetailPage] = useState(1);
   const [pendingTicketAction, setPendingTicketAction] = useState<PendingTicketAction>(null);
   const [error, setError] = useState<string | null>(null);
   const canManageWorkflow = profile?.role === 'super_admin' || profile?.role === 'admin';
   const canViewSettings = profile?.role === 'super_admin' || profile?.role === 'admin' || profile?.role === 'executive';
   const canDeleteTickets = profile?.role === 'super_admin';
+  const chartDetailRef = useRef<HTMLElement | null>(null);
+  const subjectDetailRef = useRef<HTMLElement | null>(null);
+  const urgencyDetailRef = useRef<HTMLElement | null>(null);
+
+  const scrollToDetail = (targetRef: RefObject<HTMLElement | null>) => {
+    window.setTimeout(() => {
+      targetRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 0);
+  };
 
   const loadDashboard = async () => {
     try {
@@ -507,8 +540,9 @@ export function SpdServiceDashboardPage() {
     const categoryChartData = countByCategory(tickets, categories);
     const subjectChartData = countBySubject(tickets);
     const monthlyChartData = countByMonth(tickets);
+    const urgencyChartData = countByUrgency(tickets);
 
-    return { newToday, inProgress, completed, pending, overSla, categoryChartData, subjectChartData, monthlyChartData };
+    return { newToday, inProgress, completed, pending, overSla, categoryChartData, subjectChartData, monthlyChartData, urgencyChartData };
   }, [categories, tickets]);
 
   const recentTicketTotalPages = Math.max(1, Math.ceil(tickets.length / recentTicketsPageSize));
@@ -574,6 +608,21 @@ export function SpdServiceDashboardPage() {
   useEffect(() => {
     setSubjectDetailPage((current) => Math.min(current, Math.max(1, Math.ceil(selectedSubjectTickets.length / subjectDetailPageSize))));
   }, [selectedSubjectTickets.length]);
+  const selectedUrgencyTickets = useMemo(() => {
+    if (!selectedUrgency) {
+      return [];
+    }
+
+    return tickets.filter((ticket) => ticket.urgency === selectedUrgency);
+  }, [selectedUrgency, tickets]);
+  const urgencyDetailTotalPages = Math.max(1, Math.ceil(selectedUrgencyTickets.length / urgencyDetailPageSize));
+  const normalizedUrgencyDetailPage = Math.min(urgencyDetailPage, urgencyDetailTotalPages);
+  const urgencyDetailStart = (normalizedUrgencyDetailPage - 1) * urgencyDetailPageSize;
+  const urgencyDetailTickets = selectedUrgencyTickets.slice(urgencyDetailStart, urgencyDetailStart + urgencyDetailPageSize);
+
+  useEffect(() => {
+    setUrgencyDetailPage((current) => Math.min(current, Math.max(1, Math.ceil(selectedUrgencyTickets.length / urgencyDetailPageSize))));
+  }, [selectedUrgencyTickets.length]);
 
   const applyTicketUpdate = (updatedTicket: SpdServiceTicket) => {
     setTickets((current) => current.map((ticket) => (ticket.id === updatedTicket.id ? updatedTicket : ticket)));
@@ -875,10 +924,17 @@ export function SpdServiceDashboardPage() {
                         fill={selectedCategoryName === entry.name ? '#0f766e' : chartColors[index % chartColors.length]}
                         className="cursor-pointer outline-none"
                         onClick={() => {
-                          setSelectedCategoryName(entry.name);
+                          const isSameSelection = selectedCategoryName === entry.name;
+                          setSelectedCategoryName(isSameSelection ? null : entry.name);
                           setSelectedMonthKey(null);
                           setSelectedSubject(null);
+                          setSubjectDetailPage(1);
+                          setSelectedUrgency(null);
+                          setUrgencyDetailPage(1);
                           setChartDetailPage(1);
+                          if (!isSameSelection) {
+                            scrollToDetail(chartDetailRef);
+                          }
                         }}
                       />
                     ))}
@@ -908,10 +964,17 @@ export function SpdServiceDashboardPage() {
                         fill={selectedMonthKey === entry.key ? '#0f766e' : '#2563eb'}
                         className="cursor-pointer outline-none"
                         onClick={() => {
-                          setSelectedMonthKey(entry.key);
+                          const isSameSelection = selectedMonthKey === entry.key;
+                          setSelectedMonthKey(isSameSelection ? null : entry.key);
                           setSelectedCategoryName(null);
                           setSelectedSubject(null);
+                          setSubjectDetailPage(1);
+                          setSelectedUrgency(null);
+                          setUrgencyDetailPage(1);
                           setChartDetailPage(1);
+                          if (!isSameSelection) {
+                            scrollToDetail(chartDetailRef);
+                          }
                         }}
                       />
                     ))}
@@ -923,7 +986,7 @@ export function SpdServiceDashboardPage() {
         </div>
 
         {selectedChartDetail ? (
-          <section className="rounded-md border border-teal-100 bg-white p-5 shadow-sm">
+          <section ref={chartDetailRef} className="rounded-md border border-teal-100 bg-white p-5 shadow-sm">
             <div className="flex flex-col gap-3 border-b border-slate-100 pb-4 sm:flex-row sm:items-start sm:justify-between">
               <div className="min-w-0">
                 <p className="text-xs font-semibold uppercase text-teal-700">{selectedChartDetail.label}</p>
@@ -937,8 +1000,9 @@ export function SpdServiceDashboardPage() {
                   setSelectedMonthKey(null);
                   setChartDetailPage(1);
                 }}
-                className="inline-flex items-center justify-center rounded-md border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                className="inline-flex items-center justify-center gap-1.5 rounded-md border border-teal-200 bg-teal-50 px-3 py-2 text-sm font-semibold text-teal-700 shadow-sm transition hover:border-teal-300 hover:bg-teal-100 hover:text-teal-800"
               >
+                <X className="h-4 w-4" aria-hidden="true" />
                 ล้างการเลือก
               </button>
             </div>
@@ -1055,10 +1119,17 @@ export function SpdServiceDashboardPage() {
                       fill={selectedSubject === entry.name ? '#0f766e' : chartColors[index % chartColors.length]}
                       className="cursor-pointer outline-none"
                       onClick={() => {
-                        setSelectedSubject(entry.name);
+                        const isSameSelection = selectedSubject === entry.name;
+                        setSelectedSubject(isSameSelection ? null : entry.name);
                         setSelectedCategoryName(null);
                         setSelectedMonthKey(null);
+                        setChartDetailPage(1);
                         setSubjectDetailPage(1);
+                        setSelectedUrgency(null);
+                        setUrgencyDetailPage(1);
+                        if (!isSameSelection) {
+                          scrollToDetail(subjectDetailRef);
+                        }
                       }}
                     />
                   ))}
@@ -1068,8 +1139,9 @@ export function SpdServiceDashboardPage() {
           </div>
         </section>
 
+
         {selectedSubject ? (
-          <section className="rounded-md border border-violet-100 bg-white p-5 shadow-sm">
+          <section ref={subjectDetailRef} className="rounded-md border border-violet-100 bg-white p-5 shadow-sm">
             <div className="flex flex-col gap-3 border-b border-slate-100 pb-4 sm:flex-row sm:items-start sm:justify-between">
               <div className="min-w-0">
                 <p className="text-xs font-semibold uppercase text-violet-700">รายละเอียดหัวข้อบริการ</p>
@@ -1082,8 +1154,9 @@ export function SpdServiceDashboardPage() {
                   setSelectedSubject(null);
                   setSubjectDetailPage(1);
                 }}
-                className="inline-flex items-center justify-center rounded-md border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                className="inline-flex items-center justify-center gap-1.5 rounded-md border border-violet-200 bg-violet-50 px-3 py-2 text-sm font-semibold text-violet-700 shadow-sm transition hover:border-violet-300 hover:bg-violet-100 hover:text-violet-800"
               >
+                <X className="h-4 w-4" aria-hidden="true" />
                 ล้างการเลือก
               </button>
             </div>
@@ -1203,10 +1276,187 @@ export function SpdServiceDashboardPage() {
             </div>
           </section>
         ) : null}
+
+        <section className="rounded-md border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+            <div className="flex items-center gap-2">
+              <TimerReset className="h-5 w-5 text-rose-700" aria-hidden="true" />
+              <h2 className="text-base font-semibold text-slate-950">ระดับความเร่งด่วน</h2>
+            </div>
+            <p className="text-sm text-slate-500">จำนวนคำขอแยกตามระดับความเร่งด่วน</p>
+          </div>
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_16rem]">
+            <div className="h-72">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={stats.urgencyChartData} layout="vertical" margin={{ top: 12, right: 28, left: 20, bottom: 12 }}>
+                  <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                  <XAxis type="number" allowDecimals={false} tick={{ fontSize: 12 }} domain={[0, 'dataMax + 2']} />
+                  <YAxis type="category" dataKey="name" width={72} tick={{ fontSize: 12, fontWeight: 600 }} />
+                  <Tooltip
+                    formatter={(value, _name, item) => [`${value} รายการ`, item.payload.description]}
+                    labelFormatter={(label) => `ระดับ ${label}`}
+                  />
+                  <Bar dataKey="value" name="จำนวนคำขอ" radius={[0, 4, 4, 0]} barSize={28}>
+                    <LabelList dataKey="value" position="right" className="fill-slate-700 text-xs font-semibold" />
+                    {stats.urgencyChartData.map((entry) => (
+                      <Cell
+                        key={entry.name}
+                        fill={entry.fill}
+                        fillOpacity={selectedUrgency && selectedUrgency !== entry.name ? 0.35 : 1}
+                        className="cursor-pointer outline-none"
+                        onClick={() => {
+                          const isSameSelection = selectedUrgency === entry.name;
+                          setSelectedUrgency(isSameSelection ? null : entry.name);
+                          setUrgencyDetailPage(1);
+                          setSelectedSubject(null);
+                          setSubjectDetailPage(1);
+                          setSelectedCategoryName(null);
+                          setSelectedMonthKey(null);
+                          setChartDetailPage(1);
+                          if (!isSameSelection) {
+                            scrollToDetail(urgencyDetailRef);
+                          }
+                        }}
+                      />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="grid content-start gap-2">
+              {stats.urgencyChartData.map((entry) => (
+                <div key={entry.name} className="flex items-center justify-between gap-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <span className="h-3 w-3 rounded-full" style={{ backgroundColor: entry.fill }} />
+                    <div className="min-w-0">
+                      <p className="font-semibold text-slate-900">{entry.name}</p>
+                      <p className="text-xs text-slate-500">{entry.description}</p>
+                    </div>
+                  </div>
+                  <span className="shrink-0 rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 ring-1 ring-slate-200">{entry.value} รายการ</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {selectedUrgency ? (
+          <section ref={urgencyDetailRef} className="rounded-md border border-rose-100 bg-white p-5 shadow-sm">
+            <div className="flex flex-col gap-3 border-b border-slate-100 pb-4 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0">
+                <p className="text-xs font-semibold uppercase text-rose-700">รายละเอียดระดับความเร่งด่วน</p>
+                <h2 className="mt-1 text-lg font-semibold text-slate-950">
+                  {selectedUrgency} - {urgencyDescriptions[selectedUrgency]}
+                </h2>
+                <p className="mt-1 text-sm text-slate-500">รวม {selectedUrgencyTickets.length} รายการ</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedUrgency(null);
+                  setUrgencyDetailPage(1);
+                }}
+                className="inline-flex items-center justify-center gap-1.5 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700 shadow-sm transition hover:border-rose-300 hover:bg-rose-100 hover:text-rose-800"
+              >
+                <X className="h-4 w-4" aria-hidden="true" />
+                ล้างการเลือก
+              </button>
+            </div>
+
+            <div className="mt-4 overflow-x-auto">
+              <table className="w-full min-w-[820px] border-collapse text-left text-sm">
+                <thead>
+                  <tr className="border-b border-slate-200 text-xs font-semibold uppercase text-slate-500">
+                    <th className="px-2 pb-3">เลขคำขอ</th>
+                    <th className="px-2 pb-3">หัวข้อ</th>
+                    <th className="px-2 pb-3">ประเภท</th>
+                    <th className="px-2 pb-3">ผู้แจ้ง</th>
+                    <th className="px-2 pb-3">กลุ่มงาน</th>
+                    <th className="px-2 pb-3">สถานะ</th>
+                    <th className="px-2 pb-3">วันที่สร้าง</th>
+                    <th className="px-2 pb-3">รายละเอียด</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {urgencyDetailTickets.map((ticket) => (
+                    <tr key={ticket.id} className="transition hover:bg-slate-50">
+                      <td className="px-2 py-3">
+                        <button
+                          type="button"
+                          onClick={() => void handleOpenTicketDetail(ticket.id)}
+                          className="font-mono text-xs font-semibold text-teal-700 transition hover:text-teal-900 hover:underline"
+                        >
+                          {formatSpdServiceTicketNo(ticket.ticket_no)}
+                        </button>
+                      </td>
+                      <td className="max-w-[280px] truncate px-2 py-3 font-semibold text-slate-900">{ticket.subject}</td>
+                      <td className="px-2 py-3 text-slate-600">{ticket.category_name}</td>
+                      <td className="px-2 py-3 text-slate-700">{ticket.requester_name}</td>
+                      <td className="px-2 py-3 text-slate-600">{ticket.requester_department || '-'}</td>
+                      <td className="px-2 py-3">
+                        <span className={cn('inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ring-1', statusTones[ticket.status])}>
+                          {statusLabels[ticket.status]}
+                        </span>
+                      </td>
+                      <td className="px-2 py-3 text-slate-500">{new Date(ticket.created_at).toLocaleDateString('th-TH')}</td>
+                      <td className="px-2 py-3">
+                        <button
+                          type="button"
+                          onClick={() => void handleOpenTicketDetail(ticket.id)}
+                          className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
+                        >
+                          <Eye className="h-3.5 w-3.5" aria-hidden="true" />
+                          เปิดดู
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                  {urgencyDetailTickets.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="px-2 py-10 text-center text-slate-400">
+                        ไม่มีรายการในระดับนี้
+                      </td>
+                    </tr>
+                  ) : null}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="mt-4 flex flex-col gap-3 border-t border-slate-100 pt-4 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm text-slate-500">
+                แสดง {selectedUrgencyTickets.length === 0 ? 0 : urgencyDetailStart + 1}-{Math.min(urgencyDetailStart + urgencyDetailTickets.length, selectedUrgencyTickets.length)} จาก {selectedUrgencyTickets.length} รายการ
+              </p>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setUrgencyDetailPage((current) => Math.max(1, current - 1))}
+                  disabled={normalizedUrgencyDetailPage <= 1}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+                  ก่อนหน้า
+                </button>
+                <span className="rounded-md bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-700">
+                  หน้า {normalizedUrgencyDetailPage} / {urgencyDetailTotalPages}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setUrgencyDetailPage((current) => Math.min(urgencyDetailTotalPages, current + 1))}
+                  disabled={normalizedUrgencyDetailPage >= urgencyDetailTotalPages}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  ถัดไป
+                  <ChevronRight className="h-4 w-4" aria-hidden="true" />
+                </button>
+              </div>
+            </div>
+          </section>
+        ) : null}
+
         <section className="rounded-md border border-slate-200 bg-white p-5 shadow-sm">
           <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
             <div>
-              <h2 className="text-base font-semibold text-slate-950">คำขอรับบริการ</h2>
+              <h2 className="text-base font-semibold text-slate-950">คำขอรับบริการทั้งหมด</h2>
               <p className="mt-1 text-sm text-slate-500"></p>
             </div>
             <div className="flex flex-wrap items-center gap-3">

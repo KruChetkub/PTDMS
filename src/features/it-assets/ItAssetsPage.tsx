@@ -377,8 +377,9 @@ export function ItAssetsPage() {
                   <table className="w-full min-w-[980px] border-collapse text-left text-sm">
                     <thead>
                       <tr className="border-b border-slate-200 text-xs font-semibold uppercase text-slate-500">
+                        <th className="px-2 pb-3 text-center">ลำดับที่</th>
                         <th className="px-2 pb-3">รหัสครุภัณฑ์</th>
-                        <th className="px-2 pb-3">ผู้ใช้งาน / ชื่อเครื่อง</th>
+                        <th className="px-2 pb-3">ชื่อเครื่อง</th>
                         <th className="px-2 pb-3">OS / CPU / RAM</th>
                         <th className="px-2 pb-3">Disk 1 / Disk 2</th>
                         <th className="px-2 pb-3 text-center">คุณภาพ</th>
@@ -388,13 +389,11 @@ export function ItAssetsPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {displayedAssets.slice(0, 100).map((asset) => (
+                      {displayedAssets.slice(0, 100).map((asset, index) => (
                         <tr key={asset.id} className="cursor-pointer transition hover:bg-slate-50" onClick={() => setSelectedAsset(asset)}>
+                          <td className="px-2 py-3 text-center font-mono text-xs font-semibold text-slate-600">{index + 1}</td>
                           <td className="px-2 py-3 font-mono text-xs font-semibold text-blue-700">{asset.asset_code}</td>
-                          <td className="px-2 py-3">
-                            <p className="font-semibold text-slate-900">{asset.user_name || '-'}</p>
-                            <p className="text-xs text-slate-500">{asset.computer_name || '-'}</p>
-                          </td>
+                          <td className="px-2 py-3 font-semibold text-slate-900">{asset.computer_name || '-'}</td>
                           <td className="px-2 py-3">
                             <span className="inline-flex rounded bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">{asset.operating_system || '-'}</span>
                             <p className="mt-1 text-xs text-slate-500">{asset.cpu || '-'}</p>
@@ -417,7 +416,7 @@ export function ItAssetsPage() {
                       ))}
                       {displayedAssets.length === 0 ? (
                         <tr>
-                          <td colSpan={8} className="px-2 py-10 text-center text-slate-400">ไม่พบข้อมูลที่ตรงกับเงื่อนไข</td>
+                          <td colSpan={9} className="px-2 py-10 text-center text-slate-400">ไม่พบข้อมูลที่ตรงกับเงื่อนไข</td>
                         </tr>
                       ) : null}
                     </tbody>

@@ -1,4 +1,4 @@
-import { FormEvent, PointerEvent, useEffect, useMemo, useState } from 'react';
+﻿import { FormEvent, PointerEvent, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { AlertCircle, ArrowLeft, CheckCircle2, Headphones, ImageIcon, Loader2, Send, X, ZoomIn } from 'lucide-react';
 import { createSpdServiceTicket, getSpdServiceCategories, getSpdServiceDigitalGuideSettings, notifySpdServiceTicketCreated, type SpdServiceDigitalGuide } from '../../services/spd-service.service';
@@ -8,10 +8,10 @@ import type { SpdServiceCategory, SpdServiceTicket, SpdServiceUrgency } from '..
 import { formatSpdServiceTicketNo } from './spdServiceTicketNo';
 
 const urgencyOptions: Array<{ value: SpdServiceUrgency; label: string; hint: string }> = [
-  { value: 'LOW', label: 'LOW', hint: 'ไม่เร่งด่วน' },
-  { value: 'MEDIUM', label: 'MEDIUM', hint: 'ปกติ' },
-  { value: 'HIGH', label: 'HIGH', hint: 'ควรรีบดำเนินการ' },
-  { value: 'CRITICAL', label: 'CRITICAL', hint: 'กระทบงานสำคัญ' },
+  { value: 'LOW', label: 'LOW', hint: 'ถึงหน้างานภายใน 60 นาที เป็นต้นไป' },
+  { value: 'MEDIUM', label: 'MEDIUM', hint: 'ถึงหน้างานภายใน 30 นาที' },
+  { value: 'HIGH', label: 'HIGH', hint: 'ถึงหน้างานภายใน 15 นาที' },
+  { value: 'CRITICAL', label: 'CRITICAL', hint: 'ถึงหน้างานภายใน 5 นาที' },
 ];
 
 const otherCategoryId = '__other__';

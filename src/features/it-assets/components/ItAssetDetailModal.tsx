@@ -10,7 +10,7 @@ function DetailItem({ label, value }: { label: string; value: string | number | 
   return (
     <div>
       <p className="text-xs font-medium text-slate-500">{label}</p>
-      <p className="mt-1 text-sm font-semibold text-slate-900">{value || '-'}</p>
+      <p className="mt-1 text-sm font-semibold text-slate-900">{value ?? '-'}</p>
     </div>
   );
 }
@@ -96,11 +96,11 @@ export function ItAssetDetailModal({ asset, onClose }: ItAssetDetailModalProps) 
               <Activity className="h-4 w-4 text-blue-700" aria-hidden="true" />
               รายละเอียดคะแนน
             </h3>
-            <div className="grid gap-3 text-sm sm:grid-cols-4">
+            <div className="grid gap-3 text-sm sm:grid-cols-3">
               <DetailItem label="RAM" value={`+${asset.health.breakdown.ramScore}`} />
               <DetailItem label="Disk" value={`+${asset.health.breakdown.diskScore}`} />
               <DetailItem label="OS" value={`+${asset.health.breakdown.osScore}`} />
-              <DetailItem label="Penalty" value={asset.health.breakdown.penalty} />
+
             </div>
           </section>
         </div>
