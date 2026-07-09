@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { AlertCircle, ArrowLeft, Eye, Filter, RefreshCw, Search, X } from 'lucide-react';
+import { AlertCircle, ArrowLeft, ChevronLeft, ChevronRight, Eye, FileDown, Filter, RefreshCw, Search, X } from 'lucide-react';
 import { getSpdServiceTickets } from '../../services/spd-service.service';
+import { useAuthStore } from '../../stores/auth.store';
 import type { SpdServiceTicket, SpdServiceTicketStatus, SpdServiceUrgency } from '../../types/database.types';
 import { cn } from '../../utils/cn';
 import { formatSpdServiceTicketNo } from './spdServiceTicketNo';
@@ -31,6 +32,77 @@ function uniqueOptions(values: string[]) {
   return [...new Set(values.filter(Boolean))].sort((a, b) => a.localeCompare(b, 'th'));
 }
 
+const defaultExportYear = '2569';
+const ticketsPerPage = 10;
+
+function getThaiYear(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return String(date.getFullYear() + 543);
+}
+
+function formatThaiDateTime(value: string | null) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+
+  return date.toLocaleString('th-TH', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function formatResolutionMinutes(value: number | null) {
+  return typeof value === 'number' ? value : '';
+}
+
+function isTicketInExportDateRange(ticket: SpdServiceTicket, year: string, startDate: string, endDate: string) {
+  const createdAt = new Date(ticket.created_at);
+  if (Number.isNaN(createdAt.getTime())) return false;
+
+  if (year !== 'all' && getThaiYear(ticket.created_at) !== year) {
+    return false;
+  }
+
+  if (startDate) {
+    const start = new Date(`${startDate}T00:00:00.000`);
+    if (!Number.isNaN(start.getTime()) && createdAt < start) return false;
+  }
+
+  if (endDate) {
+    const end = new Date(`${endDate}T23:59:59.999`);
+    if (!Number.isNaN(end.getTime()) && createdAt > end) return false;
+  }
+
+  return true;
+}
+
+function buildSpdServiceExportRows(tickets: SpdServiceTicket[]) {
+  return tickets.map((ticket, index) => ({
+    'ลำดับ': index + 1,
+    'เลขคำขอ': formatSpdServiceTicketNo(ticket.ticket_no),
+    'วันที่แจ้ง': formatThaiDateTime(ticket.created_at),
+    'ชื่อผู้แจ้ง': ticket.requester_name,
+    'หน่วยงาน / กลุ่มงาน': ticket.requester_department || '',
+    'ประเภทบริการ': ticket.category_name,
+    'หัวข้อคำขอ': ticket.subject,
+    'รายละเอียดคำขอ': ticket.description,
+    'ความเร่งด่วน': ticket.urgency,
+    'สถานะ': statusLabels[ticket.status],
+    'วันที่มอบหมาย': formatThaiDateTime(ticket.assigned_at),
+    'วันที่เริ่มดำเนินการ': formatThaiDateTime(ticket.started_at),
+    'วันที่เสร็จสิ้น': formatThaiDateTime(ticket.completed_at),
+    'วันที่ยกเลิก': formatThaiDateTime(ticket.cancelled_at),
+    'ระยะเวลาดำเนินการ (นาที)': formatResolutionMinutes(ticket.resolution_minutes),
+    'สาเหตุของปัญหา': ticket.problem_cause || '',
+    'วิธีดำเนินการ / วิธีแก้ไข': ticket.resolution_method || '',
+    'ผลการดำเนินงาน': ticket.resolution_result || '',
+  }));
+}
+
 function matchesKeyword(ticket: SpdServiceTicket, keyword: string) {
   if (!keyword) {
     return true;
@@ -55,11 +127,18 @@ function matchesKeyword(ticket: SpdServiceTicket, keyword: string) {
 }
 
 export function SpdServiceTicketListPage() {
+  const profile = useAuthStore((state) => state.profile);
+  const canExportExcel = profile?.role === 'super_admin' || profile?.role === 'admin';
   const [tickets, setTickets] = useState<SpdServiceTicket[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | SpdServiceTicketStatus>('all');
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [urgencyFilter, setUrgencyFilter] = useState<'all' | SpdServiceUrgency>('all');
+  const [exportYear, setExportYear] = useState(defaultExportYear);
+  const [exportStartDate, setExportStartDate] = useState('');
+  const [exportEndDate, setExportEndDate] = useState('');
+  const [exportMessage, setExportMessage] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -82,6 +161,15 @@ export function SpdServiceTicketListPage() {
   }, []);
 
   const categoryOptions = useMemo(() => uniqueOptions(tickets.map((ticket) => ticket.category_name)), [tickets]);
+  const exportYearOptions = useMemo(() => {
+    const years = new Set([defaultExportYear]);
+    tickets.forEach((ticket) => {
+      const year = getThaiYear(ticket.created_at);
+      if (year) years.add(year);
+    });
+
+    return [...years].sort((a, b) => Number(b) - Number(a));
+  }, [tickets]);
 
   const filteredTickets = useMemo(() => {
     const keyword = searchTerm.trim().toLowerCase();
@@ -95,11 +183,75 @@ export function SpdServiceTicketListPage() {
     );
   }, [categoryFilter, searchTerm, statusFilter, tickets, urgencyFilter]);
 
+  const exportTickets = useMemo(
+    () => filteredTickets.filter((ticket) => isTicketInExportDateRange(ticket, exportYear, exportStartDate, exportEndDate)),
+    [exportEndDate, exportStartDate, exportYear, filteredTickets],
+  );
+  const totalPages = Math.max(1, Math.ceil(filteredTickets.length / ticketsPerPage));
+  const paginatedTickets = useMemo(() => {
+    const startIndex = (currentPage - 1) * ticketsPerPage;
+    return filteredTickets.slice(startIndex, startIndex + ticketsPerPage);
+  }, [currentPage, filteredTickets]);
+  const pageStartItem = filteredTickets.length === 0 ? 0 : (currentPage - 1) * ticketsPerPage + 1;
+  const pageEndItem = Math.min(currentPage * ticketsPerPage, filteredTickets.length);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [categoryFilter, searchTerm, statusFilter, urgencyFilter]);
+
+  useEffect(() => {
+    setCurrentPage((page) => Math.min(page, totalPages));
+  }, [totalPages]);
+
   const resetFilters = () => {
     setSearchTerm('');
     setStatusFilter('all');
     setCategoryFilter('all');
     setUrgencyFilter('all');
+  };
+
+  const handleExportExcel = async () => {
+    if (!canExportExcel) return;
+
+    if (exportStartDate && exportEndDate && exportStartDate > exportEndDate) {
+      setExportMessage('วันที่เริ่มต้นต้องไม่เกินวันที่สิ้นสุด');
+      return;
+    }
+
+    if (exportTickets.length === 0) {
+      setExportMessage('ไม่พบคำขอที่ตรงกับเงื่อนไขสำหรับ Export');
+      return;
+    }
+
+    const XLSX = await import('xlsx');
+    const worksheet = XLSX.utils.json_to_sheet(buildSpdServiceExportRows(exportTickets));
+    worksheet['!cols'] = [
+      { wch: 8 },
+      { wch: 22 },
+      { wch: 20 },
+      { wch: 28 },
+      { wch: 28 },
+      { wch: 24 },
+      { wch: 34 },
+      { wch: 56 },
+      { wch: 14 },
+      { wch: 18 },
+      { wch: 20 },
+      { wch: 20 },
+      { wch: 20 },
+      { wch: 20 },
+      { wch: 22 },
+      { wch: 42 },
+      { wch: 42 },
+      { wch: 42 },
+    ];
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'SPD Service Requests');
+    const datePart = [exportStartDate, exportEndDate].filter(Boolean).join('_to_') || 'all-dates';
+    const yearPart = exportYear === 'all' ? 'all-years' : `BE${exportYear}`;
+    XLSX.writeFile(workbook, `spd-service-requests-${yearPart}-${datePart}.xlsx`);
+    setExportMessage(`Export Excel สำเร็จ ${exportTickets.length.toLocaleString()} รายการ`);
   };
 
   return (
@@ -211,6 +363,72 @@ export function SpdServiceTicketListPage() {
             แสดง <span className="font-semibold text-slate-950">{filteredTickets.length.toLocaleString()}</span> จาก{' '}
             <span className="font-semibold text-slate-950">{tickets.length.toLocaleString()}</span> รายการ
           </div>
+
+          {canExportExcel ? (
+            <div className="mt-4 border-t border-slate-200 pt-4">
+              <div className="grid gap-3 lg:grid-cols-[10rem_12rem_12rem_auto] lg:items-end">
+                <label className="block">
+                  <span className="text-xs font-medium text-slate-600">ปี พ.ศ.</span>
+                  <select
+                    value={exportYear}
+                    onChange={(event) => {
+                      setExportYear(event.target.value);
+                      setExportMessage(null);
+                    }}
+                    className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
+                  >
+                    <option value="all">ทุกปี</option>
+                    {exportYearOptions.map((year) => (
+                      <option key={year} value={year}>
+                        {year}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="block">
+                  <span className="text-xs font-medium text-slate-600">จากวันที่</span>
+                  <input
+                    type="date"
+                    value={exportStartDate}
+                    onChange={(event) => {
+                      setExportStartDate(event.target.value);
+                      setExportMessage(null);
+                    }}
+                    className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
+                  />
+                </label>
+
+                <label className="block">
+                  <span className="text-xs font-medium text-slate-600">ถึงวันที่</span>
+                  <input
+                    type="date"
+                    value={exportEndDate}
+                    onChange={(event) => {
+                      setExportEndDate(event.target.value);
+                      setExportMessage(null);
+                    }}
+                    className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
+                  />
+                </label>
+
+                <button
+                  type="button"
+                  onClick={() => void handleExportExcel()}
+                  disabled={exportTickets.length === 0}
+                  className="inline-flex items-center justify-center gap-2 rounded-md bg-emerald-700 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <FileDown className="h-4 w-4" aria-hidden="true" />
+                  Export Excel
+                </button>
+              </div>
+
+              <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                เตรียมส่งออก <span className="font-semibold text-slate-800">{exportTickets.length.toLocaleString()}</span> รายการตามเงื่อนไขที่เลือก
+                {exportMessage ? <span className="font-semibold text-teal-700">{exportMessage}</span> : null}
+              </div>
+            </div>
+          ) : null}
         </section>
 
         <section className="rounded-md border border-slate-200 bg-white p-5 shadow-sm">
@@ -230,7 +448,7 @@ export function SpdServiceTicketListPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {filteredTickets.map((ticket) => (
+                {paginatedTickets.map((ticket) => (
                   <tr key={ticket.id} className="transition hover:bg-slate-50">
                     <td className="px-2 py-3 font-mono text-xs font-semibold text-teal-700">{formatSpdServiceTicketNo(ticket.ticket_no)}</td>
                     <td className="max-w-[280px] truncate px-2 py-3 font-semibold text-slate-900" title={ticket.subject}>
@@ -266,6 +484,37 @@ export function SpdServiceTicketListPage() {
                 ) : null}
               </tbody>
             </table>
+          </div>
+
+          <div className="mt-4 flex flex-col gap-3 border-t border-slate-100 pt-4 text-sm text-slate-600 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              แสดงรายการที่ <span className="font-semibold text-slate-900">{pageStartItem.toLocaleString()}</span> -{' '}
+              <span className="font-semibold text-slate-900">{pageEndItem.toLocaleString()}</span> จาก{' '}
+              <span className="font-semibold text-slate-900">{filteredTickets.length.toLocaleString()}</span> รายการ
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+                disabled={currentPage <= 1}
+                className="inline-flex h-9 items-center gap-1.5 rounded-md border border-slate-200 px-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+                ก่อนหน้า
+              </button>
+              <span className="rounded-md bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-700">
+                หน้า {currentPage} / {totalPages}
+              </span>
+              <button
+                type="button"
+                onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+                disabled={currentPage >= totalPages}
+                className="inline-flex h-9 items-center gap-1.5 rounded-md border border-slate-200 px-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                ถัดไป
+                <ChevronRight className="h-4 w-4" aria-hidden="true" />
+              </button>
+            </div>
           </div>
         </section>
       </main>
