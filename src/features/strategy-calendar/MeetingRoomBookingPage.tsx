@@ -1,4 +1,4 @@
-﻿import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
 import {
   BellRing,
   CalendarDays,
@@ -52,7 +52,8 @@ const thaiMonths = [
 ];
 
 const weekdays = ['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส'];
-const rooms = ['ห้องประชุม 1', 'ห้องประชุม 2', 'ห้องสมุด'];
+const noMeetingRoomLabel = 'ไม่ใช้ห้องประชุม';
+const rooms = ['ห้องประชุม 1', 'ห้องประชุม 2', 'ห้องสมุด', noMeetingRoomLabel];
 const meetingTypes = ['การประชุมแบบ on site', 'การประชุม online', 'การประชุมแบบ on site และ online'];
 const workGroups = [
   'กลุ่มพัฒนาและบริหารยุทธศาสตร์',
@@ -142,23 +143,31 @@ function formatTime(value: string) {
 function roomStyle(room: string) {
   if (room === 'ห้องประชุม 1') {
     return {
-      chip: 'bg-blue-100 text-blue-700',
-      stripe: 'bg-blue-500',
+      chip: 'bg-blue-200 text-blue-950 ring-1 ring-blue-300',
+      stripe: 'bg-blue-700',
       icon: <Home className="h-4 w-4" aria-hidden="true" />,
     };
   }
 
   if (room === 'ห้องประชุม 2') {
     return {
-      chip: 'bg-cyan-100 text-cyan-700',
-      stripe: 'bg-cyan-500',
+      chip: 'bg-cyan-200 text-cyan-950 ring-1 ring-cyan-300',
+      stripe: 'bg-cyan-700',
       icon: <UsersRound className="h-4 w-4" aria-hidden="true" />,
     };
   }
 
+  if (room === noMeetingRoomLabel) {
+    return {
+      chip: 'bg-amber-200 text-amber-950 ring-1 ring-amber-300',
+      stripe: 'bg-amber-700',
+      icon: <XCircle className="h-4 w-4" aria-hidden="true" />,
+    };
+  }
+
   return {
-    chip: 'bg-indigo-100 text-indigo-700',
-    stripe: 'bg-indigo-500',
+    chip: 'bg-indigo-200 text-indigo-950 ring-1 ring-indigo-300',
+    stripe: 'bg-indigo-700',
     icon: <Library className="h-4 w-4" aria-hidden="true" />,
   };
 }
@@ -451,6 +460,8 @@ export function MeetingRoomBookingPage() {
       (reservation) =>
         reservation.id !== editingId &&
         reservation.reservation_date === input.reservationDate &&
+        reservation.room !== noMeetingRoomLabel &&
+        input.room !== noMeetingRoomLabel &&
         reservation.room === input.room &&
         reservationsOverlap(input, reservation),
     );
@@ -584,7 +595,7 @@ export function MeetingRoomBookingPage() {
           onChange={(event) => setForm((current) => ({ ...current, room: event.target.value }))}
           className="mt-1 w-full rounded-md border border-blue-100 bg-white px-3 py-2 text-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
         >
-          <option value="">กรุณาเลือกห้อง</option>
+          <option value="">กรุณาเลือกห้อง / ไม่ใช้ห้องประชุม</option>
           {rooms.map((room) => (
             <option key={room} value={room}>
               {room}
