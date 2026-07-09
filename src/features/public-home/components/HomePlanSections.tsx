@@ -50,6 +50,11 @@ const sectionToneClass: Record<string, { border: string; body: string; badge: st
 type HomePlanSectionsProps = {
   sections: HomePlanSection[];
   logoUrl: string;
+  sectionId?: string;
+  showPlanBanner?: boolean;
+  heading?: string;
+  description?: string;
+  showSectionNumbers?: boolean;
 };
 
 type CoverPreviewState = {
@@ -63,7 +68,15 @@ function getCardsPerPage(width: number) {
   return 1;
 }
 
-export function HomePlanSections({ sections, logoUrl }: HomePlanSectionsProps) {
+export function HomePlanSections({
+  sections,
+  logoUrl,
+  sectionId,
+  showPlanBanner = true,
+  heading,
+  description,
+  showSectionNumbers = true,
+}: HomePlanSectionsProps) {
   const [cardsPerPage, setCardsPerPage] = useState(() =>
     typeof window === 'undefined' ? 4 : getCardsPerPage(window.innerWidth),
   );
@@ -126,11 +139,20 @@ export function HomePlanSections({ sections, logoUrl }: HomePlanSectionsProps) {
   };
 
   return (
-    <section className="bg-slate-50 py-12 sm:py-16">
+    <section id={sectionId} className="scroll-mt-20 bg-slate-50 py-12 sm:py-16">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <HomePlanLevelsBanner logoUrl={logoUrl} />
+        {showPlanBanner ? <HomePlanLevelsBanner logoUrl={logoUrl} /> : null}
 
-        <div className="mt-8 grid gap-5">
+        {heading ? (
+          <div className="mb-6 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <h2 className="mt-1 text-2xl font-bold tracking-normal text-slate-950 sm:text-3xl">{heading}</h2>
+              {description ? <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">{description}</p> : null}
+            </div>
+          </div>
+        ) : null}
+
+        <div className={`${showPlanBanner ? 'mt-8' : 'mt-0'} grid gap-5`}>
           {sections.map((section, sectionIndex) => {
             const tone = sectionToneClass[section.tone] || sectionToneClass.emerald;
             const currentPage = sectionPages[section.id] || 0;
@@ -146,15 +168,17 @@ export function HomePlanSections({ sections, logoUrl }: HomePlanSectionsProps) {
             return (
               <RevealOnScroll key={section.id} delayMs={sectionIndex * 140}>
                 <article
-                  id={section.id === 'plan-levels' ? undefined : section.id}
+                  id={sectionId === section.id || section.id === 'plan-levels' ? undefined : section.id}
                   className={`scroll-mt-24 rounded-md p-[2px] ${tone.border} ${tone.shadow}`}
                 >
                   <div className={`rounded-md p-4 sm:p-5 ${tone.body}`}>
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <div className="flex min-w-0 items-center gap-3">
-                        <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-lg font-bold shadow-sm ring-1 ${tone.badge}`}>
-                          {section.number}
-                        </span>
+                        {showSectionNumbers ? (
+                          <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-lg font-bold shadow-sm ring-1 ${tone.badge}`}>
+                            {section.number}
+                          </span>
+                        ) : null}
                         <h3 className="text-xl font-semibold tracking-normal">{section.title}</h3>
                       </div>
 

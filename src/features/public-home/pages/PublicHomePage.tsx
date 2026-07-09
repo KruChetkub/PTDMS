@@ -83,7 +83,7 @@ export function PublicHomePage() {
   const visibleFaqs = siteContent.faqItems
     .filter((item) => item.status === 'published')
     .map((item) => ({ question: item.question, answer: item.answer }));
-  const planSections = homePlanSections.map((section) => {
+  const allPlanSections = homePlanSections.map((section) => {
     const selectCards = planSectionCardSelectors[section.id];
     if (!selectCards) return section;
 
@@ -92,6 +92,8 @@ export function PublicHomePage() {
       cards: mapVisiblePlanCards(selectCards(siteContent)),
     };
   });
+  const r2rSections = allPlanSections.filter((section) => section.id === 'r2r-research');
+  const planSections = allPlanSections.filter((section) => section.id !== 'r2r-research');
 
   return (
     <div className="min-h-screen bg-white text-slate-900">
@@ -104,6 +106,17 @@ export function PublicHomePage() {
         <HomeMobileSectionLauncher planSections={planSections} news={visibleNews} faqs={visibleFaqs} />
         <div className="hidden lg:block">
           <HomePlanSections sections={planSections} logoUrl={siteContent.brandSettings.logoUrl} />
+        </div>
+        <HomePlanSections
+          sections={r2rSections}
+          logoUrl={siteContent.brandSettings.logoUrl}
+          sectionId="r2r-research"
+          showPlanBanner={false}
+          showSectionNumbers={false}
+          heading="งานวิจัยจากงานประจำกองยุทธศาสตร์และแผนงาน (R2R)"
+          description="รวบรวมผลงานวิจัยจากงานประจำ แยกจากหมวดแผนเพื่อให้เข้าถึงได้ชัดเจน"
+        />
+        <div className="hidden lg:block">
           <HomeNewsSection news={visibleNews} />
           <HomeFaqSection faqs={visibleFaqs} />
         </div>

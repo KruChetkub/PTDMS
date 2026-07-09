@@ -3,6 +3,7 @@ import { scrollToHomeSection } from '../utils/scrollToHomeSection';
 const navLinks = [
   { label: 'หน้าแรก', targetId: 'home-hero' },
   { label: 'แผนงาน', targetId: 'plan-levels' },
+  { label: 'งานวิจัยจากงานประจำ', targetId: 'r2r-research' },
   { label: 'ข่าวประชาสัมพันธ์', targetId: 'public-news' },
   { label: 'คำถามที่พบบ่อย', targetId: 'public-faq' },
 ];

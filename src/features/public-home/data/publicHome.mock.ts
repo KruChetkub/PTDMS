@@ -144,7 +144,7 @@ export const homePlanSections: HomePlanSection[] = [
   {
     id: 'r2r-research',
     number: '6',
-    title: 'งานวิจัยจากงานประจำ R2R',
+    title: 'งานวิจัยจากงานประจำ',
     tone: 'emerald',
     cards: [
       {
