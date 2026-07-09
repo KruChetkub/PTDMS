@@ -56,17 +56,17 @@ export function HomeFooter() {
           })}
         </div>
 
-        <div className="flex flex-col justify-between gap-4 pt-6 sm:flex-row sm:items-center">
-          <div>
+        <div className="flex items-center justify-between gap-3 pt-6">
+          <div className="min-w-0">
             <div className="text-base font-semibold">SmartDSP</div>
             <p className="mt-1 text-sm text-white/60">กองยุทธศาสตร์และแผนงาน</p>
           </div>
-          <div className="w-full rounded-md bg-white/5 px-3 py-1.5 sm:ml-auto sm:max-w-44">
-            <div className="flex items-center gap-2 text-xs font-medium text-white/55">
+          <div className="shrink-0 rounded-md bg-white/5 px-3 py-1.5 sm:ml-auto sm:min-w-44">
+            <div className="flex items-center gap-1.5 text-[11px] font-medium text-white/55 sm:gap-2 sm:text-xs">
               <UsersRound className="h-4 w-4" aria-hidden="true" />
               ผู้เข้าชมทั้งหมด
             </div>
-            <div className="mt-1 text-base font-semibold text-white">{formatCount(stats.totalVisitors)}</div>
+            <div className="mt-1 text-sm font-semibold text-white sm:text-base">{formatCount(stats.totalVisitors)}</div>
           </div>
         </div>
       </div>

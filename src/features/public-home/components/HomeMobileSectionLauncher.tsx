@@ -60,7 +60,7 @@ const mobileSectionShortLabels: Record<string, string> = {
   'annual-guidelines': 'แนวทางประจำปี',
   'risk-management': 'บริหารความเสี่ยง',
   'executive-policy': 'นโยบายผู้บริหาร',
-  'r2r-research': 'R2R',
+  'r2r-research': 'งานวิจัย R2R',
   'public-news': 'ข่าวล่าสุด',
   'public-faq': 'คำถามที่พบบ่อย',
 };

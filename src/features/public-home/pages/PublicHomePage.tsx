@@ -103,19 +103,21 @@ export function PublicHomePage() {
         <div className="bg-slate-50 px-4 pt-6 lg:hidden">
           <HomePlanLevelsBanner logoUrl={siteContent.brandSettings.logoUrl} />
         </div>
-        <HomeMobileSectionLauncher planSections={planSections} news={visibleNews} faqs={visibleFaqs} />
+        <HomeMobileSectionLauncher planSections={allPlanSections} news={visibleNews} faqs={visibleFaqs} />
         <div className="hidden lg:block">
           <HomePlanSections sections={planSections} logoUrl={siteContent.brandSettings.logoUrl} />
         </div>
-        <HomePlanSections
-          sections={r2rSections}
-          logoUrl={siteContent.brandSettings.logoUrl}
-          sectionId="r2r-research"
-          showPlanBanner={false}
-          showSectionNumbers={false}
-          heading="งานวิจัยจากงานประจำกองยุทธศาสตร์และแผนงาน (R2R)"
-          description="รวบรวมผลงานวิจัยจากงานประจำ แยกจากหมวดแผนเพื่อให้เข้าถึงได้ชัดเจน"
-        />
+        <div className="hidden lg:block">
+          <HomePlanSections
+            sections={r2rSections}
+            logoUrl={siteContent.brandSettings.logoUrl}
+            sectionId="r2r-research"
+            showPlanBanner={false}
+            showSectionNumbers={false}
+            heading="งานวิจัยจากงานประจำกองยุทธศาสตร์และแผนงาน (R2R)"
+            description="รวบรวมผลงานวิจัยจากงานประจำ แยกจากหมวดแผนเพื่อให้เข้าถึงได้ชัดเจน"
+          />
+        </div>
         <div className="hidden lg:block">
           <HomeNewsSection news={visibleNews} />
           <HomeFaqSection faqs={visibleFaqs} />
