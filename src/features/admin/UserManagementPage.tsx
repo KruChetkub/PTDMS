@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   AlertCircle,
   CheckCircle2,
@@ -530,9 +530,10 @@ export function UserManagementPage() {
     form: getEmptyCreateForm('personnel'),
     error: null,
   });
-  const [editModal, setEditModal] = useState<{ isOpen: boolean; user: UserManagementProfile | null; form: EditFormState }>({
+  const [editModal, setEditModal] = useState<{ isOpen: boolean; user: UserManagementProfile | null; form: EditFormState; error: string | null }>({
     isOpen: false,
     user: null,
+    error: null,
     form: {
       employee_code: '',
       email: '',
@@ -932,12 +933,14 @@ export function UserManagementPage() {
       isOpen: true,
       user,
       form: mapUserToForm(user),
+      error: null,
     });
   };
 
   const handleEditField = (field: keyof EditFormState, value: string) => {
     setEditModal((prev) => ({
       ...prev,
+      error: null,
       form: {
         ...prev.form,
         [field]: value,
@@ -1017,7 +1020,7 @@ export function UserManagementPage() {
       setEditModal((prev) => ({ ...prev, isOpen: false }));
       await loadUsers();
     } catch (err) {
-      alert(getErrorMessage(err, 'ไม่สามารถบันทึกข้อมูลผู้ใช้งานได้'));
+      setEditModal((prev) => ({ ...prev, error: getErrorMessage(err, 'ไม่สามารถบันทึกข้อมูลผู้ใช้งานได้') }));
     } finally {
       setUpdating(null);
     }
@@ -1363,6 +1366,9 @@ export function UserManagementPage() {
         title={`แก้ไขข้อมูลผู้ใช้: ${editModal.user?.full_name || ''}`}
         message={(
           <div className="mt-4 grid grid-cols-1 gap-3 text-left sm:grid-cols-2">
+            {editModal.error ? (
+              <div className="rounded-md bg-red-50 px-3 py-2 text-sm font-medium text-red-700 sm:col-span-2">{editModal.error}</div>
+            ) : null}
             <input className="rounded-md border border-slate-300 px-3 py-2 text-sm" placeholder="รหัสพนักงาน" value={editModal.form.employee_code} onChange={(e) => handleEditField('employee_code', e.target.value)} />
             <input className="rounded-md border border-slate-300 px-3 py-2 text-sm" placeholder="ชื่อ-นามสกุล" value={editModal.form.full_name} onChange={(e) => handleEditField('full_name', e.target.value)} />
             <input

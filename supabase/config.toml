@@ -10,3 +10,6 @@ verify_jwt = false
 
 [functions.record-audit-log]
 verify_jwt = false
+
+[functions.update-user-email]
+verify_jwt = false
