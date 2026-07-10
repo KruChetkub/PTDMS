@@ -18,4 +18,5 @@ scratch/
 Mmd/
 .vercel
 .env*.local
+README.md
 

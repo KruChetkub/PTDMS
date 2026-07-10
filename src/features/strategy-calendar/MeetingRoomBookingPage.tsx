@@ -34,6 +34,7 @@ import {
 } from '../../services/meeting-room-reservation.service';
 import { useAuthStore } from '../../stores/auth.store';
 import { useAuditPageAccess } from '../../hooks/useAuditPageAccess';
+import { createStrategyEvent } from '../../services/strategy-calendar.service';
 import { cn } from '../../utils/cn';
 
 const thaiMonths = [
@@ -200,6 +201,8 @@ export function MeetingRoomBookingPage() {
   const [dashboardReservations, setDashboardReservations] = useState<MeetingRoomReservationRow[]>([]);
   const [linkNotifications, setLinkNotifications] = useState<MeetingRoomReservationRow[]>([]);
   const [form, setForm] = useState(() => emptyForm(todayKey, profile?.full_name, profile?.work_group));
+  const [shouldCreateCalendarEvent, setShouldCreateCalendarEvent] = useState(false);
+  const [calendarEventLocation, setCalendarEventLocation] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
   const [pendingDuplicate, setPendingDuplicate] = useState<MeetingRoomReservationRow[]>([]);
@@ -436,12 +439,16 @@ export function MeetingRoomBookingPage() {
   const resetForm = () => {
     setEditingId(null);
     setPendingDuplicate([]);
+    setShouldCreateCalendarEvent(false);
+    setCalendarEventLocation('');
     setForm(emptyForm(selectedDate, profile?.full_name, profile?.work_group));
   };
 
   const openCreateModal = () => {
     setEditingId(null);
     setPendingDuplicate([]);
+    setShouldCreateCalendarEvent(false);
+    setCalendarEventLocation('');
     setForm(emptyForm(selectedDate, profile?.full_name, profile?.work_group));
     setIsBookingModalOpen(true);
   };
@@ -479,15 +486,42 @@ export function MeetingRoomBookingPage() {
       } else {
         const savedReservation = await createMeetingRoomReservation(input);
 
+        if (shouldCreateCalendarEvent) {
+          try {
+            await createStrategyEvent({
+              title: input.topic,
+              description: [
+                input.details.trim(),
+                `สร้างจากการจองห้องประชุม โดย ${input.bookerName.trim()}`,
+                input.meetingType,
+                input.onlineMeetingUrl.trim() ? `ลิงก์ประชุมออนไลน์: ${input.onlineMeetingUrl.trim()}` : '',
+              ]
+                .filter(Boolean)
+                .join('\n'),
+              eventDate: input.reservationDate,
+              endDate: input.reservationDate,
+              startTime: input.startTime,
+              endTime: input.endTime,
+              color: 'blue',
+              location: calendarEventLocation.trim() || input.room,
+              ownerWorkGroup: input.workGroup,
+            });
+            successText = 'บันทึกการจองและเพิ่มกิจกรรมในปฏิทินเรียบร้อยแล้ว';
+          } catch (calendarEventError) {
+            console.error('Failed to create strategy calendar event:', calendarEventError);
+            successText = 'บันทึกการจองเรียบร้อยแล้ว แต่เพิ่มกิจกรรมในปฏิทินไม่สำเร็จ';
+          }
+        }
+
         try {
           const notificationResult = await notifyMeetingRoomReservationCreated(savedReservation.id);
 
           if (!notificationResult.sent && !notificationResult.skipped) {
-            successText = 'บันทึกการจองเรียบร้อยแล้ว แต่ยังส่ง Telegram ไม่สำเร็จ';
+            successText = `${successText} แต่ยังส่ง Telegram ไม่สำเร็จ`;
           }
         } catch (notificationError) {
           console.error('Failed to notify meeting room Telegram:', notificationError);
-          successText = 'บันทึกการจองเรียบร้อยแล้ว แต่ยังส่ง Telegram ไม่สำเร็จ';
+          successText = `${successText} แต่ยังส่ง Telegram ไม่สำเร็จ`;
         }
       }
 
@@ -539,6 +573,8 @@ export function MeetingRoomBookingPage() {
   };
 
   const startEdit = (reservation: MeetingRoomReservationRow) => {
+    setShouldCreateCalendarEvent(false);
+    setCalendarEventLocation('');
     setEditingId(reservation.id);
     setSelectedDate(reservation.reservation_date);
     setForm({
@@ -578,6 +614,21 @@ export function MeetingRoomBookingPage() {
 
   const bookingForm = (
     <form className="space-y-3 p-4" onSubmit={handleSubmit}>
+      {!editingId ? (
+        <label className="flex items-start gap-3 rounded-md border border-blue-100 bg-blue-50/60 px-3 py-2">
+          <input
+            type="checkbox"
+            checked={shouldCreateCalendarEvent}
+            onChange={(event) => setShouldCreateCalendarEvent(event.target.checked)}
+            className="mt-1 h-4 w-4 rounded border-blue-300 text-blue-700 focus:ring-blue-400"
+          />
+          <span className="min-w-0">
+            <span className="block text-xs font-semibold text-blue-800">เพิ่มกิจกรรมในปฏิทินกองยุทธศาสตร์และแผนงาน</span>
+            <span className="mt-0.5 block text-xs text-slate-500">เมื่อบันทึกการจองแล้ว ระบบจะสร้างกิจกรรมตามวันและเวลานี้</span>
+          </span>
+        </label>
+      ) : null}
+
       <label className="block">
         <span className="text-xs font-semibold text-blue-700">หัวข้อการประชุม</span>
         <input
@@ -587,6 +638,17 @@ export function MeetingRoomBookingPage() {
           placeholder="ระบุหัวข้อการประชุม"
         />
       </label>
+
+      <label className="block">
+        <span className="text-xs font-semibold text-blue-700">สถานที่</span>
+        <input
+          value={calendarEventLocation}
+          onChange={(event) => setCalendarEventLocation(event.target.value)}
+          className="mt-1 w-full rounded-md border border-blue-100 px-3 py-2 text-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+          placeholder="เช่น ห้องประชุม 1 หรือสถานที่จัดกิจกรรม"
+        />
+      </label>
+
 
       <label className="block">
         <span className="text-xs font-semibold text-blue-700">เลือกห้องประชุม</span>

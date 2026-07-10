@@ -1,7 +1,17 @@
-﻿import { FormEvent, PointerEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, PointerEvent, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { AlertCircle, ArrowLeft, CheckCircle2, Headphones, ImageIcon, Loader2, Send, X, ZoomIn } from 'lucide-react';
-import { createSpdServiceTicket, getSpdServiceCategories, getSpdServiceDigitalGuideSettings, notifySpdServiceTicketCreated, type SpdServiceDigitalGuide } from '../../services/spd-service.service';
+import { AlertCircle, ArrowLeft, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Headphones, ImageIcon, Loader2, Send, X, ZoomIn } from 'lucide-react';
+import {
+  createSpdServiceTicket,
+  getSpdServiceAiChatGptBookings,
+  getSpdServiceCategories,
+  getSpdServiceDigitalGuideSettings,
+  getSpdServiceRequestSubjects,
+  notifySpdServiceTicketCreated,
+  type SpdServiceAiBooking,
+  type SpdServiceDigitalGuide,
+  type SpdServiceRequestSubjectRow,
+} from '../../services/spd-service.service';
 import { useAuditPageAccess } from '../../hooks/useAuditPageAccess';
 import { useAuthStore } from '../../stores/auth.store';
 import type { SpdServiceCategory, SpdServiceTicket, SpdServiceUrgency } from '../../types/database.types';
@@ -17,11 +27,36 @@ const urgencyOptions: Array<{ value: SpdServiceUrgency; label: string; hint: str
 const otherCategoryId = '__other__';
 const otherCategoryName = 'อื่นๆ';
 
+const thaiMonths = [
+  'มกราคม',
+  'กุมภาพันธ์',
+  'มีนาคม',
+  'เมษายน',
+  'พฤษภาคม',
+  'มิถุนายน',
+  'กรกฎาคม',
+  'สิงหาคม',
+  'กันยายน',
+  'ตุลาคม',
+  'พฤศจิกายน',
+  'ธันวาคม',
+];
+
+const weekdays = ['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส'];
+
 const subjectOptionsByCategory: Record<string, string[]> = {
   'IT Support': ['แจ้งปัญหาการใช้งานเครื่องคอมพิวเตอร์', 'ขอใช้งาน Internet', 'แจ้ง Reset Password Internet', 'ขอความอนุเคราะห์เจ้าหน้า IT'],
   'Software Support': ['แจ้งใช้งาน AI ChatGPT'],
   'Information System Support': ['แจ้งปัญหาการใช้งานระบบ NAS'],
   'Digital Service': ['ขอใช้งาน Conference', 'ลงข้อมูลหน้า Website', 'ลงข่าวประชาสัมพันธ์'],
+};
+
+type ServiceSubjectOption = {
+  id?: string;
+  categoryId: string;
+  categoryName: string;
+  subject: string;
+  requiresBookingDate: boolean;
 };
 
 type GuideImagePreview = {
@@ -37,16 +72,51 @@ type GuideImageDragState = {
   originY: number;
 };
 
+function toDateKey(date: Date) {
+  const year = date.getFullYear();
+  const month = `${date.getMonth() + 1}`.padStart(2, '0');
+  const day = `${date.getDate()}`.padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function parseDateKey(dateKey: string) {
+  const [year, month, day] = dateKey.split('-').map(Number);
+  return new Date(year, month - 1, day);
+}
+
+function getCalendarDays(monthDate: Date) {
+  const firstDay = new Date(monthDate.getFullYear(), monthDate.getMonth(), 1);
+  const start = new Date(firstDay);
+  start.setDate(firstDay.getDate() - firstDay.getDay());
+
+  return Array.from({ length: 42 }, (_, index) => {
+    const date = new Date(start);
+    date.setDate(start.getDate() + index);
+    return date;
+  });
+}
+
+function formatThaiDate(dateKey: string) {
+  const date = parseDateKey(dateKey);
+  return `${date.getDate()} ${thaiMonths[date.getMonth()]} ${date.getFullYear() + 543}`;
+}
+
 export function SpdServiceRequestPage() {
   useAuditPageAccess({ module: 'spd_service', action: 'spd_service_access', route: '/spd-service/request' });
   const { profile, user } = useAuthStore();
   const [categories, setCategories] = useState<SpdServiceCategory[]>([]);
+  const [requestSubjects, setRequestSubjects] = useState<SpdServiceRequestSubjectRow[]>([]);
   const [digitalGuides, setDigitalGuides] = useState<SpdServiceDigitalGuide[]>([]);
   const [requesterName, setRequesterName] = useState(profile?.full_name || '');
   const [requesterDepartment, setRequesterDepartment] = useState(profile?.work_group || profile?.department || '');
   const [categoryId, setCategoryId] = useState('');
   const [urgency, setUrgency] = useState<SpdServiceUrgency>('MEDIUM');
   const [selectedSubjects, setSelectedSubjects] = useState<string[]>([]);
+  const [requestedServiceDate, setRequestedServiceDate] = useState('');
+  const [aiCalendarMonth, setAiCalendarMonth] = useState(() => new Date());
+  const [aiBookings, setAiBookings] = useState<SpdServiceAiBooking[]>([]);
+  const [selectedAiBookingDate, setSelectedAiBookingDate] = useState<string | null>(null);
+  const [isLoadingAiBookings, setIsLoadingAiBookings] = useState(false);
   const [description, setDescription] = useState('');
   const [isLoadingCategories, setIsLoadingCategories] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -67,13 +137,18 @@ export function SpdServiceRequestPage() {
       try {
         setIsLoadingCategories(true);
         setError(null);
-        const [categoryData, guideData] = await Promise.all([getSpdServiceCategories(), getSpdServiceDigitalGuideSettings()]);
+        const [categoryData, subjectData, guideData] = await Promise.all([
+          getSpdServiceCategories(),
+          getSpdServiceRequestSubjects({ activeOnly: true }),
+          getSpdServiceDigitalGuideSettings(),
+        ]);
         setCategories(categoryData);
+        setRequestSubjects(subjectData);
         setDigitalGuides(guideData);
-        setCategoryId((current) => current || categoryData[0]?.id || otherCategoryId);
+        setCategoryId((current) => current);
       } catch (loadError) {
         console.error('Failed to load DSP Service categories:', loadError);
-        setError('ไม่สามารถโหลดประเภทบริการได้');
+        setError('ไม่สามารถโหลดงานบริการได้');
       } finally {
         setIsLoadingCategories(false);
       }
@@ -98,9 +173,40 @@ export function SpdServiceRequestPage() {
       },
     ];
   }, [categories]);
+  const serviceSubjectOptions = useMemo<ServiceSubjectOption[]>(() => {
+    const options = requestSubjects.length > 0
+      ? requestSubjects.map((subject) => ({
+          id: subject.id,
+          categoryId: subject.category_id,
+          categoryName: subject.category_name || categoryOptions.find((category) => category.id === subject.category_id)?.name || '',
+          subject: subject.subject,
+          requiresBookingDate: subject.requires_booking_date,
+        }))
+      : categoryOptions.flatMap((category) => {
+          if (category.name === otherCategoryName) {
+            return [];
+          }
+
+          return (subjectOptionsByCategory[category.name] || []).map((subject) => ({
+            categoryId: category.id,
+            categoryName: category.name,
+            subject,
+            requiresBookingDate: subject === 'แจ้งใช้งาน AI ChatGPT',
+          }));
+        });
+
+    return [
+      ...options,
+      {
+        categoryId: otherCategoryId,
+        categoryName: otherCategoryName,
+        subject: otherCategoryName,
+        requiresBookingDate: false,
+      },
+    ];
+  }, [categoryOptions, requestSubjects]);
   const selectedCategory = useMemo(() => categoryOptions.find((category) => category.id === categoryId) || null, [categoryOptions, categoryId]);
   const isOtherCategory = selectedCategory?.name === otherCategoryName;
-  const subjectOptions = selectedCategory ? subjectOptionsByCategory[selectedCategory.name] || [] : [];
   const selectedDigitalGuides = useMemo(
     () =>
       selectedCategory?.name === 'Digital Service'
@@ -109,15 +215,67 @@ export function SpdServiceRequestPage() {
     [digitalGuides, selectedCategory?.name, selectedSubjects],
   );
   const finalSubject = isOtherCategory ? otherCategoryName : selectedSubjects.join(', ');
+  const selectedServiceSubject = useMemo(
+    () => serviceSubjectOptions.find((option) => categoryId === option.categoryId && (option.categoryName === otherCategoryName || selectedSubjects.includes(option.subject))) || null,
+    [categoryId, selectedSubjects, serviceSubjectOptions],
+  );
+  const shouldShowBookingCalendar = Boolean(selectedServiceSubject?.requiresBookingDate);
+  const aiCalendarDays = useMemo(() => getCalendarDays(aiCalendarMonth), [aiCalendarMonth]);
+  const aiCalendarMonthLabel = `${thaiMonths[aiCalendarMonth.getMonth()]} ${aiCalendarMonth.getFullYear() + 543}`;
+  const aiBookingsByDate = useMemo(() => {
+    return aiBookings.reduce<Record<string, SpdServiceAiBooking[]>>((acc, booking) => {
+      if (!booking.requested_service_date) return acc;
+      acc[booking.requested_service_date] = [...(acc[booking.requested_service_date] || []), booking];
+      return acc;
+    }, {});
+  }, [aiBookings]);
+  const selectedAiBookings = selectedAiBookingDate ? aiBookingsByDate[selectedAiBookingDate] || [] : [];
+
+  useEffect(() => {
+    if (!shouldShowBookingCalendar) {
+      setRequestedServiceDate('');
+      setSelectedAiBookingDate(null);
+      return;
+    }
+
+    const days = getCalendarDays(aiCalendarMonth);
+    const start = toDateKey(days[0]);
+    const end = toDateKey(days[days.length - 1]);
+
+    void (async () => {
+      try {
+        setIsLoadingAiBookings(true);
+        const data = await getSpdServiceAiChatGptBookings(start, end);
+        setAiBookings(data);
+      } catch (bookingError) {
+        console.error('Failed to load AI ChatGPT bookings:', bookingError);
+      } finally {
+        setIsLoadingAiBookings(false);
+      }
+    })();
+  }, [aiCalendarMonth, shouldShowBookingCalendar]);
 
   const resetIssueFields = () => {
+    setCategoryId('');
     setUrgency('MEDIUM');
     setSelectedSubjects([]);
+    setRequestedServiceDate('');
+    setSelectedAiBookingDate(null);
     setDescription('');
   };
 
-  const toggleSubject = (option: string) => {
-    setSelectedSubjects((current) => (current.includes(option) ? current.filter((item) => item !== option) : [...current, option]));
+  const selectServiceSubject = (option: ServiceSubjectOption) => {
+    const isCurrentSelection =
+      categoryId === option.categoryId && (option.categoryName === otherCategoryName || selectedSubjects.includes(option.subject));
+
+    if (isCurrentSelection) {
+      setCategoryId('');
+      setSelectedSubjects([]);
+      return;
+    }
+
+    setCategoryId(option.categoryId);
+    setSelectedSubjects(option.categoryName === otherCategoryName ? [] : [option.subject]);
   };
 
   const openGuideImage = (guide: SpdServiceDigitalGuide) => {
@@ -170,6 +328,11 @@ export function SpdServiceRequestPage() {
 
     if (!requesterName.trim() || !selectedCategory || (!isOtherCategory && !finalSubject) || !description.trim()) {
       setError('กรุณากรอกข้อมูลที่จำเป็นให้ครบถ้วน');
+      return;
+    }
+
+    if (shouldShowBookingCalendar && !requestedServiceDate) {
+      setError('กรุณาเลือกวันที่ต้องการจองใช้งาน AI ChatGPT');
       return;
     }
 
@@ -277,56 +440,120 @@ export function SpdServiceRequestPage() {
               />
             </label>
 
-            <label className="block">
-              <span className="text-sm font-medium text-slate-700">ประเภทบริการ</span>
-              <select
-                value={categoryId}
-                onChange={(event) => {
-                  setCategoryId(event.target.value);
-                  setSelectedSubjects([]);
-                }}
-                disabled={isLoadingCategories}
-                className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-100 disabled:cursor-not-allowed disabled:bg-slate-50"
-              >
-                {categoryOptions.map((category) => (
-                  <option key={category.id} value={category.id}>
-                    {category.name}
-                  </option>
-                ))}
-              </select>
-            </label>
           </div>
 
           <div className="mt-4 grid gap-4">
-            {!isOtherCategory ? (
-              <div>
-                <span className="text-sm font-medium text-slate-700">หัวข้อ</span>
-                <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                  {subjectOptions.map((option) => {
-                    const isChecked = selectedSubjects.includes(option);
+            <div>
+              <span className="text-sm font-medium text-slate-700">งานบริการ</span>
+              <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                {serviceSubjectOptions.map((option) => {
+                  const isChecked = categoryId === option.categoryId && (option.categoryName === otherCategoryName || selectedSubjects.includes(option.subject));
+
+                  return (
+                    <label
+                      key={`${option.categoryId}-${option.subject}`}
+                      className={`flex cursor-pointer items-start gap-3 rounded-md border px-3 py-2 text-sm transition ${
+                        isChecked ? 'border-teal-500 bg-teal-50 ring-2 ring-teal-100' : 'border-slate-200 bg-white hover:bg-slate-50'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={() => selectServiceSubject(option)}
+                        disabled={isLoadingCategories}
+                        className="mt-0.5 h-4 w-4 rounded border-slate-300 text-teal-700 focus:ring-teal-500 disabled:cursor-not-allowed disabled:opacity-60"
+                      />
+                      <span className="min-w-0">
+                        <span className="block font-medium text-slate-800">{option.subject}</span>
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+              {serviceSubjectOptions.length === 0 ? <p className="mt-2 text-sm text-slate-500">ยังไม่มีงานบริการให้เลือก</p> : null}
+            </div>
+
+            {shouldShowBookingCalendar ? (
+              <section className="rounded-md border border-teal-100 bg-teal-50/40 p-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <h2 className="inline-flex items-center gap-2 text-sm font-semibold text-teal-900">
+                      <CalendarDays className="h-4 w-4" aria-hidden="true" />
+                      ปฏิทินจองใช้งาน AI ChatGPT
+                    </h2>
+                    <p className="mt-1 text-xs text-slate-500">เลือกวันที่ต้องการจอง และกดวันที่ที่มีรายการเพื่อดูผู้จอง</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setAiCalendarMonth((current) => new Date(current.getFullYear(), current.getMonth() - 1, 1))}
+                      className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-teal-200 bg-white text-teal-700 transition hover:bg-teal-50"
+                      aria-label="เดือนก่อนหน้า"
+                    >
+                      <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+                    </button>
+                    <span className="min-w-36 text-center text-sm font-semibold text-slate-900">{aiCalendarMonthLabel}</span>
+                    <button
+                      type="button"
+                      onClick={() => setAiCalendarMonth((current) => new Date(current.getFullYear(), current.getMonth() + 1, 1))}
+                      className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-teal-200 bg-white text-teal-700 transition hover:bg-teal-50"
+                      aria-label="เดือนถัดไป"
+                    >
+                      <ChevronRight className="h-4 w-4" aria-hidden="true" />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="mt-4 grid grid-cols-7 rounded-t-md border border-teal-100 bg-white text-center text-xs font-semibold text-slate-500">
+                  {weekdays.map((day) => (
+                    <div key={day} className="py-2">{day}</div>
+                  ))}
+                </div>
+                <div className="grid grid-cols-7 overflow-hidden rounded-b-md border-x border-b border-teal-100 bg-white">
+                  {aiCalendarDays.map((date) => {
+                    const dateKey = toDateKey(date);
+                    const dayBookings = aiBookingsByDate[dateKey] || [];
+                    const isCurrentMonth = date.getMonth() === aiCalendarMonth.getMonth();
+                    const isSelected = requestedServiceDate === dateKey;
 
                     return (
-                      <label
-                        key={option}
-                        className={`flex cursor-pointer items-start gap-3 rounded-md border px-3 py-2 text-sm transition ${
-                          isChecked ? 'border-teal-500 bg-teal-50 ring-2 ring-teal-100' : 'border-slate-200 bg-white hover:bg-slate-50'
-                        }`}
+                      <button
+                        key={dateKey}
+                        type="button"
+                        onClick={() => setRequestedServiceDate(dateKey)}
+                        className={`min-h-20 border-r border-t border-teal-50 p-1.5 text-left text-xs transition hover:bg-teal-50 ${!isCurrentMonth ? 'bg-slate-50 text-slate-400' : 'bg-white'} ${isSelected ? 'ring-2 ring-inset ring-teal-500' : ''}`}
                       >
-                        <input
-                          type="checkbox"
-                          checked={isChecked}
-                          onChange={() => toggleSubject(option)}
-                          className="mt-0.5 h-4 w-4 rounded border-slate-300 text-teal-700 focus:ring-teal-500"
-                        />
-                        <span className="font-medium text-slate-800">{option}</span>
-                      </label>
+                        <span className="font-semibold">{date.getDate()}</span>
+                        {dayBookings.length > 0 ? (
+                          <span
+                            role="button"
+                            tabIndex={0}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              setSelectedAiBookingDate(dateKey);
+                            }}
+                            onKeyDown={(event) => {
+                              if (event.key === 'Enter' || event.key === ' ') {
+                                event.preventDefault();
+                                event.stopPropagation();
+                                setSelectedAiBookingDate(dateKey);
+                              }
+                            }}
+                            className="mt-2 block rounded bg-teal-100 px-1.5 py-1 text-[11px] font-semibold text-teal-800"
+                          >
+                            {dayBookings.length} รายการ
+                          </span>
+                        ) : (
+                          <span className="mt-2 block text-[11px] text-slate-400">ว่าง</span>
+                        )}
+                      </button>
                     );
                   })}
                 </div>
-                {subjectOptions.length === 0 ? <p className="mt-2 text-sm text-slate-500">ยังไม่มีหัวข้อสำหรับประเภทบริการนี้</p> : null}
-              </div>
+                {isLoadingAiBookings ? <p className="mt-2 text-xs text-slate-500">กำลังโหลดรายการจอง...</p> : null}
+                {requestedServiceDate ? <p className="mt-2 text-xs font-medium text-teal-800">วันที่เลือก: {formatThaiDate(requestedServiceDate)}</p> : null}
+              </section>
             ) : null}
-
             {selectedDigitalGuides.length > 0 ? (
               <div className="grid gap-4">
                 {selectedDigitalGuides.map((guide) => (
@@ -407,6 +634,53 @@ export function SpdServiceRequestPage() {
         </form>
       </main>
 
+      {selectedAiBookingDate ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4" onClick={() => setSelectedAiBookingDate(null)}>
+          <div className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-md bg-white shadow-2xl" onClick={(event) => event.stopPropagation()}>
+            <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
+              <div className="min-w-0">
+                <p className="text-xs font-semibold uppercase text-teal-700">AI ChatGPT Booking</p>
+                <h2 className="truncate text-base font-semibold text-slate-950">{formatThaiDate(selectedAiBookingDate)}</h2>
+              </div>
+              <button type="button" onClick={() => setSelectedAiBookingDate(null)} className="rounded-md p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-900">
+                <X className="h-5 w-5" aria-hidden="true" />
+              </button>
+            </div>
+            <div className="space-y-3 p-4">
+              {selectedAiBookings.length === 0 ? (
+                <div className="rounded-md border border-dashed border-slate-300 bg-slate-50 px-3 py-8 text-center text-sm text-slate-500">ยังไม่มีรายการจองในวันนี้</div>
+              ) : (
+                selectedAiBookings.map((booking) => (
+                  <article key={booking.id} className="rounded-md border border-teal-100 bg-teal-50/40 p-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <h3 className="text-sm font-semibold text-slate-950">{booking.subject}</h3>
+                        <p className="mt-1 text-xs text-slate-500">เลขคำขอ {formatSpdServiceTicketNo(booking.ticket_no)}</p>
+                      </div>
+                      <span className="rounded bg-white px-2 py-1 text-xs font-semibold text-teal-700 ring-1 ring-teal-100">จองแล้ว</span>
+                    </div>
+                    <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
+                      <div>
+                        <dt className="text-xs font-medium text-slate-500">ชื่อผู้จอง</dt>
+                        <dd className="mt-0.5 font-semibold text-slate-900">{booking.requester_name}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-xs font-medium text-slate-500">กลุ่มงาน</dt>
+                        <dd className="mt-0.5 font-semibold text-slate-900">{booking.requester_department || '-'}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-xs font-medium text-slate-500">วันที่จอง</dt>
+                        <dd className="mt-0.5 font-semibold text-slate-900">{booking.requested_service_date ? formatThaiDate(booking.requested_service_date) : '-'}</dd>
+                      </div>
+                    </dl>
+                    <p className="mt-3 whitespace-pre-wrap text-sm text-slate-600">{booking.description}</p>
+                  </article>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      ) : null}
       {selectedGuideImage ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4" onClick={closeGuideImage}>
           <div className="flex max-h-[94vh] w-full max-w-6xl flex-col overflow-hidden rounded-md bg-white shadow-2xl" onClick={(event) => event.stopPropagation()}>

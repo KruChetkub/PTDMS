@@ -247,6 +247,17 @@ export type SpdServiceCategory = {
   updated_at: string;
 };
 
+export type SpdServiceRequestSubject = {
+  id: string;
+  category_id: string;
+  subject: string;
+  is_active: boolean;
+  requires_booking_date: boolean;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+};
+
 export type SpdServiceTicket = {
   id: string;
   ticket_no: string;
@@ -260,6 +271,7 @@ export type SpdServiceTicket = {
   status: SpdServiceTicketStatus;
   subject: string;
   description: string;
+  requested_service_date: string | null;
   assigned_to: string | null;
   assigned_at: string | null;
   started_at: string | null;
@@ -615,6 +627,21 @@ export type Database = {
         Update: Partial<Omit<SpdServiceCategory, 'id' | 'created_at'>>;
         Relationships: [];
       };
+      spd_service_request_subjects: {
+        Row: SpdServiceRequestSubject;
+        Insert: {
+          id?: string;
+          category_id: string;
+          subject: string;
+          is_active?: boolean;
+          requires_booking_date?: boolean;
+          sort_order?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Omit<SpdServiceRequestSubject, 'id' | 'created_at'>>;
+        Relationships: [];
+      };
       spd_service_tickets: {
         Row: SpdServiceTicket;
         Insert: {
@@ -630,6 +657,7 @@ export type Database = {
           status?: SpdServiceTicketStatus;
           subject: string;
           description: string;
+          requested_service_date?: string | null;
           assigned_to?: string | null;
           assigned_at?: string | null;
           started_at?: string | null;

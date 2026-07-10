@@ -3,6 +3,7 @@ import type {
   Profile,
   SpdServiceCategory,
   SpdServiceNotificationSettings,
+  SpdServiceRequestSubject,
   SpdServiceSatisfactionSurvey,
   SpdServiceTicket,
   SpdServiceTicketTimeline,
@@ -21,6 +22,25 @@ export type SpdServiceTicketDetail = {
   timeline: SpdServiceTicketTimeline[];
 };
 
+export type SpdServiceRequestSubjectRow = SpdServiceRequestSubject & {
+  category_name?: string;
+};
+
+export type SaveSpdServiceRequestSubjectValues = {
+  id?: string;
+  categoryId: string;
+  subject: string;
+  isActive: boolean;
+  requiresBookingDate: boolean;
+  sortOrder: number;
+};
+
+export type SpdServiceAiBooking = Pick<
+  SpdServiceTicket,
+  'id' | 'ticket_no' | 'requester_name' | 'requester_department' | 'subject' | 'description' | 'requested_service_date' | 'created_at'
+>;
+
+
 export type CreateSpdServiceTicketValues = {
   requesterId: string;
   requesterName: string;
@@ -31,6 +51,7 @@ export type CreateSpdServiceTicketValues = {
   urgency: SpdServiceUrgency;
   subject: string;
   description: string;
+requestedServiceDate?: string | null;
 };
 
 export type UpdateSpdServiceTicketWorkflowValues = {
@@ -190,6 +211,78 @@ export async function getSpdServiceCategories(): Promise<SpdServiceCategory[]> {
   return data || [];
 }
 
+export async function getSpdServiceRequestSubjects(options: { activeOnly?: boolean } = {}): Promise<SpdServiceRequestSubjectRow[]> {
+  let query = supabase
+    .from('spd_service_request_subjects')
+    .select('*, spd_service_categories(name)')
+    .order('sort_order', { ascending: true })
+    .order('subject', { ascending: true });
+
+  if (options.activeOnly ?? true) {
+    query = query.eq('is_active', true);
+  }
+
+  const { data, error } = await query;
+
+  if (error) {
+    throw error;
+  }
+
+  return (data || []).map((item: any) => ({
+    ...item,
+    category_name: item.spd_service_categories?.name || '',
+  }));
+}
+
+export async function saveSpdServiceRequestSubject(values: SaveSpdServiceRequestSubjectValues): Promise<SpdServiceRequestSubject> {
+  const payload = {
+    category_id: values.categoryId,
+    subject: values.subject.trim(),
+    is_active: values.isActive,
+    requires_booking_date: values.requiresBookingDate,
+    sort_order: values.sortOrder,
+  };
+
+  const query = values.id
+    ? supabase.from('spd_service_request_subjects').update(payload).eq('id', values.id)
+    : supabase.from('spd_service_request_subjects').insert(payload);
+
+  const { data, error } = await query.select('*').single();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export async function deleteSpdServiceRequestSubject(subjectId: string): Promise<void> {
+  const { error } = await supabase.from('spd_service_request_subjects').delete().eq('id', subjectId);
+
+  if (error) {
+    throw error;
+  }
+}
+
+export async function getSpdServiceAiChatGptBookings(startDate: string, endDate: string): Promise<SpdServiceAiBooking[]> {
+  const { data, error } = await supabase
+    .from('spd_service_tickets')
+    .select('id, ticket_no, requester_name, requester_department, subject, description, requested_service_date, created_at')
+    .eq('subject', 'แจ้งใช้งาน AI ChatGPT')
+    .not('requested_service_date', 'is', null)
+    .gte('requested_service_date', startDate)
+    .lte('requested_service_date', endDate)
+    .neq('status', 'CANCELLED')
+    .order('requested_service_date', { ascending: true })
+    .order('created_at', { ascending: true });
+
+  if (error) {
+    throw error;
+  }
+
+  return data || [];
+}
+
 export async function getSpdServiceDashboardData(): Promise<SpdServiceDashboardData> {
   const [ticketsResult, categoriesResult, surveysResult] = await Promise.all([
     supabase.from('spd_service_tickets').select('*').order('created_at', { ascending: false }),
@@ -302,6 +395,7 @@ export async function createSpdServiceTicket(values: CreateSpdServiceTicketValue
       urgency: values.urgency,
       subject: values.subject,
       description: values.description,
+      requested_service_date: values.requestedServiceDate || null,
       status: 'NEW',
     })
     .select('*')

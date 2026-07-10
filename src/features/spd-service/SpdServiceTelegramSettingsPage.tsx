@@ -1,19 +1,24 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { AlertCircle, ArrowLeft, BellRing, CheckCircle2, ImageIcon, RefreshCw, Save, Upload } from 'lucide-react';
+import { AlertCircle, ArrowLeft, BellRing, CheckCircle2, ImageIcon, Plus, RefreshCw, Save, Trash2, Upload } from 'lucide-react';
 import {
   defaultSpdServiceTelegramMessageTemplate,
+  deleteSpdServiceRequestSubject,
   getSpdServiceAdminRecipients,
+  getSpdServiceCategories,
   getSpdServiceDigitalGuideSettings,
+  getSpdServiceRequestSubjects,
   getSpdServiceTelegramSettings,
   saveSpdServiceDigitalGuideSettings,
+  saveSpdServiceRequestSubject,
   saveSpdServiceTelegramSettings,
   uploadSpdServiceDigitalGuideImage,
   type SpdServiceDigitalGuide,
   type SpdServiceDigitalGuideSubject,
+  type SpdServiceRequestSubjectRow,
 } from '../../services/spd-service.service';
 import { useAuthStore } from '../../stores/auth.store';
-import type { Profile } from '../../types/database.types';
+import type { Profile, SpdServiceCategory } from '../../types/database.types';
 import { cn } from '../../utils/cn';
 
 const sampleTelegramTemplateValues: Record<string, string> = {
@@ -45,6 +50,8 @@ export function SpdServiceTelegramSettingsPage() {
   const canEditRequestSettings = profile?.role === 'super_admin' || profile?.role === 'admin';
   const [activeTab, setActiveTab] = useState<SettingsTab>('notification');
   const [admins, setAdmins] = useState<Profile[]>([]);
+  const [categories, setCategories] = useState<SpdServiceCategory[]>([]);
+  const [requestSubjects, setRequestSubjects] = useState<SpdServiceRequestSubjectRow[]>([]);
   const [enabled, setEnabled] = useState(false);
   const [chatId, setChatId] = useState('');
   const [adminRecipientIds, setAdminRecipientIds] = useState<string[]>([]);
@@ -70,13 +77,17 @@ export function SpdServiceTelegramSettingsPage() {
       setError(null);
       setSuccess(null);
 
-      const [adminData, telegramSettings, guideSettings] = await Promise.all([
+      const [adminData, categoryData, subjectData, telegramSettings, guideSettings] = await Promise.all([
         getSpdServiceAdminRecipients(),
+        getSpdServiceCategories(),
+        getSpdServiceRequestSubjects({ activeOnly: false }),
         getSpdServiceTelegramSettings(),
         getSpdServiceDigitalGuideSettings(),
       ]);
 
       setAdmins(adminData);
+      setCategories(categoryData);
+      setRequestSubjects(subjectData);
       setEnabled(telegramSettings.enabled);
       setChatId(telegramSettings.chatId);
       setAdminRecipientIds(telegramSettings.adminRecipientIds);
@@ -110,6 +121,41 @@ export function SpdServiceTelegramSettingsPage() {
 
   const updateDigitalGuide = (subject: SpdServiceDigitalGuideSubject, updates: Partial<Omit<SpdServiceDigitalGuide, 'subject'>>) => {
     setDigitalGuides((current) => current.map((guide) => (guide.subject === subject ? { ...guide, ...updates } : guide)));
+  };
+
+  const updateRequestSubject = (subjectKey: string, updates: Partial<SpdServiceRequestSubjectRow>) => {
+    setRequestSubjects((current) => current.map((item) => (item.id === subjectKey ? { ...item, ...updates } : item)));
+  };
+
+  const addRequestSubject = () => {
+    const category = categories[0];
+    if (!category) return;
+
+    setRequestSubjects((current) => [
+      ...current,
+      {
+        id: `new-${Date.now()}`,
+        category_id: category.id,
+        category_name: category.name,
+        subject: '',
+        is_active: true,
+        requires_booking_date: false,
+        sort_order: (current.length + 1) * 10,
+        created_at: '',
+        updated_at: '',
+      },
+    ]);
+  };
+
+  const deleteRequestSubject = async (subject: SpdServiceRequestSubjectRow) => {
+    if (!confirm(`ลบงานบริการ "${subject.subject || 'รายการใหม่'}" ใช่หรือไม่?`)) return;
+
+    if (subject.id && !subject.id.startsWith('new-')) {
+      await deleteSpdServiceRequestSubject(subject.id);
+    }
+
+    setRequestSubjects((current) => current.filter((item) => item.id !== subject.id));
+    setSuccess('ลบงานบริการเรียบร้อยแล้ว');
   };
 
   const handleGuideImageUpload = async (subject: SpdServiceDigitalGuideSubject, file: File | null) => {
@@ -466,6 +512,107 @@ export function SpdServiceTelegramSettingsPage() {
                 >
                   เปิดหน้าฟอร์ม
                 </Link>
+              </div>
+
+              <div className="mt-5 rounded-md border border-slate-200 bg-slate-50 p-4">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <h3 className="text-base font-semibold text-slate-950">งานบริการในฟอร์มแจ้งคำขอ</h3>
+                    <p className="mt-1 text-sm text-slate-500">เพิ่ม เปิด/ปิด ลบ และกำหนดว่างานบริการใดต้องใช้ปฏิทินจองวัน</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={addRequestSubject}
+                    disabled={!canEditRequestSettings || categories.length === 0}
+                    className="inline-flex items-center justify-center gap-2 rounded-md border border-teal-200 bg-white px-3 py-2 text-sm font-semibold text-teal-700 transition hover:bg-teal-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <Plus className="h-4 w-4" aria-hidden="true" />
+                    เพิ่มงานบริการ
+                  </button>
+                </div>
+
+                <div className="mt-4 space-y-3">
+                  {requestSubjects.map((subject) => (
+                    <div key={subject.id} className="rounded-md border border-slate-200 bg-white p-3">
+                      <div className="grid gap-3 lg:grid-cols-[12rem_minmax(0,1fr)_6rem_auto] lg:items-end">
+                        <label className="block">
+                          <span className="text-xs font-medium text-slate-600">ประเภทเดิมสำหรับกราฟ</span>
+                          <select
+                            value={subject.category_id}
+                            onChange={(event) => {
+                              const category = categories.find((item) => item.id === event.target.value);
+                              updateRequestSubject(subject.id, { category_id: event.target.value, category_name: category?.name || '' });
+                            }}
+                            disabled={!canEditRequestSettings}
+                            className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-100 disabled:cursor-not-allowed disabled:bg-slate-50"
+                          >
+                            {categories.map((category) => (
+                              <option key={category.id} value={category.id}>{category.name}</option>
+                            ))}
+                          </select>
+                        </label>
+
+                        <label className="block">
+                          <span className="text-xs font-medium text-slate-600">ชื่องานบริการ</span>
+                          <input
+                            value={subject.subject}
+                            onChange={(event) => updateRequestSubject(subject.id, { subject: event.target.value })}
+                            readOnly={!canEditRequestSettings}
+                            className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
+                            placeholder="เช่น แจ้งใช้งาน AI ChatGPT"
+                          />
+                        </label>
+
+                        <label className="block">
+                          <span className="text-xs font-medium text-slate-600">ลำดับ</span>
+                          <input
+                            type="number"
+                            value={subject.sort_order}
+                            onChange={(event) => updateRequestSubject(subject.id, { sort_order: Number(event.target.value) || 0 })}
+                            readOnly={!canEditRequestSettings}
+                            className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
+                          />
+                        </label>
+
+                        <button
+                          type="button"
+                          onClick={() => void deleteRequestSubject(subject)}
+                          disabled={!canEditRequestSettings}
+                          className="inline-flex items-center justify-center gap-2 rounded-md border border-red-200 bg-white px-3 py-2 text-sm font-semibold text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          <Trash2 className="h-4 w-4" aria-hidden="true" />
+                          ลบ
+                        </button>
+                      </div>
+
+                      <div className="mt-3 flex flex-wrap gap-4 text-sm">
+                        <label className="inline-flex items-center gap-2 font-medium text-slate-700">
+                          <input
+                            type="checkbox"
+                            checked={subject.is_active}
+                            onChange={(event) => updateRequestSubject(subject.id, { is_active: event.target.checked })}
+                            disabled={!canEditRequestSettings}
+                            className="h-4 w-4 rounded border-slate-300 text-teal-700 focus:ring-teal-500"
+                          />
+                          เปิดใช้งาน
+                        </label>
+                        <label className="inline-flex items-center gap-2 font-medium text-slate-700">
+                          <input
+                            type="checkbox"
+                            checked={subject.requires_booking_date}
+                            onChange={(event) => updateRequestSubject(subject.id, { requires_booking_date: event.target.checked })}
+                            disabled={!canEditRequestSettings}
+                            className="h-4 w-4 rounded border-slate-300 text-teal-700 focus:ring-teal-500"
+                          />
+                          ต้องเลือกวันที่จองในปฏิทิน
+                        </label>
+                      </div>
+                    </div>
+                  ))}
+                  {requestSubjects.length === 0 ? (
+                    <div className="rounded-md border border-dashed border-slate-300 bg-white px-3 py-8 text-center text-sm text-slate-500">ยังไม่มีงานบริการ</div>
+                  ) : null}
+                </div>
               </div>
 
               <div className="mt-5 grid gap-4">

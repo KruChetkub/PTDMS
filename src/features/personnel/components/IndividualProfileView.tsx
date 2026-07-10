@@ -10,7 +10,7 @@ import { getPersonnelDetails } from '../../../services/personnel.service';
 import type { Profile, TrainingRecord, Certificate, DevelopmentAnalysis } from '../../../types/database.types';
 import { roleLabels } from '../../../types/roles';
 import { useAuthStore } from '../../../stores/auth.store';
-import { Edit2, X, Plus } from 'lucide-react';
+import { Edit2, X, Plus, FileDown } from 'lucide-react';
 import { TrainingForm } from '../../../components/training/TrainingForm';
 import { formatThaiDate, getCurrentThaiFiscalYear } from '../../../utils/thaiDate';
 import { 
@@ -20,6 +20,7 @@ import {
 } from '../../../services/training.service';
 import { normalizeTrainingType, type TrainingFormValues } from '../../self-service/training-form.schema';
 import { Trash2 } from 'lucide-react';
+import { recordAuditLog } from '../../../services/audit.service';
 
 type IndividualProfileViewProps = {
   userId: string;
@@ -27,6 +28,14 @@ type IndividualProfileViewProps = {
 };
 
 const trainingPageSize = 5;
+
+function getExportDatePart() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function sanitizeFileName(value: string) {
+  return value.replace(/[\\/:*?"<>|]/g, '').replace(/\s+/g, '_');
+}
 
 export function IndividualProfileView({ userId, isMyProfile }: IndividualProfileViewProps) {
   const [data, setData] = useState<{
@@ -39,6 +48,7 @@ export function IndividualProfileView({ userId, isMyProfile }: IndividualProfile
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [trainingPage, setTrainingPage] = useState(1);
+  const [trainingExportMessage, setTrainingExportMessage] = useState<string | null>(null);
 
   const [isSubmittingTraining, setIsSubmittingTraining] = useState(false);
   const [trainingSubmitError, setTrainingSubmitError] = useState<string | null>(null);
@@ -82,6 +92,7 @@ export function IndividualProfileView({ userId, isMyProfile }: IndividualProfile
   useEffect(() => {
     if (!userId) return;
     setTrainingPage(1);
+    setTrainingExportMessage(null);
     void loadData({ showLoading: true });
   }, [userId]);
 
@@ -183,9 +194,80 @@ export function IndividualProfileView({ userId, isMyProfile }: IndividualProfile
   const { profile, records, certificates, analysis, chartData } = data;
   const certMap = new Map(certificates.map(c => [c.training_id, c]));
   const analysisMap = new Map(analysis.map(a => [a.training_id, a]));
+  const exportTrainingRecords = records;
   const trainingCurrentPage = Math.min(trainingPage, trainingTotalPages);
   const trainingPageStart = (trainingCurrentPage - 1) * trainingPageSize;
   const visibleTrainingRecords = records.slice(trainingPageStart, trainingPageStart + trainingPageSize);
+
+  const handleExportTrainingHistory = async () => {
+    if (exportTrainingRecords.length === 0) {
+      setTrainingExportMessage('ไม่พบประวัติการอบรมสำหรับบุคคลนี้');
+      return;
+    }
+
+    const XLSX = await import('xlsx');
+    const rows = exportTrainingRecords.map((record, index) => {
+      const cert = certMap.get(record.id);
+      const dev = analysisMap.get(record.id);
+
+      return {
+        'ลำดับที่': index + 1,
+        'ชื่อ-นามสกุล': profile.full_name,
+        'ตำแหน่ง': profile.position || '',
+        'หน่วยงาน': profile.department || '',
+        'กลุ่มงาน': profile.work_group || '',
+        'ประเภทหลักสูตร': record.category,
+        'หลักสูตร': record.course,
+        'ผู้จัด': record.organizer,
+        'วันที่อบรม': formatThaiDate(record.date),
+        'ปีงบประมาณ': record.year,
+        'ใบประกาศ': cert?.certificate_name || '',
+        'ลิงก์ใบประกาศ': cert?.certificate_link || '',
+        'ประเด็นการพัฒนา': dev?.development_area || '',
+        'กลุ่มทักษะ': dev?.skill_group || '',
+        'ทิศทางการพัฒนา': dev?.target_direction || '',
+      };
+    });
+
+    const worksheet = XLSX.utils.json_to_sheet(rows);
+    worksheet['!cols'] = [
+      { wch: 10 },
+      { wch: 30 },
+      { wch: 28 },
+      { wch: 30 },
+      { wch: 30 },
+      { wch: 28 },
+      { wch: 46 },
+      { wch: 30 },
+      { wch: 16 },
+      { wch: 14 },
+      { wch: 28 },
+      { wch: 48 },
+      { wch: 34 },
+      { wch: 28 },
+      { wch: 42 },
+    ];
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Training History');
+    const fileName = `training-history-${sanitizeFileName(profile.full_name)}-all-${getExportDatePart()}.xlsx`;
+    XLSX.writeFile(workbook, fileName);
+    setTrainingExportMessage(`Export Excel ประวัติการอบรมทั้งหมดสำเร็จ ${exportTrainingRecords.length.toLocaleString('th-TH')} รายการ`);
+
+    void recordAuditLog({
+      module: 'personnel',
+      action: 'export_individual_training_history',
+      targetType: 'profile',
+      targetId: profile.user_id,
+      metadata: {
+        format: 'xlsx',
+        file_name: fileName,
+        scope: 'all',
+        record_count: exportTrainingRecords.length,
+        target_name: profile.full_name,
+      },
+    });
+  };
 
   return (
     <div className="space-y-6">
@@ -297,18 +379,36 @@ export function IndividualProfileView({ userId, isMyProfile }: IndividualProfile
       </div>
 
       <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-        <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/50 px-6 py-4">
+        <div className="flex flex-col gap-3 border-b border-slate-100 bg-slate-50/50 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
           <h3 className="font-bold text-slate-900">ประวัติการอบรม</h3>
-          {canEdit && (
+          <div className="flex flex-wrap items-center gap-2">
+            {canEdit && (
+              <button
+                type="button"
+                onClick={() => handleAddTrainingNavigate(profile)}
+                className="inline-flex items-center gap-1.5 rounded-md bg-brand-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-brand-700"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                เพิ่มข้อมูลการอบรม
+              </button>
+            )}
             <button
-              onClick={() => handleAddTrainingNavigate(profile)}
-              className="inline-flex items-center gap-1.5 rounded-md bg-brand-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand-700 transition shadow-sm"
+              type="button"
+              onClick={() => void handleExportTrainingHistory()}
+              disabled={exportTrainingRecords.length === 0}
+              title="Export ประวัติการอบรมทั้งหมด"
+              className="inline-flex items-center gap-1.5 rounded-md border border-emerald-200 bg-white px-3 py-1.5 text-xs font-semibold text-emerald-700 shadow-sm transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              <Plus className="h-3.5 w-3.5" />
-              เพิ่มข้อมูลการอบรม
+              <FileDown className="h-3.5 w-3.5" />
+              Export ประวัติการอบรม
             </button>
-          )}
+          </div>
         </div>
+        {trainingExportMessage ? (
+          <div className="border-b border-slate-100 bg-emerald-50 px-6 py-2 text-xs font-medium text-emerald-700">
+            {trainingExportMessage}
+          </div>
+        ) : null}
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
             <thead>
