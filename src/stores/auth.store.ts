@@ -25,6 +25,14 @@ type AuthState = {
 let initializePromise: Promise<void> | null = null;
 let authSubscription: { unsubscribe: () => void } | null = null;
 
+function getSignInErrorMessage(message: string) {
+  if (message === 'Invalid login credentials') {
+    return 'อีเมลหรือรหัสผ่านไม่ถูกต้อง';
+  }
+
+  return message;
+}
+
 export const useAuthStore = create<AuthState>((set, get) => ({
   session: null,
   user: null,
@@ -128,7 +136,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) {
-      set({ error: error.message, loading: false });
+      set({ error: getSignInErrorMessage(error.message), loading: false });
       throw error;
     }
 
