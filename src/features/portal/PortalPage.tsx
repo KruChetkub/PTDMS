@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ArrowRight, CalendarDays, ExternalLink, FileText, GraduationCap, Headphones, LogOut, Megaphone, Monitor, ShieldCheck, Sparkles } from 'lucide-react';
+import { ArrowRight, CalendarDays, Database, ExternalLink, FileText, GraduationCap, Headphones, LogOut, Megaphone, Monitor, ShieldCheck, Sparkles } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ConfirmModal } from '../../components/ui/ConfirmModal';
 import { useAuditPageAccess } from '../../hooks/useAuditPageAccess';
@@ -77,6 +77,16 @@ const externalSystems: PortalCard[] = [
     icon: FileText,
     roles: ['super_admin', 'admin', 'executive', 'hr', 'personnel'],
     accent: 'from-indigo-700 to-sky-500',
+    meta: 'External System',
+  },
+  {
+    title: 'ระบบจัดเก็บข้อมูลกลาง กยผ.',
+    shortTitle: 'ข้อมูลกลาง กยผ.',
+    description: 'เข้าสู่ระบบจัดเก็บข้อมูลกลางของกองยุทธศาสตร์และแผนงานผ่านลิงก์ภายนอก',
+    externalUrl: 'http://10.100.43.2:5000/#/signin',
+    icon: Database,
+    roles: ['super_admin', 'admin', 'executive', 'hr', 'personnel'],
+    accent: 'from-slate-700 to-emerald-500',
     meta: 'External System',
   },
 ];
@@ -207,7 +217,7 @@ export function PortalPage() {
                       {system.meta}
                     </span>
                   </div>
-                  <h2 className="mt-2 text-center text-sm font-semibold tracking-normal text-slate-950 sm:mt-5 sm:text-left sm:text-xl">
+                  <h2 className="mt-2 text-center text-xs font-semibold leading-snug tracking-normal text-slate-950 min-[380px]:text-sm sm:mt-5 sm:text-left sm:text-xl">
                     {system.shortTitle}
                   </h2>
                   <p className="mt-1 hidden text-sm leading-6 text-slate-600 sm:block">{system.description}</p>
