@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ArrowRight, CalendarDays, GraduationCap, Headphones, LogOut, Megaphone, Monitor, ShieldCheck, Sparkles } from 'lucide-react';
+import { ArrowRight, CalendarDays, ExternalLink, FileText, GraduationCap, Headphones, LogOut, Megaphone, Monitor, ShieldCheck, Sparkles } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ConfirmModal } from '../../components/ui/ConfirmModal';
 import { useAuditPageAccess } from '../../hooks/useAuditPageAccess';
@@ -11,7 +11,8 @@ type PortalCard = {
   title: string;
   shortTitle: string;
   description: string;
-  to: string;
+  to?: string;
+  externalUrl?: string;
   icon: typeof GraduationCap;
   roles: UserRole[];
   accent: string;
@@ -67,6 +68,19 @@ const serviceSystems: PortalCard[] = [
   },
 ];
 
+const externalSystems: PortalCard[] = [
+  {
+    title: 'ระบบสารบรรณอิเล็กทรอนิกส์ e-Office',
+    shortTitle: 'e-Office',
+    description: 'เข้าสู่ระบบสารบรรณอิเล็กทรอนิกส์ของกรมควบคุมโรคผ่านลิงก์ภายนอก',
+    externalUrl: 'https://ddc.eoffice.go.th/api/auth/login',
+    icon: FileText,
+    roles: ['super_admin', 'admin', 'executive', 'hr', 'personnel'],
+    accent: 'from-indigo-700 to-sky-500',
+    meta: 'External System',
+  },
+];
+
 const adminSystems: PortalCard[] = [
   {
     title: 'PTDMS Site Manager',
@@ -86,8 +100,12 @@ export function PortalPage() {
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const { profile, signOut } = useAuthStore();
   useAuditPageAccess({ module: 'ptdms', action: 'ptdms_portal_access', route: '/portal' });
-  const visibleSystems = [...coreSystems, ...assetSystems, ...serviceSystems, ...adminSystems].filter((system) => canAccess(profile?.role, system.roles));
+  const visibleSystems = [...coreSystems, ...assetSystems, ...serviceSystems, ...externalSystems, ...adminSystems].filter((system) => canAccess(profile?.role, system.roles));
   const getSystemPath = (system: PortalCard) => {
+    if (!system.to) {
+      return '/portal';
+    }
+
     if (system.to === '/dashboard' && profile?.role === 'personnel') {
       return '/profile';
     }
@@ -170,39 +188,55 @@ export function PortalPage() {
           </div>
         </section>
 
-        <div className="mt-6 grid grid-cols-3 gap-x-3 gap-y-6 sm:grid-cols-2 sm:gap-4 xl:grid-cols-3">
+        <div className="mt-6 grid grid-cols-2 gap-x-3 gap-y-5 sm:grid-cols-2 sm:gap-4 xl:grid-cols-3">
           {visibleSystems.map((system) => {
             const Icon = system.icon;
-            return (
+            const isExternal = Boolean(system.externalUrl);
+            const cardClassName = "group flex min-h-28 flex-col items-center rounded-md p-2 text-center transition hover:bg-slate-100 sm:min-h-0 sm:items-stretch sm:rounded-2xl sm:border sm:border-slate-200 sm:bg-white sm:p-5 sm:text-left sm:shadow-sm sm:hover:-translate-y-0.5 sm:hover:border-slate-300 sm:hover:shadow-lg";
+            const cardContent = (
+              <div className="flex h-full flex-col items-center gap-2 sm:min-h-48 sm:items-stretch sm:justify-between sm:gap-6">
+                <div className="w-full">
+                  <div className="flex justify-center sm:items-start sm:justify-between sm:gap-4">
+                    <div
+                      className={`flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br ${system.accent} text-white shadow-sm ring-1 ring-black/5 sm:h-20 sm:w-20`}
+                    >
+                      <Icon className="h-7 w-7 sm:h-9 sm:w-9" aria-hidden="true" />
+                    </div>
+                    <span className="hidden items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600 sm:inline-flex">
+                      {isExternal ? <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" /> : <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />}
+                      {system.meta}
+                    </span>
+                  </div>
+                  <h2 className="mt-2 text-center text-sm font-semibold tracking-normal text-slate-950 sm:mt-5 sm:text-left sm:text-xl">
+                    {system.shortTitle}
+                  </h2>
+                  <p className="mt-1 hidden text-sm leading-6 text-slate-600 sm:block">{system.description}</p>
+                </div>
+
+                <div className="hidden items-center justify-between border-t border-slate-100 pt-4 text-sm font-semibold text-brand-700 sm:flex">
+                  <span>{isExternal ? 'เปิดระบบภายนอก' : 'เข้าใช้งาน'}</span>
+                  {isExternal ? <ExternalLink className="h-4 w-4 transition group-hover:translate-x-1" aria-hidden="true" /> : <ArrowRight className="h-4 w-4 transition group-hover:translate-x-1" aria-hidden="true" />}
+                </div>
+              </div>
+            );
+
+            return isExternal ? (
+              <a
+                key={system.externalUrl}
+                href={system.externalUrl}
+                target="_blank"
+                rel="noreferrer"
+                className={cardClassName}
+              >
+                {cardContent}
+              </a>
+            ) : (
               <Link
                 key={system.to}
                 to={getSystemPath(system)}
-                className="group flex flex-col items-center rounded-md p-1 text-center transition hover:bg-slate-100 sm:items-stretch sm:rounded-2xl sm:border sm:border-slate-200 sm:bg-white sm:p-5 sm:text-left sm:shadow-sm sm:hover:-translate-y-0.5 sm:hover:border-slate-300 sm:hover:shadow-lg"
+                className={cardClassName}
               >
-                <div className="flex h-full flex-col items-center gap-2 sm:min-h-48 sm:items-stretch sm:justify-between sm:gap-6">
-                  <div className="w-full">
-                    <div className="flex justify-center sm:items-start sm:justify-between sm:gap-4">
-                      <div
-                        className={`flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br ${system.accent} text-white shadow-sm ring-1 ring-black/5 sm:h-20 sm:w-20`}
-                      >
-                        <Icon className="h-7 w-7 sm:h-9 sm:w-9" aria-hidden="true" />
-                      </div>
-                      <span className="hidden items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600 sm:inline-flex">
-                        <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
-                        {system.meta}
-                      </span>
-                    </div>
-                    <h2 className="mt-2 text-center text-sm font-semibold tracking-normal text-slate-950 sm:mt-5 sm:text-left sm:text-xl">
-                      {system.shortTitle}
-                    </h2>
-                    <p className="mt-1 hidden text-sm leading-6 text-slate-600 sm:block">{system.description}</p>
-                  </div>
-
-                  <div className="hidden items-center justify-between border-t border-slate-100 pt-4 text-sm font-semibold text-brand-700 sm:flex">
-                    <span>เข้าใช้งาน</span>
-                    <ArrowRight className="h-4 w-4 transition group-hover:translate-x-1" aria-hidden="true" />
-                  </div>
-                </div>
+                {cardContent}
               </Link>
             );
           })}
