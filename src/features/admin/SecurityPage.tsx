@@ -110,6 +110,9 @@ export function SecurityPage() {
                 ส่งสำเร็จ {exportResult.total_logs ?? 0} รายการ
                 {exportResult.batch_id ? <span className="block break-all">Batch: {exportResult.batch_id}</span> : null}
                 <span className="block">ลบ log เก่าที่ส่งแล้ว: {exportResult.cleanup_deleted ?? 0} รายการ</span>
+                {exportResult.export_status_update_error ? (
+                  <span className="mt-1 block text-amber-700">ส่งเข้า Google Sheet แล้ว แต่ยังอัปเดตสถานะ log ไม่สำเร็จ: {exportResult.export_status_update_error}</span>
+                ) : null}
               </div>
             ) : null}
 

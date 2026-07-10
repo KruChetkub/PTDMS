@@ -113,6 +113,7 @@ export type AuditLogGoogleSheetExportResult = {
   total_logs?: number;
   cleanup_deleted?: number;
   cleanup_error?: string | null;
+  export_status_update_error?: string | null;
   reason?: string;
 };
 

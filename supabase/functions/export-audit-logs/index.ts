@@ -289,6 +289,8 @@ serve(async (req) => {
   }
 
   const ids = pendingLogs.map((log) => log.id);
+  let exportStatusUpdateError: string | null = null;
+
   if (ids.length > 0) {
     const { error: updateError } = await adminClient
       .from('audit_logs')
@@ -301,7 +303,11 @@ serve(async (req) => {
       .in('id', ids);
 
     if (updateError) {
-      return jsonResponse({ exported: false, batch_id: batchId, reason: updateError.message }, 500);
+      exportStatusUpdateError = updateError.message;
+      console.error('Audit log export succeeded but status update failed', {
+        batchId,
+        error: updateError.message,
+      });
     }
   }
 
@@ -319,5 +325,6 @@ serve(async (req) => {
     total_logs: pendingLogs.length,
     cleanup_deleted: cleanupDeleted || 0,
     cleanup_error: cleanupError?.message || null,
+    export_status_update_error: exportStatusUpdateError,
   });
 });
