@@ -118,11 +118,11 @@ export function AppLayout() {
       setIsLoggingOut(true);
       await signOut();
       setIsLogoutModalOpen(false);
-      navigate('/', { replace: true });
+      navigate('/login', { replace: true });
     } catch (error) {
       console.error('Logout failed:', error);
       setIsLogoutModalOpen(false);
-      navigate('/', { replace: true });
+      navigate('/login', { replace: true });
     } finally {
       setIsLoggingOut(false);
     }
