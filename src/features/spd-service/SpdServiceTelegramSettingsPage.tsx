@@ -564,7 +564,7 @@ export function SpdServiceTelegramSettingsPage() {
                         </label>
 
                         <label className="block">
-                          <span className="text-xs font-medium text-slate-600">ลำดับ</span>
+                          <span className="text-xs font-medium text-slate-600">ลำดับการแสดงผล</span>
                           <input
                             type="number"
                             value={subject.sort_order}

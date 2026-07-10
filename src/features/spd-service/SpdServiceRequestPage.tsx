@@ -1,4 +1,4 @@
-import { FormEvent, PointerEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, PointerEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { AlertCircle, ArrowLeft, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Headphones, ImageIcon, Loader2, Send, X, ZoomIn } from 'lucide-react';
 import {
@@ -180,7 +180,7 @@ export function SpdServiceRequestPage() {
           categoryId: subject.category_id,
           categoryName: subject.category_name || categoryOptions.find((category) => category.id === subject.category_id)?.name || '',
           subject: subject.subject,
-          requiresBookingDate: subject.requires_booking_date,
+          requiresBookingDate: subject.requires_booking_date || subject.subject === 'แจ้งใช้งาน AI ChatGPT',
         }))
       : categoryOptions.flatMap((category) => {
           if (category.name === otherCategoryName) {
@@ -231,6 +231,24 @@ export function SpdServiceRequestPage() {
   }, [aiBookings]);
   const selectedAiBookings = selectedAiBookingDate ? aiBookingsByDate[selectedAiBookingDate] || [] : [];
 
+  const loadAiBookings = useCallback(async (monthDate: Date) => {
+    const days = getCalendarDays(monthDate);
+    const start = toDateKey(days[0]);
+    const end = toDateKey(days[days.length - 1]);
+
+    try {
+      setIsLoadingAiBookings(true);
+      const data = await getSpdServiceAiChatGptBookings(start, end);
+      setAiBookings(data);
+      return data;
+    } catch (bookingError) {
+      console.error('Failed to load AI ChatGPT bookings:', bookingError);
+      return [];
+    } finally {
+      setIsLoadingAiBookings(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (!shouldShowBookingCalendar) {
       setRequestedServiceDate('');
@@ -238,22 +256,8 @@ export function SpdServiceRequestPage() {
       return;
     }
 
-    const days = getCalendarDays(aiCalendarMonth);
-    const start = toDateKey(days[0]);
-    const end = toDateKey(days[days.length - 1]);
-
-    void (async () => {
-      try {
-        setIsLoadingAiBookings(true);
-        const data = await getSpdServiceAiChatGptBookings(start, end);
-        setAiBookings(data);
-      } catch (bookingError) {
-        console.error('Failed to load AI ChatGPT bookings:', bookingError);
-      } finally {
-        setIsLoadingAiBookings(false);
-      }
-    })();
-  }, [aiCalendarMonth, shouldShowBookingCalendar]);
+    void loadAiBookings(aiCalendarMonth);
+  }, [aiCalendarMonth, loadAiBookings, shouldShowBookingCalendar]);
 
   const resetIssueFields = () => {
     setCategoryId('');
@@ -341,6 +345,7 @@ export function SpdServiceRequestPage() {
       setError(null);
       setNotificationWarning(null);
       setCreatedTicket(null);
+      const submittedAiBookingDate = shouldShowBookingCalendar ? requestedServiceDate : '';
       const ticket = await createSpdServiceTicket({
         requesterId: profile.user_id,
         requesterName: requesterName.trim(),
@@ -351,6 +356,7 @@ export function SpdServiceRequestPage() {
         urgency,
         subject: finalSubject,
         description: description.trim(),
+        requestedServiceDate: submittedAiBookingDate || null,
       });
 
       try {
@@ -365,7 +371,15 @@ export function SpdServiceRequestPage() {
       }
 
       setCreatedTicket(ticket);
-      resetIssueFields();
+      if (submittedAiBookingDate) {
+        setUrgency('MEDIUM');
+        setDescription('');
+        setRequestedServiceDate(submittedAiBookingDate);
+        await loadAiBookings(aiCalendarMonth);
+        setSelectedAiBookingDate(submittedAiBookingDate);
+      } else {
+        resetIssueFields();
+      }
     } catch (submitError) {
       console.error('Failed to create DSP Service ticket:', submitError);
       setError('ไม่สามารถสร้างคำขอได้ กรุณาตรวจสอบข้อมูลแล้วลองใหม่');
