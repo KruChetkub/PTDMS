@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { AlertCircle, ArrowLeft, BellRing, CheckCircle2, ImageIcon, Plus, RefreshCw, Save, Trash2, Upload } from 'lucide-react';
+import { AlertCircle, ArrowLeft, BellRing, CheckCircle2, ChevronDown, ChevronRight, ImageIcon, Plus, RefreshCw, Save, Trash2, Upload, X } from 'lucide-react';
 import {
   defaultSpdServiceTelegramMessageTemplate,
   deleteSpdServiceRequestSubject,
@@ -63,6 +63,10 @@ export function SpdServiceTelegramSettingsPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [subjectPendingDelete, setSubjectPendingDelete] = useState<SpdServiceRequestSubjectRow | null>(null);
+  const [expandedRequestSubjectIds, setExpandedRequestSubjectIds] = useState<string[]>([]);
+  const [expandedDigitalGuideSubjects, setExpandedDigitalGuideSubjects] = useState<SpdServiceDigitalGuideSubject[]>([]);
+  const [selectedDigitalGuideSubject, setSelectedDigitalGuideSubject] = useState('');
 
   const selectedAdminCount = useMemo(
     () => admins.filter((admin) => adminRecipientIds.includes(admin.user_id)).length,
@@ -70,6 +74,13 @@ export function SpdServiceTelegramSettingsPage() {
   );
   const messagePreview = useMemo(() => renderTelegramTemplatePreview(messageTemplate), [messageTemplate]);
   const canSaveActiveTab = activeTab === 'request' ? canEditRequestSettings : canEditTelegramSettings;
+  const digitalGuideSubjectOptions = useMemo(
+    () =>
+      requestSubjects
+        .filter((subject) => subject.subject.trim() && !digitalGuides.some((guide) => guide.subject === subject.subject.trim()))
+        .map((subject) => ({ id: subject.id, subject: subject.subject.trim(), categoryName: subject.category_name || '' })),
+    [digitalGuides, requestSubjects],
+  );
 
   const loadSettings = async () => {
     try {
@@ -94,6 +105,9 @@ export function SpdServiceTelegramSettingsPage() {
       setAdminUsernames(telegramSettings.adminUsernames);
       setMessageTemplate(telegramSettings.messageTemplate);
       setDigitalGuides(guideSettings);
+      setExpandedRequestSubjectIds([]);
+      setExpandedDigitalGuideSubjects([]);
+      setSelectedDigitalGuideSubject('');
     } catch (loadError) {
       console.error('Failed to load DSP Service settings:', loadError);
       setError('ไม่สามารถโหลดการตั้งค่า DSP Service ได้');
@@ -131,10 +145,11 @@ export function SpdServiceTelegramSettingsPage() {
     const category = categories[0];
     if (!category) return;
 
+    const newSubjectId = `new-${Date.now()}`;
     setRequestSubjects((current) => [
       ...current,
       {
-        id: `new-${Date.now()}`,
+        id: newSubjectId,
         category_id: category.id,
         category_name: category.name,
         subject: '',
@@ -145,17 +160,59 @@ export function SpdServiceTelegramSettingsPage() {
         updated_at: '',
       },
     ]);
+    setExpandedRequestSubjectIds((current) => [...current, newSubjectId]);
   };
 
-  const deleteRequestSubject = async (subject: SpdServiceRequestSubjectRow) => {
-    if (!confirm(`ลบงานบริการ "${subject.subject || 'รายการใหม่'}" ใช่หรือไม่?`)) return;
+  const toggleRequestSubjectExpansion = (subjectId: string) => {
+    setExpandedRequestSubjectIds((current) =>
+      current.includes(subjectId) ? current.filter((id) => id !== subjectId) : [...current, subjectId],
+    );
+  };
 
-    if (subject.id && !subject.id.startsWith('new-')) {
-      await deleteSpdServiceRequestSubject(subject.id);
+  const toggleDigitalGuideExpansion = (subject: SpdServiceDigitalGuideSubject) => {
+    setExpandedDigitalGuideSubjects((current) =>
+      current.includes(subject) ? current.filter((item) => item !== subject) : [...current, subject],
+    );
+  };
+
+  const addDigitalGuideSubject = () => {
+    const subject = selectedDigitalGuideSubject || digitalGuideSubjectOptions[0]?.subject || '';
+    if (!subject) return;
+
+    setDigitalGuides((current) => [
+      ...current,
+      {
+        subject,
+        enabled: true,
+        imagePath: '',
+        signedImageUrl: '',
+      },
+    ]);
+    setExpandedDigitalGuideSubjects((current) => [...current, subject]);
+    setSelectedDigitalGuideSubject('');
+  };
+
+  const deleteRequestSubject = async () => {
+    if (!subjectPendingDelete) return;
+
+    try {
+      setIsSaving(true);
+      setError(null);
+      setSuccess(null);
+
+      if (subjectPendingDelete.id && !subjectPendingDelete.id.startsWith('new-')) {
+        await deleteSpdServiceRequestSubject(subjectPendingDelete.id);
+      }
+
+      setRequestSubjects((current) => current.filter((item) => item.id !== subjectPendingDelete.id));
+      setSubjectPendingDelete(null);
+      setSuccess('ลบงานบริการเรียบร้อยแล้ว');
+    } catch (deleteError) {
+      console.error('Failed to delete DSP Service request subject:', deleteError);
+      setError('ไม่สามารถลบงานบริการได้');
+    } finally {
+      setIsSaving(false);
     }
-
-    setRequestSubjects((current) => current.filter((item) => item.id !== subject.id));
-    setSuccess('ลบงานบริการเรียบร้อยแล้ว');
   };
 
   const handleGuideImageUpload = async (subject: SpdServiceDigitalGuideSubject, file: File | null) => {
@@ -191,14 +248,33 @@ export function SpdServiceTelegramSettingsPage() {
         return;
       }
 
+      if (requestSubjects.some((subject) => !subject.subject.trim())) {
+        setError('กรุณากรอกชื่องานบริการให้ครบถ้วน');
+        return;
+      }
+
       try {
         setIsSaving(true);
         setError(null);
         setSuccess(null);
-        await saveSpdServiceDigitalGuideSettings({ guides: digitalGuides, updatedBy: profile.user_id });
+        await Promise.all([
+          saveSpdServiceDigitalGuideSettings({ guides: digitalGuides, updatedBy: profile.user_id }),
+          ...requestSubjects.map((subject) =>
+            saveSpdServiceRequestSubject({
+              id: subject.id.startsWith('new-') ? undefined : subject.id,
+              categoryId: subject.category_id,
+              subject: subject.subject,
+              isActive: subject.is_active,
+              requiresBookingDate: subject.requires_booking_date,
+              sortOrder: subject.sort_order,
+            }),
+          ),
+        ]);
+        const latestSubjects = await getSpdServiceRequestSubjects({ activeOnly: false });
+        setRequestSubjects(latestSubjects);
         setSuccess('บันทึกการตั้งค่าแจ้งคำขอรับบริการเรียบร้อยแล้ว');
       } catch (saveError) {
-        console.error('Failed to save DSP Service request guide settings:', saveError);
+        console.error('Failed to save DSP Service request settings:', saveError);
         setError('ไม่สามารถบันทึกการตั้งค่าแจ้งคำขอรับบริการได้');
       } finally {
         setIsSaving(false);
@@ -532,143 +608,259 @@ export function SpdServiceTelegramSettingsPage() {
                 </div>
 
                 <div className="mt-4 space-y-3">
-                  {requestSubjects.map((subject) => (
-                    <div key={subject.id} className="rounded-md border border-slate-200 bg-white p-3">
-                      <div className="grid gap-3 lg:grid-cols-[12rem_minmax(0,1fr)_6rem_auto] lg:items-end">
-                        <label className="block">
-                          <span className="text-xs font-medium text-slate-600">ประเภทเดิมสำหรับกราฟ</span>
-                          <select
-                            value={subject.category_id}
-                            onChange={(event) => {
-                              const category = categories.find((item) => item.id === event.target.value);
-                              updateRequestSubject(subject.id, { category_id: event.target.value, category_name: category?.name || '' });
-                            }}
-                            disabled={!canEditRequestSettings}
-                            className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-100 disabled:cursor-not-allowed disabled:bg-slate-50"
+                  {requestSubjects.map((subject, index) => {
+                    const isExpanded = expandedRequestSubjectIds.includes(subject.id);
+
+                    return (
+                      <div key={subject.id} className="rounded-md border border-slate-200 bg-white">
+                        <div className="flex flex-col gap-3 p-3 lg:flex-row lg:items-center lg:justify-between">
+                          <button
+                            type="button"
+                            onClick={() => toggleRequestSubjectExpansion(subject.id)}
+                            className="flex min-w-0 flex-1 items-start gap-3 text-left"
                           >
-                            {categories.map((category) => (
-                              <option key={category.id} value={category.id}>{category.name}</option>
-                            ))}
-                          </select>
-                        </label>
+                            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-slate-100 text-sm font-semibold text-slate-700 ring-1 ring-slate-200">
+                              {index + 1}
+                            </span>
+                            <span className="min-w-0 flex-1">
+                              <span className="flex items-center gap-2 text-sm font-semibold text-slate-950">
+                                {isExpanded ? <ChevronDown className="h-4 w-4 shrink-0 text-slate-400" aria-hidden="true" /> : <ChevronRight className="h-4 w-4 shrink-0 text-slate-400" aria-hidden="true" />}
+                                <span className="truncate">{subject.subject || 'รายการใหม่'}</span>
+                              </span>
+                              <span className="mt-1 flex flex-wrap gap-2 text-xs text-slate-500">
+                                <span>ลำดับการแสดงผล {subject.sort_order}</span>
+                                <span>{subject.category_name || categories.find((category) => category.id === subject.category_id)?.name || '-'}</span>
+                              </span>
+                            </span>
+                          </button>
 
-                        <label className="block">
-                          <span className="text-xs font-medium text-slate-600">ชื่องานบริการ</span>
-                          <input
-                            value={subject.subject}
-                            onChange={(event) => updateRequestSubject(subject.id, { subject: event.target.value })}
-                            readOnly={!canEditRequestSettings}
-                            className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
-                            placeholder="เช่น แจ้งใช้งาน AI ChatGPT"
-                          />
-                        </label>
+                          <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+                            <span className={cn('rounded px-2 py-1 text-xs font-semibold ring-1', subject.is_active ? 'bg-emerald-50 text-emerald-700 ring-emerald-100' : 'bg-slate-100 text-slate-500 ring-slate-200')}>
+                              {subject.is_active ? 'เปิดใช้งาน' : 'ปิดใช้งาน'}
+                            </span>
+                            {subject.requires_booking_date ? (
+                              <span className="rounded bg-teal-50 px-2 py-1 text-xs font-semibold text-teal-700 ring-1 ring-teal-100">ใช้ปฏิทิน</span>
+                            ) : null}
+                            <button
+                              type="button"
+                              onClick={() => toggleRequestSubjectExpansion(subject.id)}
+                              className="inline-flex items-center justify-center rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                            >
+                              {isExpanded ? 'ซ่อน' : 'แก้ไข'}
+                            </button>
+                          </div>
+                        </div>
 
-                        <label className="block">
-                          <span className="text-xs font-medium text-slate-600">ลำดับการแสดงผล</span>
-                          <input
-                            type="number"
-                            value={subject.sort_order}
-                            onChange={(event) => updateRequestSubject(subject.id, { sort_order: Number(event.target.value) || 0 })}
-                            readOnly={!canEditRequestSettings}
-                            className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
-                          />
-                        </label>
+                        {isExpanded ? (
+                          <div className="border-t border-slate-200 p-3">
+                            <div className="grid gap-3 lg:grid-cols-[12rem_minmax(0,1fr)_8rem_auto] lg:items-end">
+                              <label className="block">
+                                <span className="text-xs font-medium text-slate-600">ประเภทเดิมสำหรับกราฟ</span>
+                                <select
+                                  value={subject.category_id}
+                                  onChange={(event) => {
+                                    const category = categories.find((item) => item.id === event.target.value);
+                                    updateRequestSubject(subject.id, { category_id: event.target.value, category_name: category?.name || '' });
+                                  }}
+                                  disabled={!canEditRequestSettings}
+                                  className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-100 disabled:cursor-not-allowed disabled:bg-slate-50"
+                                >
+                                  {categories.map((category) => (
+                                    <option key={category.id} value={category.id}>{category.name}</option>
+                                  ))}
+                                </select>
+                              </label>
 
-                        <button
-                          type="button"
-                          onClick={() => void deleteRequestSubject(subject)}
-                          disabled={!canEditRequestSettings}
-                          className="inline-flex items-center justify-center gap-2 rounded-md border border-red-200 bg-white px-3 py-2 text-sm font-semibold text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                          <Trash2 className="h-4 w-4" aria-hidden="true" />
-                          ลบ
-                        </button>
+                              <label className="block">
+                                <span className="text-xs font-medium text-slate-600">ชื่องานบริการ</span>
+                                <input
+                                  value={subject.subject}
+                                  onChange={(event) => updateRequestSubject(subject.id, { subject: event.target.value })}
+                                  readOnly={!canEditRequestSettings}
+                                  className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
+                                  placeholder="เช่น แจ้งใช้งาน AI ChatGPT"
+                                />
+                              </label>
+
+                              <label className="block">
+                                <span className="text-xs font-medium text-slate-600">ลำดับ</span>
+                                <input
+                                  type="number"
+                                  value={subject.sort_order}
+                                  onChange={(event) => updateRequestSubject(subject.id, { sort_order: Number(event.target.value) || 0 })}
+                                  readOnly={!canEditRequestSettings}
+                                  className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
+                                />
+                              </label>
+
+                              <button
+                                type="button"
+                                onClick={() => setSubjectPendingDelete(subject)}
+                                disabled={!canEditRequestSettings}
+                                className="inline-flex items-center justify-center gap-2 rounded-md border border-red-200 bg-white px-3 py-2 text-sm font-semibold text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+                              >
+                                <Trash2 className="h-4 w-4" aria-hidden="true" />
+                                ลบ
+                              </button>
+                            </div>
+
+                            <div className="mt-3 flex flex-wrap gap-4 text-sm">
+                              <label className="inline-flex items-center gap-2 font-medium text-slate-700">
+                                <input
+                                  type="checkbox"
+                                  checked={subject.is_active}
+                                  onChange={(event) => updateRequestSubject(subject.id, { is_active: event.target.checked })}
+                                  disabled={!canEditRequestSettings}
+                                  className="h-4 w-4 rounded border-slate-300 text-teal-700 focus:ring-teal-500"
+                                />
+                                เปิดใช้งาน
+                              </label>
+                              <label className="inline-flex items-center gap-2 font-medium text-slate-700">
+                                <input
+                                  type="checkbox"
+                                  checked={subject.requires_booking_date}
+                                  onChange={(event) => updateRequestSubject(subject.id, { requires_booking_date: event.target.checked })}
+                                  disabled={!canEditRequestSettings}
+                                  className="h-4 w-4 rounded border-slate-300 text-teal-700 focus:ring-teal-500"
+                                />
+                                ต้องเลือกวันที่จองในปฏิทิน
+                              </label>
+                            </div>
+                          </div>
+                        ) : null}
                       </div>
-
-                      <div className="mt-3 flex flex-wrap gap-4 text-sm">
-                        <label className="inline-flex items-center gap-2 font-medium text-slate-700">
-                          <input
-                            type="checkbox"
-                            checked={subject.is_active}
-                            onChange={(event) => updateRequestSubject(subject.id, { is_active: event.target.checked })}
-                            disabled={!canEditRequestSettings}
-                            className="h-4 w-4 rounded border-slate-300 text-teal-700 focus:ring-teal-500"
-                          />
-                          เปิดใช้งาน
-                        </label>
-                        <label className="inline-flex items-center gap-2 font-medium text-slate-700">
-                          <input
-                            type="checkbox"
-                            checked={subject.requires_booking_date}
-                            onChange={(event) => updateRequestSubject(subject.id, { requires_booking_date: event.target.checked })}
-                            disabled={!canEditRequestSettings}
-                            className="h-4 w-4 rounded border-slate-300 text-teal-700 focus:ring-teal-500"
-                          />
-                          ต้องเลือกวันที่จองในปฏิทิน
-                        </label>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                   {requestSubjects.length === 0 ? (
                     <div className="rounded-md border border-dashed border-slate-300 bg-white px-3 py-8 text-center text-sm text-slate-500">ยังไม่มีงานบริการ</div>
                   ) : null}
                 </div>
               </div>
 
-              <div className="mt-5 grid gap-4">
-                {digitalGuides.map((guide) => (
-                  <div key={guide.subject} className="rounded-md border border-slate-200 p-4">
-                    <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                      <label className="flex cursor-pointer items-start gap-3">
-                        <input
-                          type="checkbox"
-                          checked={guide.enabled}
-                          onChange={(event) => updateDigitalGuide(guide.subject, { enabled: event.target.checked })}
-                          disabled={!canEditRequestSettings}
-                          className="mt-1 h-4 w-4 rounded border-slate-300 text-teal-700 focus:ring-teal-500"
-                        />
-                        <span>
-                          <span className="block text-base font-semibold text-slate-950">{guide.subject}</span>
-                          <span className="mt-1 block text-sm text-slate-500">เปิด/ปิดการแสดงรูปภาพคำแนะนำสำหรับหัวข้อนี้</span>
-                        </span>
-                      </label>
+              <div className="mt-5 rounded-md border border-slate-200 bg-slate-50 p-4">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+                  <label className="block min-w-0 flex-1">
+                    <span className="text-sm font-semibold text-slate-950">หัวข้อที่เพิ่มภาพคำแนะนำได้</span>
+                    <select
+                      value={selectedDigitalGuideSubject || digitalGuideSubjectOptions[0]?.subject || ''}
+                      onChange={(event) => setSelectedDigitalGuideSubject(event.target.value)}
+                      disabled={!canEditRequestSettings || digitalGuideSubjectOptions.length === 0}
+                      className="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-100 disabled:cursor-not-allowed disabled:bg-slate-50"
+                    >
+                      {digitalGuideSubjectOptions.length === 0 ? <option value="">ไม่มีงานบริการให้เพิ่มภาพแล้ว</option> : null}
+                      {digitalGuideSubjectOptions.map((option) => (
+                        <option key={option.id} value={option.subject}>{option.subject}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={addDigitalGuideSubject}
+                    disabled={!canEditRequestSettings || digitalGuideSubjectOptions.length === 0}
+                    className="inline-flex items-center justify-center gap-2 rounded-md border border-teal-200 bg-white px-3 py-2 text-sm font-semibold text-teal-700 transition hover:bg-teal-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <Plus className="h-4 w-4" aria-hidden="true" />
+                    เพิ่มหัวข้อภาพคำแนะนำ
+                  </button>
+                </div>
+                <p className="mt-2 text-xs text-slate-500">หัวข้อที่ไม่มีรูปภาพจะไม่แสดงที่หน้าแจ้งคำขอ</p>
+              </div>
 
-                      <label className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50">
-                        <Upload className="h-4 w-4" aria-hidden="true" />
-                        {uploadingSubject === guide.subject ? 'กำลังอัปโหลด...' : 'อัปโหลดรูปภาพ'}
-                        <input
-                          type="file"
-                          accept="image/png,image/jpeg,image/webp"
-                          className="sr-only"
-                          disabled={!canEditRequestSettings || uploadingSubject === guide.subject}
-                          onChange={(event) => void handleGuideImageUpload(guide.subject, event.target.files?.[0] || null)}
-                        />
-                      </label>
+              <div className="mt-5 grid gap-3">
+                {digitalGuides.map((guide, index) => {
+                  const isGuideExpanded = expandedDigitalGuideSubjects.includes(guide.subject);
+
+                  return (
+                    <div key={guide.subject} className="rounded-md border border-slate-200 bg-white">
+                      <div className="flex flex-col gap-3 p-3 lg:flex-row lg:items-center lg:justify-between">
+                        <button
+                          type="button"
+                          onClick={() => toggleDigitalGuideExpansion(guide.subject)}
+                          className="flex min-w-0 flex-1 items-start gap-3 text-left"
+                        >
+                          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-slate-100 text-sm font-semibold text-slate-700 ring-1 ring-slate-200">
+                            {index + 1}
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="flex items-center gap-2 text-sm font-semibold text-slate-950">
+                              {isGuideExpanded ? <ChevronDown className="h-4 w-4 shrink-0 text-slate-400" aria-hidden="true" /> : <ChevronRight className="h-4 w-4 shrink-0 text-slate-400" aria-hidden="true" />}
+                              <span className="truncate">{guide.subject}</span>
+                            </span>
+                            <span className="mt-1 block text-xs text-slate-500">คำแนะนำสำหรับ Digital Service</span>
+                          </span>
+                        </button>
+
+                        <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+                          <span className={cn('rounded px-2 py-1 text-xs font-semibold ring-1', guide.enabled ? 'bg-emerald-50 text-emerald-700 ring-emerald-100' : 'bg-slate-100 text-slate-500 ring-slate-200')}>
+                            {guide.enabled ? 'เปิดแสดง' : 'ปิดแสดง'}
+                          </span>
+                          {guide.imagePath ? <span className="rounded bg-teal-50 px-2 py-1 text-xs font-semibold text-teal-700 ring-1 ring-teal-100">มีรูปภาพ</span> : null}
+                          <button
+                            type="button"
+                            onClick={() => toggleDigitalGuideExpansion(guide.subject)}
+                            className="inline-flex items-center justify-center rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                          >
+                            {isGuideExpanded ? 'ซ่อน' : 'แก้ไข'}
+                          </button>
+                        </div>
+                      </div>
+
+                      {isGuideExpanded ? (
+                        <div className="border-t border-slate-200 p-4">
+                          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                            <label className="flex cursor-pointer items-start gap-3">
+                              <input
+                                type="checkbox"
+                                checked={guide.enabled}
+                                onChange={(event) => updateDigitalGuide(guide.subject, { enabled: event.target.checked })}
+                                disabled={!canEditRequestSettings}
+                                className="mt-1 h-4 w-4 rounded border-slate-300 text-teal-700 focus:ring-teal-500"
+                              />
+                              <span>
+                                <span className="block text-base font-semibold text-slate-950">{guide.subject}</span>
+                                <span className="mt-1 block text-sm text-slate-500">เปิด/ปิดการแสดงรูปภาพคำแนะนำสำหรับหัวข้อนี้</span>
+                              </span>
+                            </label>
+
+                            <label className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50">
+                              <Upload className="h-4 w-4" aria-hidden="true" />
+                              {uploadingSubject === guide.subject ? 'กำลังอัปโหลด...' : 'อัปโหลดรูปภาพ'}
+                              <input
+                                type="file"
+                                accept="image/png,image/jpeg,image/webp"
+                                className="sr-only"
+                                disabled={!canEditRequestSettings || uploadingSubject === guide.subject}
+                                onChange={(event) => void handleGuideImageUpload(guide.subject, event.target.files?.[0] || null)}
+                              />
+                            </label>
+                          </div>
+
+                          <label className="mt-4 block">
+                            <span className="text-sm font-medium text-slate-700">ตำแหน่งไฟล์รูปภาพ</span>
+                            <input
+                              value={guide.imagePath}
+                              onChange={(event) => updateDigitalGuide(guide.subject, { imagePath: event.target.value })}
+                              readOnly={!canEditRequestSettings}
+                              className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
+                              placeholder="อัปโหลดรูปภาพเพื่อสร้าง path ใน private bucket"
+                            />
+                          </label>
+
+                          {guide.signedImageUrl ? (
+                            <div className="mt-4 overflow-hidden rounded-md border border-slate-200 bg-slate-50">
+                              <img src={guide.signedImageUrl} alt={`คำแนะนำ ${guide.subject}`} className="max-h-96 w-full object-contain" />
+                            </div>
+                          ) : (
+                            <div className="mt-4 flex min-h-36 items-center justify-center rounded-md border border-dashed border-slate-300 bg-slate-50 text-sm text-slate-400">
+                              <ImageIcon className="mr-2 h-5 w-5" aria-hidden="true" />
+                              ยังไม่มีรูปภาพ
+                            </div>
+                          )}
+                        </div>
+                      ) : null}
                     </div>
-
-                    <label className="mt-4 block">
-                      <span className="text-sm font-medium text-slate-700">ตำแหน่งไฟล์รูปภาพ</span>
-                      <input
-                        value={guide.imagePath}
-                        onChange={(event) => updateDigitalGuide(guide.subject, { imagePath: event.target.value })}
-                        readOnly={!canEditRequestSettings}
-                        className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
-                        placeholder="อัปโหลดรูปภาพเพื่อสร้าง path ใน private bucket"
-                      />
-                    </label>
-
-                    {guide.signedImageUrl ? (
-                      <div className="mt-4 overflow-hidden rounded-md border border-slate-200 bg-slate-50">
-                        <img src={guide.signedImageUrl} alt={`คำแนะนำ ${guide.subject}`} className="max-h-96 w-full object-contain" />
-                      </div>
-                    ) : (
-                      <div className="mt-4 flex min-h-36 items-center justify-center rounded-md border border-dashed border-slate-300 bg-slate-50 text-sm text-slate-400">
-                        <ImageIcon className="mr-2 h-5 w-5" aria-hidden="true" />
-                        ยังไม่มีรูปภาพ
-                      </div>
-                    )}
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </section>
           ) : null}
@@ -691,6 +883,47 @@ export function SpdServiceTelegramSettingsPage() {
           </div>
         </form>
       </main>
+
+      {subjectPendingDelete ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4" onClick={() => setSubjectPendingDelete(null)}>
+          <div className="w-full max-w-md rounded-md bg-white shadow-2xl" onClick={(event) => event.stopPropagation()}>
+            <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
+              <div className="min-w-0">
+                <p className="text-xs font-semibold uppercase text-red-600">ยืนยันการลบ</p>
+                <h2 className="truncate text-base font-semibold text-slate-950">ลบงานบริการ</h2>
+              </div>
+              <button type="button" onClick={() => setSubjectPendingDelete(null)} className="rounded-md p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-900">
+                <X className="h-5 w-5" aria-hidden="true" />
+              </button>
+            </div>
+            <div className="space-y-3 p-4">
+              <p className="text-sm leading-6 text-slate-600">
+                ต้องการลบงานบริการ <span className="font-semibold text-slate-950">{subjectPendingDelete.subject || 'รายการใหม่'}</span> ใช่หรือไม่?
+              </p>
+              <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">เมื่อลบแล้ว งานบริการนี้จะไม่แสดงในหน้าแจ้งคำขอ</p>
+            </div>
+            <div className="flex flex-col-reverse gap-3 border-t border-slate-200 px-4 py-3 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={() => setSubjectPendingDelete(null)}
+                disabled={isSaving}
+                className="inline-flex items-center justify-center rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                ยกเลิก
+              </button>
+              <button
+                type="button"
+                onClick={() => void deleteRequestSubject()}
+                disabled={isSaving}
+                className="inline-flex items-center justify-center gap-2 rounded-md bg-red-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <Trash2 className="h-4 w-4" aria-hidden="true" />
+                {isSaving ? 'กำลังลบ...' : 'ลบ'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

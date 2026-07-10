@@ -57,6 +57,7 @@ type ServiceSubjectOption = {
   categoryName: string;
   subject: string;
   requiresBookingDate: boolean;
+  sortOrder: number;
 };
 
 type GuideImagePreview = {
@@ -106,6 +107,7 @@ export function SpdServiceRequestPage() {
   const { profile, user } = useAuthStore();
   const [categories, setCategories] = useState<SpdServiceCategory[]>([]);
   const [requestSubjects, setRequestSubjects] = useState<SpdServiceRequestSubjectRow[]>([]);
+  const [hasLoadedRequestSubjects, setHasLoadedRequestSubjects] = useState(false);
   const [digitalGuides, setDigitalGuides] = useState<SpdServiceDigitalGuide[]>([]);
   const [requesterName, setRequesterName] = useState(profile?.full_name || '');
   const [requesterDepartment, setRequesterDepartment] = useState(profile?.work_group || profile?.department || '');
@@ -136,6 +138,7 @@ export function SpdServiceRequestPage() {
     void (async () => {
       try {
         setIsLoadingCategories(true);
+        setHasLoadedRequestSubjects(false);
         setError(null);
         const [categoryData, subjectData, guideData] = await Promise.all([
           getSpdServiceCategories(),
@@ -144,6 +147,7 @@ export function SpdServiceRequestPage() {
         ]);
         setCategories(categoryData);
         setRequestSubjects(subjectData);
+        setHasLoadedRequestSubjects(true);
         setDigitalGuides(guideData);
         setCategoryId((current) => current);
       } catch (loadError) {
@@ -174,24 +178,26 @@ export function SpdServiceRequestPage() {
     ];
   }, [categories]);
   const serviceSubjectOptions = useMemo<ServiceSubjectOption[]>(() => {
-    const options = requestSubjects.length > 0
+    const options = hasLoadedRequestSubjects
       ? requestSubjects.map((subject) => ({
           id: subject.id,
           categoryId: subject.category_id,
           categoryName: subject.category_name || categoryOptions.find((category) => category.id === subject.category_id)?.name || '',
           subject: subject.subject,
           requiresBookingDate: subject.requires_booking_date || subject.subject === 'แจ้งใช้งาน AI ChatGPT',
+          sortOrder: subject.sort_order,
         }))
       : categoryOptions.flatMap((category) => {
           if (category.name === otherCategoryName) {
             return [];
           }
 
-          return (subjectOptionsByCategory[category.name] || []).map((subject) => ({
+          return (subjectOptionsByCategory[category.name] || []).map((subject, index) => ({
             categoryId: category.id,
             categoryName: category.name,
             subject,
             requiresBookingDate: subject === 'แจ้งใช้งาน AI ChatGPT',
+            sortOrder: index + 1,
           }));
         });
 
@@ -202,9 +208,10 @@ export function SpdServiceRequestPage() {
         categoryName: otherCategoryName,
         subject: otherCategoryName,
         requiresBookingDate: false,
+        sortOrder: 9999,
       },
-    ];
-  }, [categoryOptions, requestSubjects]);
+    ].sort((a, b) => a.sortOrder - b.sortOrder || a.subject.localeCompare(b.subject, 'th'));
+  }, [categoryOptions, hasLoadedRequestSubjects, requestSubjects]);
   const selectedCategory = useMemo(() => categoryOptions.find((category) => category.id === categoryId) || null, [categoryOptions, categoryId]);
   const isOtherCategory = selectedCategory?.name === otherCategoryName;
   const selectedDigitalGuides = useMemo(

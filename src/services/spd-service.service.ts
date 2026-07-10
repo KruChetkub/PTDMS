@@ -98,7 +98,7 @@ export type SaveSpdServiceTelegramSettingsValues = SpdServiceTelegramSettings & 
   updatedBy: string;
 };
 
-export type SpdServiceDigitalGuideSubject = 'ลงข้อมูลหน้า Website' | 'ลงข่าวประชาสัมพันธ์';
+export type SpdServiceDigitalGuideSubject = string;
 
 export type SpdServiceDigitalGuide = {
   subject: SpdServiceDigitalGuideSubject;
@@ -575,15 +575,28 @@ function parseDigitalGuideSettings(value: string | null | undefined): SpdService
       return defaultSpdServiceDigitalGuides;
     }
 
-    return defaultSpdServiceDigitalGuides.map((defaultGuide) => {
-      const savedGuide = parsed.find((item) => item?.subject === defaultGuide.subject);
-      return {
-        subject: defaultGuide.subject,
-        enabled: typeof savedGuide?.enabled === 'boolean' ? savedGuide.enabled : defaultGuide.enabled,
-        imagePath: typeof savedGuide?.imagePath === 'string' ? savedGuide.imagePath : typeof savedGuide?.imageUrl === 'string' ? savedGuide.imageUrl : defaultGuide.imagePath,
+    const guidesBySubject = new Map<string, SpdServiceDigitalGuide>();
+
+    for (const guide of defaultSpdServiceDigitalGuides) {
+      guidesBySubject.set(guide.subject, guide);
+    }
+
+    for (const item of parsed) {
+      if (!item || typeof item.subject !== 'string' || !item.subject.trim()) {
+        continue;
+      }
+
+      const subject = item.subject.trim();
+      const defaultGuide = guidesBySubject.get(subject);
+      guidesBySubject.set(subject, {
+        subject,
+        enabled: typeof item.enabled === 'boolean' ? item.enabled : defaultGuide?.enabled ?? true,
+        imagePath: typeof item.imagePath === 'string' ? item.imagePath : typeof item.imageUrl === 'string' ? item.imageUrl : defaultGuide?.imagePath ?? '',
         signedImageUrl: '',
-      };
-    });
+      });
+    }
+
+    return Array.from(guidesBySubject.values());
   } catch {
     return defaultSpdServiceDigitalGuides;
   }
@@ -648,14 +661,19 @@ export async function uploadSpdServiceDigitalGuideImage(file: File): Promise<Pic
 }
 
 export async function saveSpdServiceDigitalGuideSettings(values: SaveSpdServiceDigitalGuideSettingsValues): Promise<void> {
-  const normalizedGuides = defaultSpdServiceDigitalGuides.map((defaultGuide) => {
-    const guide = values.guides.find((item) => item.subject === defaultGuide.subject);
-    return {
-      subject: defaultGuide.subject,
-      enabled: guide?.enabled ?? defaultGuide.enabled,
-      imagePath: guide?.imagePath?.trim() || '',
-    };
-  });
+  const normalizedGuides = values.guides.reduce<Array<Omit<SpdServiceDigitalGuide, 'signedImageUrl'>>>((acc, guide) => {
+    const subject = guide.subject.trim();
+    if (!subject || acc.some((item) => item.subject === subject)) {
+      return acc;
+    }
+
+    acc.push({
+      subject,
+      enabled: guide.enabled,
+      imagePath: guide.imagePath?.trim() || '',
+    });
+    return acc;
+  }, []);
 
   const { error } = await supabase
     .from('spd_service_notification_settings')
