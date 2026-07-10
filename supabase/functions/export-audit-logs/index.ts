@@ -235,15 +235,21 @@ serve(async (req) => {
   };
 
   const appsScriptBody = JSON.stringify(payload);
-  const appsScriptResponse = await fetch(appsScriptUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Content-Length': String(new TextEncoder().encode(appsScriptBody).length),
-      'X-Audit-Export-Secret': exportSecret,
-    },
-    body: appsScriptBody,
-  });
+  let appsScriptResponse: Response;
+
+  try {
+    appsScriptResponse = await fetch(appsScriptUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Audit-Export-Secret': exportSecret,
+      },
+      body: appsScriptBody,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'unknown_error';
+    return jsonResponse({ exported: false, batch_id: batchId, reason: `apps_script_fetch_failed: ${message}` }, 502);
+  }
 
   const responseText = await appsScriptResponse.text();
   let appsScriptResult: { ok?: boolean; error?: string } | null = null;
@@ -259,6 +265,13 @@ serve(async (req) => {
     : responseText;
 
   if (!appsScriptResponse.ok || appsScriptResult?.ok === false) {
+    console.error('Audit log Apps Script export failed', {
+      status: appsScriptResponse.status,
+      statusText: appsScriptResponse.statusText,
+      body: appsScriptError.slice(0, 500),
+      batchId,
+    });
+
     const ids = pendingLogs.map((log) => log.id);
     if (ids.length > 0) {
       await adminClient

@@ -135,6 +135,34 @@ async function getFunctionErrorReason(error: unknown) {
   return error instanceof Error ? error.message : null;
 }
 
+function getAuditExportErrorMessage(reason?: string | null) {
+  if (!reason) {
+    return 'ไม่สามารถส่งออก Audit Logs ไป Google Sheet ได้';
+  }
+
+  if (reason === 'missing_export_env') {
+    return 'ยังไม่ได้ตั้งค่า Google Sheet Export ใน Supabase Secrets: AUDIT_LOG_APPS_SCRIPT_URL และ AUDIT_LOG_EXPORT_SECRET';
+  }
+
+  if (reason === 'missing_supabase_env') {
+    return 'Supabase Function ยังไม่มีค่า SUPABASE_URL หรือ SUPABASE_SERVICE_ROLE_KEY';
+  }
+
+  if (reason === 'super_admin_required') {
+    return 'เฉพาะ Super Admin เท่านั้นที่ส่ง Audit Logs ไป Google Sheet ได้';
+  }
+
+  if (reason === 'missing_authorization' || reason === 'invalid_authorization') {
+    return 'สิทธิ์เข้าใช้งานหมดอายุ กรุณาเข้าสู่ระบบใหม่';
+  }
+
+  if (reason.startsWith('apps_script_fetch_failed')) {
+    return `ไม่สามารถเชื่อมต่อ Google Apps Script ได้: ${reason.replace('apps_script_fetch_failed:', '').trim()}`;
+  }
+
+  return reason;
+}
+
 export async function exportAuditLogsToGoogleSheet() {
   const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
   const accessToken = sessionData.session?.access_token;
@@ -152,12 +180,12 @@ export async function exportAuditLogsToGoogleSheet() {
 
   if (error) {
     const reason = await getFunctionErrorReason(error);
-    throw new Error(reason || 'ไม่สามารถส่งออก Audit Logs ไป Google Sheet ได้');
+    throw new Error(getAuditExportErrorMessage(reason));
   }
 
   const result = data as AuditLogGoogleSheetExportResult;
   if (!result?.exported) {
-    throw new Error(result?.reason || 'ไม่สามารถส่งออก Audit Logs ไป Google Sheet ได้');
+    throw new Error(getAuditExportErrorMessage(result?.reason));
   }
 
   return result;
