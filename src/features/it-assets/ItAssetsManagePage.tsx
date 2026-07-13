@@ -475,6 +475,7 @@ export function ItAssetsManagePage() {
   const [activeTab, setActiveTab] = useState<'assets' | 'criteria'>('assets');
   const [assets, setAssets] = useState<ItAsset[]>([]);
   const [selectedAsset, setSelectedAsset] = useState<ItAsset | null>(null);
+  const [assetPendingDelete, setAssetPendingDelete] = useState<ItAsset | null>(null);
   const [formValues, setFormValues] = useState<ItAssetFormValues>(emptyFormValues);
   const [criteria, setCriteria] = useState<ItAssetEvaluationCriteria>(defaultItAssetEvaluationCriteria);
   const [searchTerm, setSearchTerm] = useState('');
@@ -536,6 +537,7 @@ export function ItAssetsManagePage() {
 
   const startCreate = () => {
     setSelectedAsset(null);
+    setAssetPendingDelete(null);
     setFormValues(emptyFormValues);
     setStatusMessage(null);
     setError(null);
@@ -543,6 +545,7 @@ export function ItAssetsManagePage() {
 
   const startEdit = (asset: ItAsset) => {
     setSelectedAsset(asset);
+    setAssetPendingDelete(null);
     setFormValues(toFormValues(asset));
     setStatusMessage(null);
     setError(null);
@@ -676,19 +679,39 @@ export function ItAssetsManagePage() {
     }
   };
 
+  const openDeleteModal = (asset: ItAsset) => {
+    setAssetPendingDelete(asset);
+    setError(null);
+    setStatusMessage(null);
+    setIsDeleteModalOpen(true);
+  };
+
+  const closeDeleteModal = () => {
+    if (isSaving) {
+      return;
+    }
+
+    setIsDeleteModalOpen(false);
+    setAssetPendingDelete(null);
+  };
+
   const handleConfirmDelete = async () => {
-    if (!selectedAsset) {
+    const targetAsset = assetPendingDelete || selectedAsset;
+    if (!targetAsset) {
       return;
     }
 
     try {
       setIsSaving(true);
       setError(null);
-      await deleteItAsset(selectedAsset.id);
-      setAssets((current) => current.filter((asset) => asset.id !== selectedAsset.id));
-      setSelectedAsset(null);
-      setFormValues(emptyFormValues);
-      setStatusMessage('ลบรายการเรียบร้อย');
+      await deleteItAsset(targetAsset.id);
+      setAssets((current) => current.filter((asset) => asset.id !== targetAsset.id));
+      if (selectedAsset?.id === targetAsset.id) {
+        setSelectedAsset(null);
+        setFormValues(emptyFormValues);
+      }
+      setAssetPendingDelete(null);
+      setStatusMessage(`ลบรายการ ${targetAsset.asset_code || 'IT Asset'} เรียบร้อย`);
       setIsDeleteModalOpen(false);
     } catch (deleteError) {
       console.error('Failed to delete IT asset:', deleteError);
@@ -801,14 +824,25 @@ export function ItAssetsManagePage() {
                       <td className="px-2 py-3">{asset.computer_name || '-'}</td>
                       <td className="px-2 py-3">{asset.user_name || '-'}</td>
                       <td className="px-2 py-3">
-                        <button
-                          type="button"
-                          onClick={() => startEdit(asset)}
-                          className="inline-flex items-center gap-1 rounded-md border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-700 transition hover:bg-white"
-                        >
-                          <Edit className="h-3.5 w-3.5" aria-hidden="true" />
-                          แก้ไข
-                        </button>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => startEdit(asset)}
+                            className="inline-flex items-center gap-1 rounded-md border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-700 transition hover:bg-white"
+                          >
+                            <Edit className="h-3.5 w-3.5" aria-hidden="true" />
+                            แก้ไข
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => openDeleteModal(asset)}
+                            disabled={isSaving}
+                            className="inline-flex items-center gap-1 rounded-md border border-red-200 px-2 py-1 text-xs font-semibold text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                            ลบ
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -891,7 +925,7 @@ export function ItAssetsManagePage() {
               {selectedAsset ? (
                 <button
                   type="button"
-                  onClick={() => setIsDeleteModalOpen(true)}
+                  onClick={() => selectedAsset && openDeleteModal(selectedAsset)}
                   disabled={isSaving}
                   className="inline-flex items-center justify-center gap-2 rounded-md border border-red-200 px-4 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-50 disabled:opacity-60"
                 >
@@ -1026,10 +1060,10 @@ export function ItAssetsManagePage() {
 
       <ConfirmModal
         isOpen={isDeleteModalOpen}
-        onClose={() => setIsDeleteModalOpen(false)}
+        onClose={closeDeleteModal}
         onConfirm={() => void handleConfirmDelete()}
         title="ยืนยันการลบข้อมูล"
-        message={`ต้องการลบรายการ ${selectedAsset?.asset_code || '-'} ใช่หรือไม่?`}
+        message={`ต้องการลบรายการ ${(assetPendingDelete || selectedAsset)?.asset_code || '-'} ใช่หรือไม่? ข้อมูลจะถูกลบออกจากฐานข้อมูล`}
         confirmLabel="ลบ"
         cancelLabel="ยกเลิก"
         isLoading={isSaving}
