@@ -7,6 +7,7 @@ import { ConfiguredNotice } from '../../../components/auth/ConfiguredNotice';
 import { supabase } from '../../../lib/supabase';
 import { useAuthStore } from '../../../stores/auth.store';
 import { resetPasswordSchema, type ResetPasswordFormValues } from '../auth.schemas';
+import { getSafeUserErrorMessage, reportClientError } from '../../../utils/errorHandling';
 
 export function ResetPasswordPage() {
   const navigate = useNavigate();
@@ -76,7 +77,7 @@ export function ResetPasswordPage() {
           navigate(window.location.pathname || '/set-new-password', { replace: true });
         }
       } catch (err) {
-        setRecoveryError(err instanceof Error ? err.message : 'ไม่สามารถตรวจสอบลิงก์ Reset Password ได้');
+        setRecoveryError(getSafeUserErrorMessage(err, 'ไม่สามารถตรวจสอบลิงก์ Reset Password ได้'));
       } finally {
         setPreparingSession(false);
       }
@@ -92,7 +93,7 @@ export function ResetPasswordPage() {
       navigate('/portal', { replace: true });
     } catch (err) {
       // Error is handled by the store and displayed in the UI
-      console.error('Password update failed:', err);
+      void reportClientError('Password update failed:', err);
     }
   };
 

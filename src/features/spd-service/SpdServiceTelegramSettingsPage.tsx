@@ -20,6 +20,7 @@ import {
 import { useAuthStore } from '../../stores/auth.store';
 import type { Profile, SpdServiceCategory } from '../../types/database.types';
 import { cn } from '../../utils/cn';
+import { reportClientError } from '../../utils/errorHandling';
 
 const sampleTelegramTemplateValues: Record<string, string> = {
   ticket_no: 'DSP-IT-07072569-001',
@@ -109,7 +110,7 @@ export function SpdServiceTelegramSettingsPage() {
       setExpandedDigitalGuideSubjects([]);
       setSelectedDigitalGuideSubject('');
     } catch (loadError) {
-      console.error('Failed to load DSP Service settings:', loadError);
+      void reportClientError('Failed to load DSP Service settings:', loadError);
       setError('ไม่สามารถโหลดการตั้งค่า DSP Service ได้');
     } finally {
       setIsLoading(false);
@@ -208,7 +209,7 @@ export function SpdServiceTelegramSettingsPage() {
       setSubjectPendingDelete(null);
       setSuccess('ลบงานบริการเรียบร้อยแล้ว');
     } catch (deleteError) {
-      console.error('Failed to delete DSP Service request subject:', deleteError);
+      void reportClientError('Failed to delete DSP Service request subject:', deleteError);
       setError('ไม่สามารถลบงานบริการได้');
     } finally {
       setIsSaving(false);
@@ -227,7 +228,7 @@ export function SpdServiceTelegramSettingsPage() {
       updateDigitalGuide(subject, image);
       setSuccess('อัปโหลดรูปภาพแล้ว กรุณากดบันทึกการตั้งค่าเพื่อใช้งาน');
     } catch (uploadError) {
-      console.error('Failed to upload DSP Service guide image:', uploadError);
+      void reportClientError('Failed to upload DSP Service guide image:', uploadError);
       setError('ไม่สามารถอัปโหลดรูปภาพได้');
     } finally {
       setUploadingSubject(null);
@@ -274,7 +275,7 @@ export function SpdServiceTelegramSettingsPage() {
         setRequestSubjects(latestSubjects);
         setSuccess('บันทึกการตั้งค่าแจ้งคำขอรับบริการเรียบร้อยแล้ว');
       } catch (saveError) {
-        console.error('Failed to save DSP Service request settings:', saveError);
+        void reportClientError('Failed to save DSP Service request settings:', saveError);
         setError('ไม่สามารถบันทึกการตั้งค่าแจ้งคำขอรับบริการได้');
       } finally {
         setIsSaving(false);
@@ -313,7 +314,7 @@ export function SpdServiceTelegramSettingsPage() {
 
       setSuccess('บันทึกการตั้งค่า Telegram สำหรับ DSP Service เรียบร้อยแล้ว');
     } catch (saveError) {
-      console.error('Failed to save DSP Service Telegram settings:', saveError);
+      void reportClientError('Failed to save DSP Service Telegram settings:', saveError);
       setError('ไม่สามารถบันทึกการตั้งค่า Telegram ได้');
     } finally {
       setIsSaving(false);

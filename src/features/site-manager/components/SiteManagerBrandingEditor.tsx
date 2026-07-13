@@ -2,6 +2,7 @@ import { Upload } from 'lucide-react';
 import { useState } from 'react';
 import { uploadSiteLogo } from '../../site-content/services/siteContent.assets';
 import type { SiteContentBrandSettings } from '../../site-content/types/siteContent.types';
+import { getSafeUserErrorMessage } from '../../../utils/errorHandling';
 
 type SiteManagerBrandingEditorProps = {
   brandSettings: SiteContentBrandSettings;
@@ -33,7 +34,7 @@ export function SiteManagerBrandingEditor({
       const logoUrl = await uploadSiteLogo(file);
       onBrandSettingsChange({ ...brandSettings, logoUrl });
     } catch (error) {
-      setUploadError(error instanceof Error ? error.message : 'อัปโหลดโลโก้ไม่สำเร็จ');
+      setUploadError(getSafeUserErrorMessage(error, 'อัปโหลดโลโก้ไม่สำเร็จ'));
     } finally {
       setUploadingLogo(false);
     }

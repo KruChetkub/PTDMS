@@ -9,6 +9,7 @@ import {
 } from '../services/siteContent.storage';
 import { loadSiteContentFromSupabase, saveSiteContentToSupabase } from '../services/siteContent.supabase';
 import type { SiteContentState } from '../types/siteContent.types';
+import { reportClientError } from '../../../utils/errorHandling';
 
 export function usePublishedSiteContent() {
   const [content, setContent] = useState<SiteContentState>(() => loadSiteContent());
@@ -30,7 +31,7 @@ export function usePublishedSiteContent() {
         saveSiteContent(nextContent);
         setContent(nextContent);
       } catch (error) {
-        console.warn('Site content Supabase load fallback:', error);
+        void reportClientError('Site content Supabase load fallback:', error);
       }
     };
 
@@ -65,7 +66,7 @@ export function useSiteContentDraft() {
         setContentDraft(nextContent);
         setLoadingSource('supabase');
       } catch (error) {
-        console.warn('Site content Supabase draft fallback:', error);
+        void reportClientError('Site content Supabase draft fallback:', error);
         if (isMounted) {
           setLoadingSource('local');
         }
@@ -85,7 +86,7 @@ export function useSiteContentDraft() {
       saveSiteContent(contentDraft);
       return 'supabase' as const;
     } catch (error) {
-      console.warn('Site content Supabase save fallback:', error);
+      void reportClientError('Site content Supabase save fallback:', error);
       saveSiteContent(contentDraft);
       return 'local' as const;
     }

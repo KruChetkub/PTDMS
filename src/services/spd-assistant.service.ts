@@ -1,5 +1,6 @@
 import { supabase } from '../lib/supabase';
 import type { UserRole } from '../types/roles';
+import { reportClientError } from '../utils/errorHandling';
 
 export const SPD_ASSISTANT_FALLBACK = 'ขออภัย ไม่พบข้อมูลในฐานความรู้ของระบบ';
 
@@ -88,7 +89,7 @@ function isStrongMatch(result: SpdAssistantSearchResult | undefined, route: stri
 }
 
 function logAssistantError(message: string, error: unknown) {
-  console.error(`[DSP Assistant] ${message}`, error);
+  void reportClientError(`[DSP Assistant] ${message}`, error);
 }
 
 function escapeIlikeTerm(value: string) {

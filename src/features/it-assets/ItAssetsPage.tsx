@@ -12,6 +12,7 @@ import { ItAssetFilterSection } from './components/ItAssetFilterSection';
 import { ItAssetStatCard } from './components/ItAssetStatCard';
 import type { ItAssetFilters, ItAssetViewModel } from './types';
 import { cleanFilterValue, countByLabel, itAssetChartColors, toItAssetViewModel } from './utils/assetMetrics';
+import { reportClientError } from '../../utils/errorHandling';
 
 const emptyFilters: ItAssetFilters = {
   assetType: [],
@@ -63,7 +64,7 @@ export function ItAssetsPage() {
       const [data, criteria] = await Promise.all([getItAssets(), getItAssetEvaluationCriteria()]);
       setAssets(data.map((asset) => toItAssetViewModel(asset, criteria)));
     } catch (loadError) {
-      console.error('Failed to load IT assets:', loadError);
+      void reportClientError('Failed to load IT assets:', loadError);
       setError('ไม่สามารถโหลดข้อมูลครุภัณฑ์คอมพิวเตอร์ได้');
     } finally {
       setIsLoading(false);

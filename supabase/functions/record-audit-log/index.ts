@@ -150,7 +150,8 @@ serve(async (req) => {
   });
 
   if (error) {
-    return jsonResponse({ logged: false, reason: error.message }, 500);
+    console.error('record-audit-log insert failed', error);
+    return jsonResponse({ logged: false, reason: 'audit_log_insert_failed' }, 500);
   }
 
   return jsonResponse({ logged: true });

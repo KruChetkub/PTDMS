@@ -6,6 +6,7 @@ import { Link } from 'react-router-dom';
 import { ConfiguredNotice } from '../../../components/auth/ConfiguredNotice';
 import { useAuthStore } from '../../../stores/auth.store';
 import { registerSchema, type RegisterFormValues } from '../auth.schemas';
+import { reportClientError } from '../../../utils/errorHandling';
 
 export function RegisterPage() {
   const [submitted, setSubmitted] = useState(false);
@@ -30,7 +31,7 @@ export function RegisterPage() {
       setSubmitted(true);
     } catch (err) {
       // Error is handled by the store and displayed in the UI
-      console.error('Registration failed:', err);
+      void reportClientError('Registration failed:', err);
     }
   };
 

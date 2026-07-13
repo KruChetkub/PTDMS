@@ -11,6 +11,7 @@ import type {
   SpdServiceTicketStatus,
   SpdServiceUrgency,
 } from '../types/database.types';
+import { reportClientError } from '../utils/errorHandling';
 
 export type SpdServiceDashboardData = {
   tickets: SpdServiceTicket[];
@@ -278,7 +279,7 @@ export async function getSpdServiceAiChatGptBookings(startDate: string, endDate:
     return data || [];
   }
 
-  console.warn('Failed to load AI ChatGPT booking RPC, falling back to limited ticket query:', error);
+  void reportClientError('Failed to load AI ChatGPT booking RPC, falling back to limited ticket query:', error);
 
   const fallbackResult = await supabase
     .from('spd_service_tickets')
@@ -659,7 +660,7 @@ async function signSpdServiceDigitalGuides(guides: SpdServiceDigitalGuide[]): Pr
         .createSignedUrl(guide.imagePath, 60 * 30);
 
       if (signedError) {
-        console.error('Failed to sign DSP Service guide image:', signedError);
+        void reportClientError('Failed to sign DSP Service guide image:', signedError);
         return { ...guide, signedImageUrl: '' };
       }
 

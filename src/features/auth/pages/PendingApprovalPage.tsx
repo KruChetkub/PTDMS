@@ -3,6 +3,7 @@ import { Clock, LogOut, Mail } from 'lucide-react';
 import { useAuthStore } from '../../../stores/auth.store';
 import { ConfirmModal } from '../../../components/ui/ConfirmModal';
 import { useState } from 'react';
+import { reportClientError } from '../../../utils/errorHandling';
 
 export function PendingApprovalPage() {
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
@@ -17,7 +18,7 @@ export function PendingApprovalPage() {
       setIsLogoutModalOpen(false);
       navigate('/login', { replace: true });
     } catch (error) {
-      console.error('Logout failed:', error);
+      void reportClientError('Logout failed:', error);
       setIsLogoutModalOpen(false);
       navigate('/login', { replace: true });
     } finally {

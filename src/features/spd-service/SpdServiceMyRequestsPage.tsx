@@ -13,6 +13,7 @@ import { useAuditPageAccess } from '../../hooks/useAuditPageAccess';
 import type { SpdServiceSatisfactionSurvey, SpdServiceTicket, SpdServiceTicketStatus } from '../../types/database.types';
 import { cn } from '../../utils/cn';
 import { formatSpdServiceTicketNo } from './spdServiceTicketNo';
+import { reportClientError } from '../../utils/errorHandling';
 
 const statusLabels: Record<SpdServiceTicketStatus, string> = {
   NEW: 'งานใหม่',
@@ -314,7 +315,7 @@ export function SpdServiceMyRequestsPage() {
       setTickets(ticketData);
       setSurveys(surveyData);
     } catch (loadError) {
-      console.error('Failed to load my DSP Service requests:', loadError);
+      void reportClientError('Failed to load my DSP Service requests:', loadError);
       setError('ไม่สามารถโหลดคำขอของฉันได้');
     } finally {
       setIsLoading(false);
@@ -343,7 +344,7 @@ export function SpdServiceMyRequestsPage() {
       const detail = await getSpdServiceTicketDetail(ticketId);
       setTicketDetail(detail);
     } catch (detailError) {
-      console.error('Failed to load my DSP Service request detail:', detailError);
+      void reportClientError('Failed to load my DSP Service request detail:', detailError);
       setError('ไม่สามารถโหลดรายละเอียดคำขอได้');
     } finally {
       setIsDetailLoading(false);
@@ -370,7 +371,7 @@ export function SpdServiceMyRequestsPage() {
       setSurveys((current) => [survey, ...current]);
       setSatisfactionTicket(null);
     } catch (surveyError) {
-      console.error('Failed to submit DSP Service satisfaction survey:', surveyError);
+      void reportClientError('Failed to submit DSP Service satisfaction survey:', surveyError);
       setError('ไม่สามารถบันทึกคะแนนความพึงพอใจได้ หรืออาจเคยให้คะแนนรายการนี้แล้ว');
     } finally {
       setIsSurveySubmitting(false);

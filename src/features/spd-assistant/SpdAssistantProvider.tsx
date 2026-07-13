@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { getSpdAssistantPageContext, getSpdAssistantRoute, type SpdAssistantPageContext } from '../../services/spd-assistant.service';
 import { useAuthStore } from '../../stores/auth.store';
 import type { UserRole } from '../../types/roles';
+import { reportClientError } from '../../utils/errorHandling';
 
 type SpdAssistantContextValue = {
   route: string;
@@ -80,7 +81,7 @@ export function SpdAssistantProvider({ children }: { children: ReactNode }) {
         setPageContext(context);
       }
     } catch (error) {
-      console.error('Failed to load DSP Assistant page context:', error);
+      void reportClientError('Failed to load DSP Assistant page context:', error);
       if (requestIdRef.current === requestId) {
         setPageContext(null);
       }

@@ -16,6 +16,7 @@ import { useAuditPageAccess } from '../../hooks/useAuditPageAccess';
 import { useAuthStore } from '../../stores/auth.store';
 import type { SpdServiceCategory, SpdServiceTicket, SpdServiceUrgency } from '../../types/database.types';
 import { formatSpdServiceTicketNo } from './spdServiceTicketNo';
+import { reportClientError } from '../../utils/errorHandling';
 
 const urgencyOptions: Array<{ value: SpdServiceUrgency; label: string; hint: string }> = [
   { value: 'LOW', label: 'LOW', hint: 'ถึงหน้างานภายใน 60 นาที เป็นต้นไป' },
@@ -151,7 +152,7 @@ export function SpdServiceRequestPage() {
         setDigitalGuides([]);
         setCategoryId((current) => current);
       } catch (loadError) {
-        console.error('Failed to load DSP Service categories:', loadError);
+        void reportClientError('Failed to load DSP Service categories:', loadError);
         setError('ไม่สามารถโหลดงานบริการได้');
       } finally {
         setIsLoadingCategories(false);
@@ -254,7 +255,7 @@ export function SpdServiceRequestPage() {
           setDigitalGuides(guides);
         }
       } catch (guideError) {
-        console.error('Failed to load DSP Service guide images:', guideError);
+        void reportClientError('Failed to load DSP Service guide images:', guideError);
         if (!cancelled) {
           setDigitalGuides([]);
         }
@@ -278,7 +279,7 @@ export function SpdServiceRequestPage() {
       setAiBookings(data);
       return data;
     } catch (bookingError) {
-      console.error('Failed to load AI ChatGPT bookings:', bookingError);
+      void reportClientError('Failed to load AI ChatGPT bookings:', bookingError);
       setAiBookingError('ไม่สามารถโหลดรายการจอง AI ChatGPT ได้ กรุณาตรวจสอบสิทธิ์หรือ migration ฐานข้อมูล');
       setAiBookings([]);
       return [];
@@ -404,7 +405,7 @@ export function SpdServiceRequestPage() {
           setNotificationWarning('สร้างคำขอสำเร็จ แต่ยังส่ง Telegram ไม่สำเร็จ กรุณาตรวจสอบการตั้งค่า');
         }
       } catch (notificationError) {
-        console.error('Failed to notify DSP Service Telegram:', notificationError);
+        void reportClientError('Failed to notify DSP Service Telegram:', notificationError);
         setNotificationWarning('สร้างคำขอสำเร็จ แต่ยังส่ง Telegram ไม่สำเร็จ กรุณาตรวจสอบ Edge Function และ Bot Token');
       }
 
@@ -419,7 +420,7 @@ export function SpdServiceRequestPage() {
         resetIssueFields();
       }
     } catch (submitError) {
-      console.error('Failed to create DSP Service ticket:', submitError);
+      void reportClientError('Failed to create DSP Service ticket:', submitError);
       setError('ไม่สามารถสร้างคำขอได้ กรุณาตรวจสอบข้อมูลแล้วลองใหม่');
     } finally {
       setIsSubmitting(false);

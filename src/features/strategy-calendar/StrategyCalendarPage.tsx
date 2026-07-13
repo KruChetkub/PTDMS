@@ -1,4 +1,4 @@
-﻿import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { BarChart3, Bell, CalendarCheck2, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, ClipboardList, Clock, Edit3, Filter, Hourglass, LayoutDashboard, List, MapPin, Plus, RefreshCw, RotateCcw, UserRound, X, XCircle } from 'lucide-react';
 import {
   Area,
@@ -29,6 +29,7 @@ import {
 } from '../../services/strategy-calendar.service';
 import { useAuthStore } from '../../stores/auth.store';
 import { cn } from '../../utils/cn';
+import { getSafeUserErrorMessage } from '../../utils/errorHandling';
 
 const thaiMonths = [
   'มกราคม',
@@ -745,7 +746,7 @@ export function StrategyCalendarPage() {
       const data = await listStrategyEvents(range.start, range.end);
       setEvents(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'ไม่สามารถโหลดปฏิทินกิจกรรมได้');
+      setError(getSafeUserErrorMessage(err, 'ไม่สามารถโหลดปฏิทินกิจกรรมได้'));
     } finally {
       setLoading(false);
     }
@@ -774,7 +775,7 @@ export function StrategyCalendarPage() {
       const data = await listStrategyEvents(start, end);
       setDashboardEvents(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'ไม่สามารถโหลดข้อมูลแดชบอร์ดได้');
+      setError(getSafeUserErrorMessage(err, 'ไม่สามารถโหลดข้อมูลแดชบอร์ดได้'));
     } finally {
       setDashboardLoading(false);
     }
@@ -831,7 +832,7 @@ export function StrategyCalendarPage() {
       await loadEvents();
       await loadDashboardEvents();
     } catch (err) {
-      setError(err instanceof Error ? err.message : editingEventId ? 'แก้ไขกิจกรรมไม่สำเร็จ' : 'บันทึกกิจกรรมไม่สำเร็จ');
+      setError(getSafeUserErrorMessage(err, editingEventId ? 'แก้ไขกิจกรรมไม่สำเร็จ' : 'บันทึกกิจกรรมไม่สำเร็จ'));
     } finally {
       setSubmitting(false);
     }
@@ -844,7 +845,7 @@ export function StrategyCalendarPage() {
       await loadEvents();
       await loadDashboardEvents();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'ยกเลิกกิจกรรมไม่สำเร็จ');
+      setError(getSafeUserErrorMessage(err, 'ยกเลิกกิจกรรมไม่สำเร็จ'));
     }
   };
 
@@ -855,7 +856,7 @@ export function StrategyCalendarPage() {
       await loadEvents();
       await loadDashboardEvents();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'กู้คืนกิจกรรมไม่สำเร็จ');
+      setError(getSafeUserErrorMessage(err, 'กู้คืนกิจกรรมไม่สำเร็จ'));
     }
   };
 

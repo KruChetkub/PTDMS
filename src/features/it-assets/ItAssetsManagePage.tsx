@@ -6,6 +6,7 @@ import { createItAsset, deleteItAsset, getItAssets, updateItAsset } from '../../
 import type { ItAsset, ItAssetEvaluationCriteria, ItAssetFormValues } from './types';
 import { ConfirmModal } from '../../components/ui/ConfirmModal';
 import { defaultItAssetEvaluationCriteria } from './utils/assetMetrics';
+import { reportClientError } from '../../utils/errorHandling';
 
 const emptyFormValues: ItAssetFormValues = {
   source_row_number: null,
@@ -495,7 +496,7 @@ export function ItAssetsManagePage() {
       const data = await getItAssets();
       setAssets(data);
     } catch (loadError) {
-      console.error('Failed to load IT assets:', loadError);
+      void reportClientError('Failed to load IT assets:', loadError);
       setError('ไม่สามารถโหลดข้อมูลสำหรับจัดการได้');
     } finally {
       setIsLoading(false);
@@ -508,7 +509,7 @@ export function ItAssetsManagePage() {
       const data = await getItAssetEvaluationCriteria();
       setCriteria(data);
     } catch (loadError) {
-      console.error('Failed to load IT asset evaluation criteria:', loadError);
+      void reportClientError('Failed to load IT asset evaluation criteria:', loadError);
       setError('ไม่สามารถโหลดเกณฑ์การประเมินได้');
     } finally {
       setIsCriteriaLoading(false);
@@ -587,7 +588,7 @@ export function ItAssetsManagePage() {
       setError(null);
       setStatusMessage(`นำเข้าข้อมูลจาก ${file.name} แล้ว กรุณาตรวจสอบและกรอกข้อมูลที่ยังขาด`);
     } catch (uploadError) {
-      console.error('Failed to import IT asset CSV:', uploadError);
+      void reportClientError('Failed to import IT asset CSV:', uploadError);
       setError('อ่านไฟล์ CSV ไม่สำเร็จ');
       setStatusMessage(null);
     }
@@ -623,7 +624,7 @@ export function ItAssetsManagePage() {
       setCriteria(updated);
       setStatusMessage('บันทึกเกณฑ์การประเมินเรียบร้อย');
     } catch (saveError) {
-      console.error('Failed to save IT asset evaluation criteria:', saveError);
+      void reportClientError('Failed to save IT asset evaluation criteria:', saveError);
       setError('บันทึกเกณฑ์การประเมินไม่สำเร็จ กรุณาตรวจสอบสิทธิ์ผู้ใช้งานหรือ migration');
       setStatusMessage(null);
     } finally {
@@ -672,7 +673,7 @@ export function ItAssetsManagePage() {
       }
       setIsSaveModalOpen(false);
     } catch (saveError) {
-      console.error('Failed to save IT asset:', saveError);
+      void reportClientError('Failed to save IT asset:', saveError);
       setError('บันทึกข้อมูลไม่สำเร็จ กรุณาตรวจสอบรหัสครุภัณฑ์หรือสิทธิ์ผู้ใช้งาน');
     } finally {
       setIsSaving(false);
@@ -714,7 +715,7 @@ export function ItAssetsManagePage() {
       setStatusMessage(`ลบรายการ ${targetAsset.asset_code || 'IT Asset'} เรียบร้อย`);
       setIsDeleteModalOpen(false);
     } catch (deleteError) {
-      console.error('Failed to delete IT asset:', deleteError);
+      void reportClientError('Failed to delete IT asset:', deleteError);
       setError('ลบข้อมูลไม่สำเร็จ กรุณาตรวจสอบสิทธิ์ผู้ใช้งาน');
     } finally {
       setIsSaving(false);

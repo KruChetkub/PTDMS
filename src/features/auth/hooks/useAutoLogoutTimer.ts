@@ -7,6 +7,7 @@ import {
   SYSTEM_SETTINGS_UPDATED_EVENT,
   type LoginSecuritySettings,
 } from '../../../services/system-settings.service';
+import { reportClientError } from '../../../utils/errorHandling';
 
 const ACTIVITY_EVENTS = ['mousemove', 'mousedown', 'keydown', 'scroll', 'touchstart', 'click'] as const;
 
@@ -60,7 +61,7 @@ export function useAutoLogoutTimer(enabled: boolean) {
         minutesRef.current = settings.autoLogoutMinutes;
         resetAutoLogoutTimer();
       } catch (error) {
-        console.warn('Auto logout setting fallback:', error);
+        void reportClientError('Auto logout setting fallback:', error);
         minutesRef.current = DEFAULT_AUTO_LOGOUT_MINUTES;
         resetAutoLogoutTimer();
       }

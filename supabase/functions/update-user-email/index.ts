@@ -99,12 +99,13 @@ serve(async (req) => {
     });
 
     if (updateError) {
-      return jsonResponse({ error: updateError.message }, 400);
+      console.error('update-user-email failed', updateError);
+      return jsonResponse({ error: 'email_update_failed' }, 400);
     }
 
     return jsonResponse({ ok: true });
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'unknown_error';
-    return jsonResponse({ error: message }, 500);
+    console.error('update-user-email internal error', error);
+    return jsonResponse({ error: 'internal_error' }, 500);
   }
 });

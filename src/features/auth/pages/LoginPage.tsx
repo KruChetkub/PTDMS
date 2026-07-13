@@ -8,6 +8,7 @@ import { LegalFooter } from '../../legal/LegalFooter';
 import { useAuthStore } from '../../../stores/auth.store';
 import { usePublishedSiteContent } from '../../site-content/hooks/useSiteContent';
 import { loginSchema, type LoginFormValues } from '../auth.schemas';
+import { reportClientError } from '../../../utils/errorHandling';
 
 
 export function LoginPage() {
@@ -54,7 +55,7 @@ export function LoginPage() {
       }
     } catch (err) {
       // Error is handled by the store and displayed in the UI
-      console.error('Login failed:', err);
+      void reportClientError('Login failed:', err);
     }
   };
 

@@ -5,6 +5,7 @@ import { useAuthStore } from '../../stores/auth.store';
 import { roleLabels } from '../../types/roles';
 import { cn } from '../../utils/cn';
 import { ConfirmModal } from '../ui/ConfirmModal';
+import { reportClientError } from '../../utils/errorHandling';
 
 export function CalendarLayout() {
   const navigate = useNavigate();
@@ -21,7 +22,7 @@ export function CalendarLayout() {
       setIsLogoutModalOpen(false);
       navigate('/login', { replace: true });
     } catch (error) {
-      console.error('Logout failed:', error);
+      void reportClientError('Logout failed:', error);
       setIsLogoutModalOpen(false);
       navigate('/login', { replace: true });
     } finally {

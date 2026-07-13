@@ -1,6 +1,7 @@
-﻿import { useEffect } from 'react';
+import { useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import { recordPublicPageVisit } from '../../../services/public-analytics.service';
+import { reportClientError } from '../../../utils/errorHandling';
 
 export function usePublicPageAnalytics() {
   const location = useLocation();
@@ -10,7 +11,7 @@ export function usePublicPageAnalytics() {
       void recordPublicPageVisit(`${location.pathname}${location.search}`)
         .then(() => window.dispatchEvent(new Event('smartdsp-public-analytics-updated')))
         .catch((error) => {
-          console.error('Failed to record public page visit:', error);
+          void reportClientError('Failed to record public page visit:', error);
         });
     };
 

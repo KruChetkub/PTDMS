@@ -5,6 +5,7 @@ import { TrainingForm } from '../../components/training/TrainingForm';
 import { createTrainingRecord } from '../../services/training.service';
 import { useAuthStore } from '../../stores/auth.store';
 import type { TrainingFormValues } from './training-form.schema';
+import { getSafeUserErrorMessage, reportClientError } from '../../utils/errorHandling';
 
 type SelfServiceRouteState = {
   targetUserId?: string;
@@ -61,8 +62,8 @@ export function SelfServicePage() {
       setResetKey(prev => prev + 1); // Reset form by remounting
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (err) {
-      console.error('Submission Error:', err);
-      setSubmitError(err instanceof Error ? err.message : 'ไม่สามารถบันทึกข้อมูลอบรมได้');
+      void reportClientError('Submission Error:', err);
+      setSubmitError(getSafeUserErrorMessage(err, 'ไม่สามารถบันทึกข้อมูลอบรมได้'));
     } finally {
       setIsSubmitting(false);
     }

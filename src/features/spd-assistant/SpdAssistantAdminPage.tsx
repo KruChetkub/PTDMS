@@ -8,6 +8,7 @@ import {
   saveSpdAssistantKnowledge,
   type SpdAssistantKnowledgeRecord,
 } from '../../services/spd-assistant.service';
+import { reportClientError } from '../../utils/errorHandling';
 
 const roleOptions: UserRole[] = ['super_admin', 'admin', 'executive', 'hr', 'personnel'];
 
@@ -74,7 +75,7 @@ export function SpdAssistantAdminPage() {
       const data = await listSpdAssistantKnowledge(term);
       setRecords(data);
     } catch (loadError) {
-      console.error('Failed to load DSP knowledge:', loadError);
+      void reportClientError('Failed to load DSP knowledge:', loadError);
       setError('ไม่สามารถโหลดฐานความรู้ DSP Assistant ได้');
     } finally {
       setLoading(false);
@@ -115,7 +116,7 @@ export function SpdAssistantAdminPage() {
       setForm(emptyForm);
       await loadRecords();
     } catch (saveError) {
-      console.error('Failed to save DSP knowledge:', saveError);
+      void reportClientError('Failed to save DSP knowledge:', saveError);
       setError('ไม่สามารถบันทึกฐานความรู้ได้');
     } finally {
       setSaving(false);

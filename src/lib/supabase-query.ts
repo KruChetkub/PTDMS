@@ -1,3 +1,5 @@
+import { getTechnicalErrorMessage, reportHandledError } from '../utils/errorHandling';
+
 const DEFAULT_SUPABASE_TIMEOUT_MS = 60000;
 
 type SupabaseResult = {
@@ -8,7 +10,7 @@ type AbortableSupabaseRequest<T extends SupabaseResult> = PromiseLike<T> & {
   abortSignal?: (signal: AbortSignal) => PromiseLike<T>;
 };
 
-function getErrorMessage(error: unknown) {
+function getSupabaseErrorMessage(error: unknown) {
   if (!error) return '';
 
   if (error instanceof Error) {
@@ -17,7 +19,7 @@ function getErrorMessage(error: unknown) {
 
   if (typeof error === 'object') {
     const fields = error as Record<string, unknown>;
-    return [fields.code, fields.message, fields.details, fields.hint]
+    return [fields.message]
       .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
       .join(' ');
   }
@@ -26,10 +28,17 @@ function getErrorMessage(error: unknown) {
 }
 
 export function toSupabaseError(error: unknown, operation: string) {
-  const message = getErrorMessage(error);
+  const message = getSupabaseErrorMessage(error);
   return new Error(message ? `${operation} ไม่สำเร็จ: ${message}` : `${operation} ไม่สำเร็จ`);
 }
 
+function getSafeSupabaseError(error: unknown, operation: string) {
+  const message = getSupabaseErrorMessage(error);
+  const technicalMessage = getTechnicalErrorMessage(error);
+  const isTechnical = /(pgrst|sql|schema|policy|permission denied|relation|constraint|jwt|service_role|supabase|hint|details)/i.test(technicalMessage);
+
+  return new Error(!message || isTechnical ? `${operation} ไม่สำเร็จ` : `${operation} ไม่สำเร็จ: ${message}`);
+}
 export async function runSupabaseQuery<T extends SupabaseResult>(
   request: AbortableSupabaseRequest<T>,
   operation: string,
@@ -56,7 +65,13 @@ export async function runSupabaseQuery<T extends SupabaseResult>(
     ]);
 
     if (result.error) {
-      throw toSupabaseError(result.error, operation);
+      void reportHandledError(result.error, {
+        module: 'supabase',
+        action: 'query_error',
+        targetType: 'supabase_query',
+        metadata: { operation },
+      });
+      throw getSafeSupabaseError(result.error, operation);
     }
 
     return result;

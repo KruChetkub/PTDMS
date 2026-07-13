@@ -15,6 +15,7 @@ import { Link } from 'react-router-dom';
 import { PageHeader } from '../../components/ui/PageHeader';
 import { getAnalyticsData, type AnalyticsData } from '../../services/analytics.service';
 import { getDashboardSummary, type DashboardSummary } from '../../services/dashboard.service';
+import { getSafeUserErrorMessage } from '../../utils/errorHandling';
 
 const COLORS = ['#2563eb', '#7c3aed', '#db2777', '#ea580c', '#ca8a04', '#16a34a', '#0891b2'];
 const WORK_GROUP_DETAIL_PAGE_SIZE = 5;
@@ -242,7 +243,7 @@ export function AnalyticsPage() {
         setData(analytics);
         setSummary(dashSummary);
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'ไม่สามารถโหลดข้อมูลสถิติได้');
+        setError(getSafeUserErrorMessage(err, 'ไม่สามารถโหลดข้อมูลสถิติได้'));
       } finally {
         setLoading(false);
       }
@@ -431,7 +432,7 @@ export function AnalyticsPage() {
 
       downloadBlob(blob, `${fileBaseName}.${format}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'ไม่สามารถดาวน์โหลดภาพได้');
+      setError(getSafeUserErrorMessage(err, 'ไม่สามารถดาวน์โหลดภาพได้'));
     } finally {
       setExportingKey(null);
     }

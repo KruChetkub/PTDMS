@@ -9,6 +9,7 @@ import {
 import { PageHeader } from '../../components/ui/PageHeader';
 import { listTrainingRecords, type TrainingRecordRow } from '../../services/training.service';
 import { formatThaiDate, getCurrentThaiFiscalYear } from '../../utils/thaiDate';
+import { getSafeUserErrorMessage } from '../../utils/errorHandling';
 
 const REPORT_PAGE_SIZE = 5;
 
@@ -31,7 +32,7 @@ export function ReportsPage() {
         const data = await listTrainingRecords({ year });
         setRecords(data);
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'ไม่สามารถโหลดข้อมูลรายงานได้');
+        setError(getSafeUserErrorMessage(err, 'ไม่สามารถโหลดข้อมูลรายงานได้'));
       } finally {
         setLoading(false);
       }

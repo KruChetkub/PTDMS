@@ -5,6 +5,7 @@ import { useAuthStore } from '../../stores/auth.store';
 import { roleLabels } from '../../types/roles';
 import { cn } from '../../utils/cn';
 import { useSpdAssistantContext } from './SpdAssistantProvider';
+import { reportClientError } from '../../utils/errorHandling';
 
 type ChatMessage = {
   id: string;
@@ -119,7 +120,7 @@ export function SpdAssistantWidget() {
         },
       ]);
     } catch (error) {
-      console.error('DSP Assistant failed:', error);
+      void reportClientError('DSP Assistant failed:', error);
       setMessages((current) => [
         ...current,
         {

@@ -22,6 +22,7 @@ import type { Profile } from '../../types/database.types';
 import { useAuthStore } from '../../stores/auth.store';
 import type { UserRole, ProfileStatus } from '../../types/roles';
 import { roleLabels } from '../../types/roles';
+import { getSafeUserErrorMessage } from '../../utils/errorHandling';
 
 type CreateFormState = {
   employee_code: string;
@@ -572,7 +573,7 @@ export function UserManagementPage() {
       setUsers(data);
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'ไม่สามารถโหลดข้อมูลผู้ใช้งานได้');
+      setError(getSafeUserErrorMessage(err, 'ไม่สามารถโหลดข้อมูลผู้ใช้งานได้'));
     } finally {
       setLoading(false);
     }
@@ -585,7 +586,7 @@ export function UserManagementPage() {
   const handleRoleChange = async (userId: string, newRole: UserRole) => {
     if (!currentUser || !canManageRoleAndStatus) return;
     if (!availableManageRoleOptions.includes(newRole)) {
-      alert('คุณไม่มีสิทธิ์กำหนด Role ที่สูงกว่าสิทธิ์ของคุณ');
+      setError('คุณไม่มีสิทธิ์กำหนด Role ที่สูงกว่าสิทธิ์ของคุณ');
       return;
     }
     const targetUser = users.find((user) => user.user_id === userId);
@@ -604,7 +605,8 @@ export function UserManagementPage() {
       });
       await loadUsers();
     } catch (err) {
-      alert(getErrorMessage(err, 'ไม่สามารถเปลี่ยน Role ได้'));
+      setError(getSafeUserErrorMessage(err, 'ไม่สามารถเปลี่ยน Role ได้'));
+      void recordAuditLog({ module: 'user_management', action: 'user_role_change_error', route: '/admin/users', targetType: 'user', targetId: userId, status: 'fail', errorMessage: getErrorMessage(err, 'role_change_error') });
     } finally {
       setUpdating(null);
     }
@@ -628,7 +630,8 @@ export function UserManagementPage() {
       });
       await loadUsers();
     } catch (err) {
-      alert(getErrorMessage(err, 'ไม่สามารถเปลี่ยนสถานะได้'));
+      setError(getSafeUserErrorMessage(err, 'ไม่สามารถเปลี่ยนสถานะได้'));
+      void recordAuditLog({ module: 'user_management', action: 'user_status_change_error', route: '/admin/users', targetType: 'user', targetId: userId, status: 'fail', errorMessage: getErrorMessage(err, 'status_change_error') });
     } finally {
       setUpdating(null);
     }
@@ -636,7 +639,7 @@ export function UserManagementPage() {
 
   const handleDeleteClick = (userId: string, fullName: string) => {
     if (userId === currentUser?.id) {
-      alert('คุณไม่สามารถลบบัญชีของตัวเองได้');
+      setError('คุณไม่สามารถลบบัญชีของตัวเองได้');
       return;
     }
     setDeleteModal({ isOpen: true, userId, fullName });
@@ -659,7 +662,8 @@ export function UserManagementPage() {
       setDeleteModal({ isOpen: false, userId: '', fullName: '' });
       await loadUsers();
     } catch (err) {
-      alert(getErrorMessage(err, 'ไม่สามารถลบผู้ใช้งานได้'));
+      setError(getSafeUserErrorMessage(err, 'ไม่สามารถลบผู้ใช้งานได้'));
+      void recordAuditLog({ module: 'user_management', action: 'user_delete_error', route: '/admin/users', targetType: 'user', targetId: deleteModal.userId, status: 'fail', errorMessage: getErrorMessage(err, 'delete_user_error') });
     } finally {
       setUpdating(null);
     }

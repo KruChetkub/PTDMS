@@ -6,6 +6,7 @@ import { useAuthStore } from '../../stores/auth.store';
 import type { SpdServiceTicket, SpdServiceTicketStatus, SpdServiceUrgency } from '../../types/database.types';
 import { cn } from '../../utils/cn';
 import { formatSpdServiceTicketNo } from './spdServiceTicketNo';
+import { reportClientError } from '../../utils/errorHandling';
 
 const statusLabels: Record<SpdServiceTicketStatus, string> = {
   NEW: 'งานใหม่',
@@ -149,7 +150,7 @@ export function SpdServiceTicketListPage() {
       const data = await getSpdServiceTickets();
       setTickets(data);
     } catch (loadError) {
-      console.error('Failed to load DSP Service tickets:', loadError);
+      void reportClientError('Failed to load DSP Service tickets:', loadError);
       setError('ไม่สามารถโหลดรายการคำขอได้');
     } finally {
       setIsLoading(false);

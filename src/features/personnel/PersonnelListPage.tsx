@@ -5,6 +5,7 @@ import { PageHeader } from '../../components/ui/PageHeader';
 import { listPersonnel, type PersonnelSummary } from '../../services/personnel.service';
 import { roleLabels } from '../../types/roles';
 import { formatThaiDate } from '../../utils/thaiDate';
+import { getSafeUserErrorMessage } from '../../utils/errorHandling';
 
 function statusStyle(status: PersonnelSummary['status']) {
   if (status === 'active') return 'bg-emerald-50 text-emerald-700 ring-emerald-200';
@@ -28,7 +29,7 @@ export function PersonnelListPage() {
       const data = await listPersonnel();
       setPersonnel(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'ไม่สามารถโหลดข้อมูลรายชื่อบุคลากรได้');
+      setError(getSafeUserErrorMessage(err, 'ไม่สามารถโหลดข้อมูลรายชื่อบุคลากรได้'));
     } finally {
       setLoading(false);
     }

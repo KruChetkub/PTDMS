@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { ChevronDown, ChevronUp, Image, Save, Upload } from 'lucide-react';
 import { uploadLoginPageBackgroundImage, uploadLoginPageImage } from '../../site-content/services/siteContent.assets';
 import type { SiteContentLoginPage, SiteContentStatus } from '../../site-content/types/siteContent.types';
+import { getSafeUserErrorMessage } from '../../../utils/errorHandling';
 
 type SiteManagerLoginPageEditorProps = {
   loginPage: SiteContentLoginPage;
@@ -60,7 +61,7 @@ export function SiteManagerLoginPageEditor({
       const imageUrl = await uploadLoginPageImage(file);
       onLoginPageChange({ ...loginPage, sideImageUrl: imageUrl, sideImageAlt: loginPage.sideImageAlt || file.name });
     } catch (error) {
-      setUploadError(error instanceof Error ? error.message : 'อัปโหลดภาพไม่สำเร็จ');
+      setUploadError(getSafeUserErrorMessage(error, 'อัปโหลดภาพไม่สำเร็จ'));
     } finally {
       setIsUploadingSideImage(false);
     }
@@ -75,7 +76,7 @@ export function SiteManagerLoginPageEditor({
       const imageUrl = await uploadLoginPageBackgroundImage(file);
       updateField('backgroundImageUrl', imageUrl);
     } catch (error) {
-      setUploadError(error instanceof Error ? error.message : 'อัปโหลดภาพพื้นหลังไม่สำเร็จ');
+      setUploadError(getSafeUserErrorMessage(error, 'อัปโหลดภาพพื้นหลังไม่สำเร็จ'));
     } finally {
       setIsUploadingBackground(false);
     }

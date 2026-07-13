@@ -6,6 +6,7 @@ import type {
   SiteContentPlanIconKey,
   SiteContentStatus,
 } from '../../site-content/types/siteContent.types';
+import { getSafeUserErrorMessage } from '../../../utils/errorHandling';
 
 type PlanFocusTarget = {
   index: number;
@@ -148,7 +149,7 @@ export function SiteManagerPlanDocumentsEditor({
       const imageUrl = await uploadPlanCoverImage(file);
       updatePlanCard(index, 'coverImageUrl', imageUrl);
     } catch (error) {
-      setCoverUploadError(error instanceof Error ? error.message : 'อัปโหลดภาพหน้าปกไม่สำเร็จ');
+      setCoverUploadError(getSafeUserErrorMessage(error, 'อัปโหลดภาพหน้าปกไม่สำเร็จ'));
     } finally {
       setUploadingCoverIndex(null);
     }

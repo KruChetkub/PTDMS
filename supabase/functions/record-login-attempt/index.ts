@@ -118,7 +118,8 @@ serve(async (req) => {
   });
 
   if (loginHistoryError) {
-    return jsonResponse({ logged: false, reason: loginHistoryError.message }, 500);
+    console.error('record-login-attempt login history insert failed', loginHistoryError);
+    return jsonResponse({ logged: false, reason: 'login_history_insert_failed' }, 500);
   }
 
   const { error: auditLogError } = await adminClient.from('audit_logs').insert({
@@ -143,7 +144,8 @@ serve(async (req) => {
   });
 
   if (auditLogError) {
-    return jsonResponse({ logged: false, reason: auditLogError.message }, 500);
+    console.error('record-login-attempt audit log insert failed', auditLogError);
+    return jsonResponse({ logged: false, reason: 'audit_log_insert_failed' }, 500);
   }
 
   return jsonResponse({ logged: true });

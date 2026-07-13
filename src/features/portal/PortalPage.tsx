@@ -6,6 +6,7 @@ import { useAuditPageAccess } from '../../hooks/useAuditPageAccess';
 import { useAuthStore } from '../../stores/auth.store';
 import type { UserRole } from '../../types/roles';
 import { canAccess, roleLabels } from '../../types/roles';
+import { reportClientError } from '../../utils/errorHandling';
 
 type PortalCard = {
   title: string;
@@ -134,7 +135,7 @@ export function PortalPage() {
       setIsLogoutModalOpen(false);
       navigate('/login', { replace: true });
     } catch (error) {
-      console.error('Logout failed:', error);
+      void reportClientError('Logout failed:', error);
       setIsLogoutModalOpen(false);
       navigate('/login', { replace: true });
     } finally {

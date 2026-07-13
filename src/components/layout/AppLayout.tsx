@@ -21,6 +21,7 @@ import { canAccess, roleLabels } from '../../types/roles';
 import { cn } from '../../utils/cn';
 import { ConfirmModal } from '../ui/ConfirmModal';
 import { useState } from 'react';
+import { reportClientError } from '../../utils/errorHandling';
 
 type NavItem = {
   to: string;
@@ -120,7 +121,7 @@ export function AppLayout() {
       setIsLogoutModalOpen(false);
       navigate('/login', { replace: true });
     } catch (error) {
-      console.error('Logout failed:', error);
+      void reportClientError('Logout failed:', error);
       setIsLogoutModalOpen(false);
       navigate('/login', { replace: true });
     } finally {

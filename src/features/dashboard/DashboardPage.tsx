@@ -26,6 +26,7 @@ import {
 import { getDashboardSummary, type DashboardSummary } from '../../services/dashboard.service';
 import { trainingTypeOptions } from '../../constants/training';
 import { formatThaiDate } from '../../utils/thaiDate';
+import { getSafeUserErrorMessage } from '../../utils/errorHandling';
 
 const emptySummary: DashboardSummary = {
   personnelCount: 0,
@@ -319,7 +320,7 @@ export function DashboardPage() {
       setCourseDirectory(courseData);
       setExpandedCourseCategories({});
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'ไม่สามารถโหลดข้อมูล Dashboard ได้');
+      setError(getSafeUserErrorMessage(err, 'ไม่สามารถโหลดข้อมูล Dashboard ได้'));
     } finally {
       setLoading(false);
     }
@@ -355,7 +356,7 @@ export function DashboardPage() {
       const result = await listCourseAttendees(course.course);
       setAttendees(result);
     } catch (err) {
-      setDrawerError(err instanceof Error ? err.message : 'ไม่สามารถโหลดรายชื่อผู้เรียนได้');
+      setDrawerError(getSafeUserErrorMessage(err, 'ไม่สามารถโหลดรายชื่อผู้เรียนได้'));
     } finally {
       setDrawerLoading(false);
     }
@@ -497,7 +498,7 @@ export function DashboardPage() {
 
       downloadBlob(blob, `${fileBaseName}.${format}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'ไม่สามารถดาวน์โหลดภาพได้');
+      setError(getSafeUserErrorMessage(err, 'ไม่สามารถดาวน์โหลดภาพได้'));
     } finally {
       setExportingKey(null);
     }

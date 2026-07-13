@@ -1,10 +1,11 @@
-﻿import { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Eye, EyeOff, KeyRound, Save, UserCog } from 'lucide-react';
 import { PageHeader } from '../../components/ui/PageHeader';
 import { useAuditPageAccess } from '../../hooks/useAuditPageAccess';
 import { updateOwnProfileDetails } from '../../services/personnel.service';
 import { useAuthStore } from '../../stores/auth.store';
 import { roleLabels } from '../../types/roles';
+import { getSafeUserErrorMessage } from '../../utils/errorHandling';
 
 type SettingsTab = 'profile' | 'password';
 
@@ -142,7 +143,7 @@ export function AccountSettingsPage() {
       await refreshProfile();
       setProfileMessage('บันทึกข้อมูลส่วนบุคคลเรียบร้อย');
     } catch (err) {
-      setProfileError(err instanceof Error ? err.message : 'ไม่สามารถบันทึกข้อมูลส่วนบุคคลได้');
+      setProfileError(getSafeUserErrorMessage(err, 'ไม่สามารถบันทึกข้อมูลส่วนบุคคลได้'));
     } finally {
       setSavingProfile(false);
     }
@@ -168,7 +169,7 @@ export function AccountSettingsPage() {
       setPasswordForm({ password: '', confirmPassword: '' });
       setPasswordMessage('เปลี่ยนรหัสผ่านเรียบร้อย');
     } catch (err) {
-      setPasswordError(err instanceof Error ? err.message : 'ไม่สามารถเปลี่ยนรหัสผ่านได้');
+      setPasswordError(getSafeUserErrorMessage(err, 'ไม่สามารถเปลี่ยนรหัสผ่านได้'));
     }
   };
 

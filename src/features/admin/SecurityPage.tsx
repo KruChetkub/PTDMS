@@ -17,6 +17,7 @@ import {
   type AuditLogGoogleSheetExportResult,
   type LoginHistory,
 } from '../../services/audit.service';
+import { getSafeUserErrorMessage } from '../../utils/errorHandling';
 
 export function SecurityPage() {
   const [history, setHistory] = useState<LoginHistory[]>([]);
@@ -33,7 +34,7 @@ export function SecurityPage() {
         const data = await listLoginHistory();
         setHistory(Array.isArray(data) ? data : []);
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'ไม่สามารถโหลดประวัติการล็อกอินได้');
+        setError(getSafeUserErrorMessage(err, 'ไม่สามารถโหลดประวัติการล็อกอินได้'));
       } finally {
         setLoading(false);
       }
@@ -52,7 +53,7 @@ export function SecurityPage() {
       const result = await exportAuditLogsToGoogleSheet();
       setExportResult(result);
     } catch (err) {
-      setExportError(err instanceof Error ? err.message : 'ไม่สามารถส่ง Audit Logs ไป Google Sheet ได้');
+      setExportError(getSafeUserErrorMessage(err, 'ไม่สามารถส่ง Audit Logs ไป Google Sheet ได้'));
     } finally {
       setExportingLogs(false);
     }

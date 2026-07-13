@@ -7,6 +7,7 @@ import { ConfiguredNotice } from '../../../components/auth/ConfiguredNotice';
 import { ConfirmModal } from '../../../components/ui/ConfirmModal';
 import { useAuthStore } from '../../../stores/auth.store';
 import { forgotPasswordSchema, type ForgotPasswordFormValues } from '../auth.schemas';
+import { reportClientError } from '../../../utils/errorHandling';
 
 export function ForgotPasswordPage() {
   const navigate = useNavigate();
@@ -30,7 +31,7 @@ export function ForgotPasswordPage() {
       setSubmitted(true);
     } catch (err) {
       // Error is handled by the store and displayed in the UI
-      console.error('Password reset request failed:', err);
+      void reportClientError('Password reset request failed:', err);
     }
   };
   const goToLogin = () => {

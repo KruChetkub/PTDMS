@@ -3,6 +3,7 @@ import { runSupabaseQuery } from '../lib/supabase-query';
 import { sanitizePlainTextInput, optionalPlainTextInput, sanitizeUrlInput } from '../utils/inputSecurity';
 import type { Profile, TrainingRecord, Certificate, DevelopmentAnalysis } from '../types/database.types';
 import { getMonthFromDate, normalizeTrainingType, type TrainingFormValues } from '../features/self-service/training-form.schema';
+import { getSafeUserErrorMessage } from '../utils/errorHandling';
 
 export type TrainingRecordFilters = {
   search?: string;
@@ -551,7 +552,7 @@ export async function importTrainingRecordsFromRows(rows: TrainingImportInputRow
         status: 'error',
         personnelName: row.personnelName || '-',
         courseName: label,
-        message: err instanceof Error ? err.message : 'ไม่สามารถนำเข้ารายการนี้ได้',
+        message: getSafeUserErrorMessage(err, 'ไม่สามารถนำเข้ารายการนี้ได้'),
       });
     }
   }

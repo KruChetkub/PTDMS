@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { UsersRound } from 'lucide-react';
 import { getPublicVisitStats, type PublicVisitStats } from '../../../services/public-analytics.service';
 import { homeBrandHighlights } from '../data/publicHome.mock';
+import { reportClientError } from '../../../utils/errorHandling';
 
 const emptyStats: PublicVisitStats = {
   totalVisitors: 0,
@@ -25,7 +26,7 @@ export function HomeFooter() {
         const data = await getPublicVisitStats();
         if (isMounted) setStats(data);
       } catch (error) {
-        console.error('Failed to load public visit stats:', error);
+        void reportClientError('Failed to load public visit stats:', error);
       }
     };
 

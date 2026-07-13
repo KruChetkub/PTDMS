@@ -9,6 +9,7 @@ import {
   type CourseDirectorySection,
 } from '../../services/course.service';
 import { formatThaiDate } from '../../utils/thaiDate';
+import { getSafeUserErrorMessage } from '../../utils/errorHandling';
 
 function getVisibleSections(data: CourseDirectoryData | null, search: string): CourseDirectorySection[] {
   if (!data) return [];
@@ -57,7 +58,7 @@ export function CourseListPage() {
       setExpandedCategories({});
 
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'ไม่สามารถโหลดคลังหลักสูตรได้');
+      setError(getSafeUserErrorMessage(err, 'ไม่สามารถโหลดคลังหลักสูตรได้'));
     } finally {
       setLoading(false);
     }
@@ -83,7 +84,7 @@ export function CourseListPage() {
       const result = await listCourseAttendees(course.course);
       setAttendees(result);
     } catch (err) {
-      setDrawerError(err instanceof Error ? err.message : 'ไม่สามารถโหลดรายชื่อผู้เรียนได้');
+      setDrawerError(getSafeUserErrorMessage(err, 'ไม่สามารถโหลดรายชื่อผู้เรียนได้'));
     } finally {
       setDrawerLoading(false);
     }

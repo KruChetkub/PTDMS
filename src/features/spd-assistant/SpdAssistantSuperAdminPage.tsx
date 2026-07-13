@@ -6,6 +6,7 @@ import {
   listSpdAssistantFeedback,
   listSpdAssistantKnowledge,
 } from '../../services/spd-assistant.service';
+import { reportClientError } from '../../utils/errorHandling';
 
 type ConversationRow = {
   id: string;
@@ -57,7 +58,7 @@ export function SpdAssistantSuperAdminPage() {
       setConversations(conversationRows as ConversationRow[]);
       setFeedback(feedbackRows as FeedbackRow[]);
     } catch (loadError) {
-      console.error('Failed to load DSP Assistant super admin data:', loadError);
+      void reportClientError('Failed to load DSP Assistant super admin data:', loadError);
       setError('ไม่สามารถโหลดข้อมูลควบคุม DSP Assistant ได้');
     } finally {
       setLoading(false);

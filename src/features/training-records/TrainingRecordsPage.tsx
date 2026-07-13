@@ -16,6 +16,7 @@ import { TrainingForm } from '../../components/training/TrainingForm';
 import { useAuthStore } from '../../stores/auth.store';
 import { normalizeTrainingType, trainingTypeOptions, type TrainingFormValues } from '../self-service/training-form.schema';
 import { formatThaiDate, getThaiFiscalYearFromISODate } from '../../utils/thaiDate';
+import { getSafeUserErrorMessage } from '../../utils/errorHandling';
 
 const pageSize = 10;
 
@@ -299,7 +300,7 @@ export function TrainingRecordsPage() {
       setRecords(data);
       setPage(1);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'ไม่สามารถโหลดข้อมูลอบรมได้');
+      setError(getSafeUserErrorMessage(err, 'ไม่สามารถโหลดข้อมูลอบรมได้'));
     } finally {
       setLoading(false);
     }
@@ -403,7 +404,7 @@ export function TrainingRecordsPage() {
       setImportFile(null);
       await loadRecords();
     } catch (err) {
-      setImportError(err instanceof Error ? err.message : 'ไม่สามารถนำเข้าไฟล์ Excel ได้');
+      setImportError(getSafeUserErrorMessage(err, 'ไม่สามารถนำเข้าไฟล์ Excel ได้'));
     } finally {
       setIsImporting(false);
     }
@@ -422,7 +423,7 @@ export function TrainingRecordsPage() {
       setRecords((prev) => prev.filter((record) => record.id !== deleteTarget.id));
       setDeleteTarget(null);
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'ไม่สามารถลบข้อมูลได้');
+      setError(getSafeUserErrorMessage(err, 'ไม่สามารถลบข้อมูลได้'));
     } finally {
       setIsDeleting(false);
     }
@@ -448,7 +449,7 @@ export function TrainingRecordsPage() {
         targetDirection: analysis?.target_direction || '',
       });
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'ไม่สามารถโหลดข้อมูลรายละเอียดได้');
+      setEditError(getSafeUserErrorMessage(err, 'ไม่สามารถโหลดข้อมูลรายละเอียดได้'));
       setEditingId(null);
     } finally {
       setIsFetchingDetails(false);
@@ -467,7 +468,7 @@ export function TrainingRecordsPage() {
       setEditValues(null);
       void loadRecords();
     } catch (err) {
-      setEditError(err instanceof Error ? err.message : 'ไม่สามารถอัปเดตข้อมูลได้');
+      setEditError(getSafeUserErrorMessage(err, 'ไม่สามารถอัปเดตข้อมูลได้'));
     } finally {
       setIsUpdating(false);
     }

@@ -36,6 +36,7 @@ import { useAuthStore } from '../../stores/auth.store';
 import { useAuditPageAccess } from '../../hooks/useAuditPageAccess';
 import { createStrategyEvent } from '../../services/strategy-calendar.service';
 import { cn } from '../../utils/cn';
+import { getSafeUserErrorMessage, reportClientError } from '../../utils/errorHandling';
 
 const thaiMonths = [
   'มกราคม',
@@ -359,7 +360,7 @@ export function MeetingRoomBookingPage() {
       const data = await listMeetingRoomReservations(firstDate, lastDate);
       setReservations(data);
     } catch (error) {
-      setMessage({ type: 'error', text: error instanceof Error ? error.message : 'ไม่สามารถโหลดข้อมูลการจองได้' });
+      setMessage({ type: 'error', text: getSafeUserErrorMessage(error, 'ไม่สามารถโหลดข้อมูลการจองได้') });
     } finally {
       setLoading(false);
     }
@@ -378,7 +379,7 @@ export function MeetingRoomBookingPage() {
       });
       setLinkNotifications(data);
     } catch (error) {
-      console.error('Failed to load meeting room link notifications:', error);
+      void reportClientError('Failed to load meeting room link notifications:', error);
       setLinkNotifications([]);
     }
   };
@@ -393,7 +394,7 @@ export function MeetingRoomBookingPage() {
       const data = await listAllMeetingRoomReservations();
       setDashboardReservations(data);
     } catch (error) {
-      setMessage({ type: 'error', text: error instanceof Error ? error.message : 'ไม่สามารถโหลดข้อมูลแดชบอร์ดได้' });
+      setMessage({ type: 'error', text: getSafeUserErrorMessage(error, 'ไม่สามารถโหลดข้อมูลแดชบอร์ดได้') });
     } finally {
       setDashboardLoading(false);
     }
@@ -508,7 +509,7 @@ export function MeetingRoomBookingPage() {
             });
             successText = 'บันทึกการจองและเพิ่มกิจกรรมในปฏิทินเรียบร้อยแล้ว';
           } catch (calendarEventError) {
-            console.error('Failed to create strategy calendar event:', calendarEventError);
+            void reportClientError('Failed to create strategy calendar event:', calendarEventError);
             successText = 'บันทึกการจองเรียบร้อยแล้ว แต่เพิ่มกิจกรรมในปฏิทินไม่สำเร็จ';
           }
         }
@@ -520,7 +521,7 @@ export function MeetingRoomBookingPage() {
             successText = `${successText} แต่ยังส่ง Telegram ไม่สำเร็จ`;
           }
         } catch (notificationError) {
-          console.error('Failed to notify meeting room Telegram:', notificationError);
+          void reportClientError('Failed to notify meeting room Telegram:', notificationError);
           successText = `${successText} แต่ยังส่ง Telegram ไม่สำเร็จ`;
         }
       }
@@ -532,7 +533,7 @@ export function MeetingRoomBookingPage() {
       await loadDashboardReservations();
       await loadLinkNotifications();
     } catch (error) {
-      setMessage({ type: 'error', text: error instanceof Error ? error.message : 'บันทึกการจองไม่สำเร็จ' });
+      setMessage({ type: 'error', text: getSafeUserErrorMessage(error, 'บันทึกการจองไม่สำเร็จ') });
     } finally {
       setSubmitting(false);
     }
@@ -606,7 +607,7 @@ export function MeetingRoomBookingPage() {
       await loadDashboardReservations();
       await loadLinkNotifications();
     } catch (error) {
-      setMessage({ type: 'error', text: error instanceof Error ? error.message : 'ยกเลิกการจองไม่สำเร็จ' });
+      setMessage({ type: 'error', text: getSafeUserErrorMessage(error, 'ยกเลิกการจองไม่สำเร็จ') });
     } finally {
       setSubmitting(false);
     }

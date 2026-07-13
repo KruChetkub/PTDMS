@@ -19,6 +19,7 @@ import {
   type RecommendationData,
   type RecommendationPriority,
 } from '../../services/recommendation.service';
+import { getSafeUserErrorMessage } from '../../utils/errorHandling';
 
 const priorityLabels: Record<RecommendationPriority, string> = {
   high: 'เร่งด่วน',
@@ -68,7 +69,7 @@ export function RecommendationsPage() {
       const result = await getRecommendationData();
       setData(result);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'ไม่สามารถโหลดข้อมูลคำแนะนำได้');
+      setError(getSafeUserErrorMessage(err, 'ไม่สามารถโหลดข้อมูลคำแนะนำได้'));
     } finally {
       setLoading(false);
     }

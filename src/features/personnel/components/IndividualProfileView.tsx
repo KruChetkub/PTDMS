@@ -22,6 +22,7 @@ import {
 import { normalizeTrainingType, type TrainingFormValues } from '../../self-service/training-form.schema';
 import { Trash2 } from 'lucide-react';
 import { recordAuditLog } from '../../../services/audit.service';
+import { getSafeUserErrorMessage, reportClientError } from '../../../utils/errorHandling';
 
 type IndividualProfileViewProps = {
   userId: string;
@@ -79,11 +80,11 @@ export function IndividualProfileView({ userId, isMyProfile }: IndividualProfile
       setData(result);
 
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'ไม่สามารถโหลดข้อมูลโปรไฟล์ได้';
+      const message = getSafeUserErrorMessage(err, 'ไม่สามารถโหลดข้อมูลโปรไฟล์ได้');
       if (showLoading || !data) {
         setError(message);
       } else {
-        console.error('Profile refresh failed:', err);
+        void reportClientError('Profile refresh failed:', err);
       }
     } finally {
       if (showLoading) {
@@ -142,7 +143,7 @@ export function IndividualProfileView({ userId, isMyProfile }: IndividualProfile
         targetDirection: analysis?.target_direction || '',
       });
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'ไม่สามารถโหลดรายละเอียดข้อมูลได้');
+      setTrainingSubmitError(getSafeUserErrorMessage(err, 'ไม่สามารถโหลดรายละเอียดข้อมูลได้'));
       setEditingTrainingId(null);
     } finally {
       setIsFetchingTrainingDetails(false);
@@ -164,7 +165,7 @@ export function IndividualProfileView({ userId, isMyProfile }: IndividualProfile
       setEditTrainingValues(null);
       refreshTrainingData();
     } catch (err) {
-      setTrainingSubmitError(err instanceof Error ? err.message : 'ไม่สามารถอัปเดตข้อมูลได้');
+      setTrainingSubmitError(getSafeUserErrorMessage(err, 'ไม่สามารถอัปเดตข้อมูลได้'));
     } finally {
       setIsSubmittingTraining(false);
     }
@@ -184,7 +185,7 @@ export function IndividualProfileView({ userId, isMyProfile }: IndividualProfile
       setTrainingDeleteTarget(null);
       await loadData({ showLoading: false });
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'ไม่สามารถลบข้อมูลได้');
+      setTrainingSubmitError(getSafeUserErrorMessage(err, 'ไม่สามารถลบข้อมูลได้'));
     } finally {
       setIsDeletingTraining(false);
     }

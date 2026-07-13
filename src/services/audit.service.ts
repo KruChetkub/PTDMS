@@ -102,13 +102,11 @@ export async function recordAuditLog(input: AuditLogInput) {
 
     if (error) {
       const reason = await getFunctionErrorReason(error);
-      console.warn('Audit log insert failed:', reason || error.message);
       return { logged: false, reason: reason || error.message };
     }
 
     return { logged: true };
   } catch (error) {
-    console.warn('Audit log insert failed:', error);
     return { logged: false, reason: error instanceof Error ? error.message : 'unknown_error' };
   }
 }
@@ -135,13 +133,11 @@ export async function recordLoginAttempt(input: LoginAttemptInput) {
 
     if (error) {
       const reason = await getFunctionErrorReason(error);
-      console.warn('Login audit insert failed:', reason || error.message);
       return { logged: false, reason: reason || error.message };
     }
 
     return { logged: true };
   } catch (error) {
-    console.warn('Login audit insert failed:', error);
     return { logged: false, reason: error instanceof Error ? error.message : 'unknown_error' };
   }
 }

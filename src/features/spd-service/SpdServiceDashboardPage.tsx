@@ -34,6 +34,7 @@ import { useAuthStore } from '../../stores/auth.store';
 import type { SpdServiceCategory, SpdServiceSatisfactionSurvey, SpdServiceTicket, SpdServiceTicketStatus, SpdServiceUrgency } from '../../types/database.types';
 import { cn } from '../../utils/cn';
 import { formatSpdServiceTicketNo } from './spdServiceTicketNo';
+import { reportClientError } from '../../utils/errorHandling';
 
 const statusLabels: Record<SpdServiceTicketStatus, string> = {
   NEW: 'งานใหม่',
@@ -520,7 +521,7 @@ export function SpdServiceDashboardPage() {
       setCategories(data.categories);
       setSurveys(data.surveys);
     } catch (loadError) {
-      console.error('Failed to load DSP Service dashboard:', loadError);
+      void reportClientError('Failed to load DSP Service dashboard:', loadError);
       setError('ไม่สามารถโหลดข้อมูล DSP Service ได้ กรุณาตรวจสอบว่า migration ถูกใช้งานแล้ว');
     } finally {
       setIsLoading(false);
@@ -653,7 +654,7 @@ export function SpdServiceDashboardPage() {
       });
       applyTicketUpdate(updatedTicket);
     } catch (workflowError) {
-      console.error('Failed to update DSP Service workflow:', workflowError);
+      void reportClientError('Failed to update DSP Service workflow:', workflowError);
       setError('ไม่สามารถอัปเดตสถานะงานได้');
     } finally {
       setActionTicketId(null);
@@ -707,7 +708,7 @@ export function SpdServiceDashboardPage() {
       const detail = await getSpdServiceTicketDetail(ticketId);
       setTicketDetail(detail);
     } catch (detailError) {
-      console.error('Failed to load DSP Service ticket detail:', detailError);
+      void reportClientError('Failed to load DSP Service ticket detail:', detailError);
       setError('ไม่สามารถโหลดรายละเอียดคำขอได้');
     } finally {
       setIsDetailLoading(false);
@@ -726,7 +727,7 @@ export function SpdServiceDashboardPage() {
       setTickets((current) => current.filter((item) => item.id !== ticket.id));
       setSurveys((current) => current.filter((survey) => survey.ticket_id !== ticket.id));
     } catch (deleteError) {
-      console.error('Failed to delete DSP Service ticket:', deleteError);
+      void reportClientError('Failed to delete DSP Service ticket:', deleteError);
       setError('ไม่สามารถลบคำขอได้ กรุณาตรวจสอบสิทธิ์ Super Admin และ policy ฐานข้อมูล');
     } finally {
       setActionTicketId(null);
