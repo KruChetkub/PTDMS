@@ -31,20 +31,28 @@ function hasDevelopmentContent(analysis: DevelopmentAnalysis) {
   return Boolean(analysis.development_area || analysis.skill_group || analysis.target_direction);
 }
 
+function toArray<T>(value: T | T[] | null | undefined): T[] {
+  if (!value) return [];
+  return Array.isArray(value) ? value : [value];
+}
+
 export async function listPersonnel(): Promise<PersonnelSummary[]> {
   const [profileResult, trainingResult] = await Promise.all([
     runSupabaseQuery(supabase.from('profiles').select('*').order('full_name'), 'โหลดรายชื่อบุคลากร'),
     runSupabaseQuery(supabase.from('training_records').select('user_id, category, date, year'), 'โหลดสถิติอบรมของบุคลากร'),
   ]);
 
-  const recordsByUser = ((trainingResult.data || []) as Pick<TrainingRecord, 'user_id' | 'category' | 'date' | 'year'>[])
+  const trainingRows = Array.isArray(trainingResult.data) ? trainingResult.data : [];
+  const profileRows = Array.isArray(profileResult.data) ? profileResult.data : [];
+
+  const recordsByUser = (trainingRows as Pick<TrainingRecord, 'user_id' | 'category' | 'date' | 'year'>[])
     .reduce<Record<string, Pick<TrainingRecord, 'user_id' | 'category' | 'date' | 'year'>[]>>((acc, record) => {
       acc[record.user_id] = acc[record.user_id] || [];
       acc[record.user_id].push(record);
       return acc;
     }, {});
 
-  return ((profileResult.data || []) as Profile[]).map((profile) => {
+  return (profileRows as Profile[]).map((profile) => {
     const userRecords = recordsByUser[profile.user_id] || [];
     const sortedByDate = [...userRecords].sort((a, b) => b.date.localeCompare(a.date));
 
@@ -80,7 +88,7 @@ export async function getPersonnelDetails(userId: string) {
   ]);
 
   const profile = profileRes.data as Profile;
-  const rawRecords = recordsRes.data || [];
+  const rawRecords = Array.isArray(recordsRes.data) ? recordsRes.data : [];
   
   // Extract records, certificates and analysis from the joined result
   const records: TrainingRecord[] = [];
@@ -91,10 +99,10 @@ export async function getPersonnelDetails(userId: string) {
     // Separate the joined data back into the format the UI expects
     const { certificates: certs, development_analysis: devAn, ...record } = item;
     records.push(record);
-    (certs || [])
+    toArray<Certificate>(certs)
       .filter(hasCertificateContent)
       .forEach((certificate: Certificate) => certificatesByTrainingId.set(certificate.training_id, certificate));
-    (devAn || [])
+    toArray<DevelopmentAnalysis>(devAn)
       .filter(hasDevelopmentContent)
       .forEach((development: DevelopmentAnalysis) => analysisByTrainingId.set(development.training_id, development));
   });
