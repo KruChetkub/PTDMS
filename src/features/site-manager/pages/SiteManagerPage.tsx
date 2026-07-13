@@ -8,6 +8,7 @@ import { SiteManagerContentEditor } from '../components/SiteManagerContentEditor
 import { SiteManagerLoginPageEditor } from '../components/SiteManagerLoginPageEditor';
 import { SiteManagerPlanDocumentsEditor } from '../components/SiteManagerPlanDocumentsEditor';
 import { SiteManagerPlanPreview } from '../components/SiteManagerPlanPreview';
+import { SiteManagerPortalManualsEditor } from '../components/SiteManagerPortalManualsEditor';
 import { SiteManagerSecuritySettings } from '../components/SiteManagerSecuritySettings';
 
 type PlanFocusTarget = {
@@ -24,6 +25,7 @@ type SiteManagerTab =
   | 'risk-management'
   | 'executive-policy'
   | 'r2r-research'
+  | 'portal-manuals'
   | 'login-page'
   | 'security';
 
@@ -36,6 +38,7 @@ const siteManagerTabs: Array<{ id: SiteManagerTab; label: string; superAdminOnly
   { id: 'risk-management', label: 'แผนบริหารความเสี่ยง' },
   { id: 'executive-policy', label: 'นโยบายผู้บริหาร' },
   { id: 'r2r-research', label: 'งานวิจัยจากงานประจำ R2R' },
+  { id: 'portal-manuals', label: 'ตั้งค่าคู่มือการใช้งาน' },
   { id: 'login-page', label: 'จัดการภาพหน้า login' },
   { id: 'security', label: 'ความปลอดภัย', superAdminOnly: true },
 ];
@@ -249,6 +252,8 @@ export function SiteManagerPage() {
             canResetDraft={canManageSecurity}
             focusTarget={planFocusTarget}
           />
+        ) : activeTab === 'portal-manuals' ? (
+          <SiteManagerPortalManualsEditor />
         ) : activeTab === 'login-page' ? (
           <SiteManagerLoginPageEditor
             loginPage={contentDraft.loginPage}

@@ -144,6 +144,19 @@ export type SiteContentHistory = {
   created_at: string;
 };
 
+
+export type PortalUserManual = {
+  id: string;
+  title: string;
+  description: string | null;
+  pdf_url: string;
+  pdf_path: string | null;
+  is_active: boolean;
+  sort_order: number;
+  updated_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
 export type StrategyEventStatus = 'draft' | 'published' | 'cancelled';
 
 export type StrategyEvent = {
@@ -507,6 +520,23 @@ export type Database = {
           created_at?: string;
         };
         Update: Partial<Omit<SiteContentHistory, 'id' | 'created_at'>>;
+        Relationships: [];
+      };
+      portal_user_manuals: {
+        Row: PortalUserManual;
+        Insert: {
+          id?: string;
+          title: string;
+          description?: string | null;
+          pdf_url: string;
+          pdf_path?: string | null;
+          is_active?: boolean;
+          sort_order?: number;
+          updated_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Omit<PortalUserManual, 'id' | 'created_at'>>;
         Relationships: [];
       };
       strategy_events: {

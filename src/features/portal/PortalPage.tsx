@@ -1,12 +1,16 @@
-import { useState } from 'react';
-import { ArrowRight, CalendarDays, Database, ExternalLink, FileText, GraduationCap, Headphones, LogOut, Megaphone, Monitor, ShieldCheck, Sparkles } from 'lucide-react';
+﻿import { useEffect, useMemo, useRef, useState } from 'react';
+import { ArrowRight, BookOpen, CalendarDays, ChevronDown, ChevronLeft, ChevronRight, Database, ExternalLink, FileText, GraduationCap, Headphones, KeyRound, LogOut, Megaphone, Monitor, ShieldCheck, Sparkles } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ConfirmModal } from '../../components/ui/ConfirmModal';
 import { useAuditPageAccess } from '../../hooks/useAuditPageAccess';
 import { useAuthStore } from '../../stores/auth.store';
+import type { PortalUserManual } from '../../types/database.types';
 import type { UserRole } from '../../types/roles';
 import { canAccess, roleLabels } from '../../types/roles';
 import { reportClientError } from '../../utils/errorHandling';
+import { listActivePortalUserManuals } from './portalManuals.service';
+
+const PORTAL_MANUALS_PER_PAGE = 2;
 
 type PortalCard = {
   title: string;
@@ -24,7 +28,7 @@ const coreSystems: PortalCard[] = [
   {
     title: 'Personnel Training & Development Management System',
     shortTitle: 'PTDMS',
-    description: 'บริหารจัดการข้อมูลการฝึกอบรมและการพัฒนาบุคลากรภายใน',
+    description: 'ระบบบริหารจัดการข้อมูลการฝึกอบรมและการพัฒนาบุคลากรภายในกองยุทธศาสตร์และแผนงาน',
     to: '/dashboard',
     icon: GraduationCap,
     roles: ['super_admin', 'admin', 'executive', 'hr', 'personnel'],
@@ -32,9 +36,9 @@ const coreSystems: PortalCard[] = [
     meta: 'Training Intelligence',
   },
   {
-    title: 'ปฏิทินกิจกรรมกองยุทธศาสตร์ฯ',
+    title: 'ปฏิทินสำคัญและจองห้องประชุม กยผ.',
     shortTitle: 'ปฏิทินฯ',
-    description: 'แจ้งกิจกรรมภายในกองยุทธศาสตร์และแผนงาน พร้อมมุมมองปฏิทินประเทศไทย',
+    description: 'ระบบปฏิทินสำคัญและการจองห้องประชุมงานภายในกองยุทธศาสตร์และแผนงาน',
     to: '/strategy-calendar',
     icon: CalendarDays,
     roles: ['super_admin', 'admin', 'executive', 'hr', 'personnel'],
@@ -60,7 +64,7 @@ const serviceSystems: PortalCard[] = [
   {
     title: 'DSP Service Management System',
     shortTitle: 'DSP Service',
-    description: 'ติดตามคำขอรับบริการและงานสนับสนุนด้านสารสนเทศภายในกองยุทธศาสตร์ฯ',
+    description: 'ระบบแจ้งขอรับบริการและงานสนับสนุนด้านสารสนเทศภายในกองยุทธศาสตร์และแผนงาน',
     to: '/spd-service',
     icon: Headphones,
     roles: ['super_admin', 'admin', 'executive', 'hr', 'personnel'],
@@ -73,7 +77,7 @@ const externalSystems: PortalCard[] = [
   {
     title: 'ระบบสารบรรณอิเล็กทรอนิกส์ e-Office',
     shortTitle: 'e-Office',
-    description: 'เข้าสู่ระบบสารบรรณอิเล็กทรอนิกส์ของกรมควบคุมโรคผ่านลิงก์ภายนอก',
+    description: 'ระบบสารบรรณอิเล็กทรอนิกส์ของกรมควบคุมโรคผ่านลิงก์ภายนอก',
     externalUrl: 'https://ddc.eoffice.go.th/api/auth/login',
     icon: FileText,
     roles: ['super_admin', 'admin', 'executive', 'hr', 'personnel'],
@@ -82,8 +86,8 @@ const externalSystems: PortalCard[] = [
   },
   {
     title: 'ระบบจัดเก็บข้อมูลกลาง กยผ.',
-    shortTitle: 'ข้อมูลกลาง กยผ.',
-    description: 'เข้าสู่ระบบจัดเก็บข้อมูลกลางของกองยุทธศาสตร์และแผนงานผ่านลิงก์ภายนอก',
+    shortTitle: 'คลังข้อมูลกลาง กยผ.',
+    description: 'คลังข้อมูลกลาง กยผ. (NAS)',
     externalUrl: 'http://10.100.43.2:5000/#/signin',
     icon: Database,
     roles: ['super_admin', 'admin', 'executive', 'hr', 'personnel'],
@@ -107,10 +111,64 @@ const adminSystems: PortalCard[] = [
 
 export function PortalPage() {
   const navigate = useNavigate();
+  const userPanelRef = useRef<HTMLDivElement | null>(null);
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [isUserPanelOpen, setIsUserPanelOpen] = useState(false);
+  const [manuals, setManuals] = useState<PortalUserManual[]>([]);
+  const [manualPage, setManualPage] = useState(0);
   const { profile, signOut } = useAuthStore();
   useAuditPageAccess({ module: 'ptdms', action: 'ptdms_portal_access', route: '/portal' });
+  useEffect(() => {
+    let active = true;
+
+    async function loadManuals() {
+      try {
+        const data = await listActivePortalUserManuals();
+        if (active) {
+          setManuals(data);
+        }
+      } catch (error) {
+        void reportClientError('Failed to load portal user manuals:', error);
+      }
+    }
+
+    void loadManuals();
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const totalManualPages = Math.max(1, Math.ceil(manuals.length / PORTAL_MANUALS_PER_PAGE));
+  const visibleManuals = useMemo(
+    () => manuals.slice(manualPage * PORTAL_MANUALS_PER_PAGE, manualPage * PORTAL_MANUALS_PER_PAGE + PORTAL_MANUALS_PER_PAGE),
+    [manualPage, manuals],
+  );
+
+  useEffect(() => {
+    setManualPage((currentPage) => Math.min(currentPage, totalManualPages - 1));
+  }, [totalManualPages]);
+
+  useEffect(() => {
+    if (!isUserPanelOpen) return;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target;
+
+      if (target instanceof Node && userPanelRef.current?.contains(target)) {
+        return;
+      }
+
+      setIsUserPanelOpen(false);
+    };
+
+    document.addEventListener('pointerdown', handlePointerDown);
+
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+    };
+  }, [isUserPanelOpen]);
   const visibleSystems = [...coreSystems, ...assetSystems, ...serviceSystems, ...externalSystems, ...adminSystems].filter((system) => canAccess(profile?.role, system.roles));
   const getSystemPath = (system: PortalCard) => {
     if (!system.to) {
@@ -128,6 +186,16 @@ export function PortalPage() {
     return system.to;
   };
 
+
+  const handleOpenPasswordSettings = () => {
+    setIsUserPanelOpen(false);
+    navigate('/settings?tab=password');
+  };
+
+  const handleRequestSignOut = () => {
+    setIsUserPanelOpen(false);
+    setIsLogoutModalOpen(true);
+  };
   const handleSignOut = async () => {
     try {
       setIsLoggingOut(true);
@@ -145,56 +213,155 @@ export function PortalPage() {
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
-      <header className="border-b border-slate-200 bg-white/95 backdrop-blur">
+      <header className="relative z-50 border-b border-slate-200 bg-white/95 backdrop-blur">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4 sm:px-6 lg:px-8">
           <div>
             <img src="/DDC_0.png" alt="กรมควบคุมโรค" className="h-14 w-auto object-contain" />
           </div>
-          <button
-            type="button"
-            onClick={() => setIsLogoutModalOpen(true)}
-            className="inline-flex items-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100"
-          >
-            <LogOut className="h-4 w-4" aria-hidden="true" />
-            Logout
-          </button>
+          <div ref={userPanelRef} className="relative">
+            <button
+              type="button"
+              onClick={() => setIsUserPanelOpen((current) => !current)}
+              className="inline-flex items-center gap-3 rounded-full border border-slate-200 bg-white px-3 py-2 text-left text-sm font-semibold text-slate-800 shadow-sm transition hover:border-brand-200 hover:bg-slate-50"
+              aria-expanded={isUserPanelOpen}
+            >
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-600 text-white">
+                <ShieldCheck className="h-4 w-4" aria-hidden="true" />
+              </span>
+              <span className="hidden sm:block">
+                <span className="block text-sm font-semibold">บัญชีผู้ใช้</span>
+                <span className="block text-xs font-medium text-slate-500">เมนูส่วนตัว</span>
+              </span>
+              <ChevronDown className={`h-4 w-4 shrink-0 text-slate-400 transition ${isUserPanelOpen ? 'rotate-180' : ''}`} aria-hidden="true" />
+            </button>
+
+            {isUserPanelOpen ? (
+              <div className="absolute right-0 top-full z-50 mt-3 w-80 max-w-[calc(100vw-2rem)] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
+                <div className="flex items-center gap-3 border-b border-slate-100 bg-slate-50 px-4 py-4">
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-600 text-white shadow-sm">
+                    <ShieldCheck className="h-5 w-5" aria-hidden="true" />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold text-slate-950">ข้อมูลผู้ใช้งาน</p>
+                    <p className="mt-0.5 truncate text-xs text-slate-500">จัดการบัญชีและเมนูส่วนตัว</p>
+                  </div>
+                  <ChevronRight className="h-4 w-4 shrink-0 text-slate-400" aria-hidden="true" />
+                </div>
+
+                <div className="grid gap-1 p-2">
+                  <div className="rounded-xl bg-slate-50 px-3 py-3 ring-1 ring-slate-100">
+                    <div className="grid gap-2">
+                      <div className="grid gap-0.5">
+                        <p className="truncate text-sm font-semibold text-slate-900">{profile?.full_name || '-'}</p>
+                      </div>
+                      <div className="grid grid-cols-[82px_minmax(0,1fr)] items-center gap-2">
+                        <p className="truncate text-sm font-semibold text-slate-900">
+                          {profile?.role ? roleLabels[profile.role] : '-'}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="whitespace-normal break-words text-sm font-semibold leading-5 text-slate-900">{profile?.work_group || '-'}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="my-1 border-t border-slate-100" />
+
+                  <button
+                    type="button"
+                    onClick={handleOpenPasswordSettings}
+                    className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                  >
+                    <KeyRound className="h-4 w-4 text-slate-500" aria-hidden="true" />
+                    ตั้งค่ารหัสผ่านใหม่
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleRequestSignOut}
+                    className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                  >
+                    <LogOut className="h-4 w-4 text-slate-500" aria-hidden="true" />
+                    Logout
+                  </button>
+                </div>
+              </div>
+            ) : null}
+          </div>
         </div>
       </header>
 
       <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
         <section className="relative overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm">
           <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-brand-600 via-emerald-500 to-amber-400" />
-          <div className="grid gap-6 p-5 sm:p-7 lg:grid-cols-[1.15fr_0.85fr] lg:p-8">
-            <div>
-              <div className="inline-flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-600">
-                <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" aria-hidden="true" />
-                Single Sign-On Portal
-              </div>
+          <div className="p-5 sm:p-7 lg:p-8">
+            <div className="min-w-0">
               <h1 className="mt-5 max-w-3xl text-3xl font-semibold tracking-normal text-slate-950 sm:text-4xl">
                 เลือกระบบที่ต้องการใช้งาน
               </h1>
-              <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600 sm:text-base">
-                สำหรับบริหารจัดการข้อมูลการฝึกอบรม การพัฒนาบุคลากรภายในกองยุทธศาสตร์และแผนงาน
-              </p>
-            </div>
+              {manuals.length > 0 ? (
+                <div className="mt-5 grid gap-4 lg:grid-cols-2">
+                  <div className="hidden min-h-[142px] rounded-md border border-dashed border-slate-200 bg-slate-50/70 lg:block" aria-hidden="true" />
+                  <div className="rounded-md border border-slate-200 bg-slate-50/80 p-3 sm:p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex min-w-0 items-center gap-2">
+                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-white text-brand-700 ring-1 ring-slate-200">
+                          <BookOpen className="h-4 w-4" aria-hidden="true" />
+                        </span>
+                        <div className="min-w-0">
+                          <p className="text-m font-semibold text-slate-1000">คู่มือการใช้งาน</p>
+                          <p className="text-xs text-slate-500">เอกสารสำหรับผู้ใช้งานระบบ</p>
+                        </div>
+                      </div>
+                      {totalManualPages > 1 ? (
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => setManualPage((currentPage) => Math.max(0, currentPage - 1))}
+                            disabled={manualPage === 0}
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                            title="หน้าก่อนหน้า"
+                          >
+                            <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+                          </button>
+                          <span className="min-w-12 text-center text-xs font-semibold text-slate-500">
+                            {manualPage + 1}/{totalManualPages}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setManualPage((currentPage) => Math.min(totalManualPages - 1, currentPage + 1))}
+                            disabled={manualPage >= totalManualPages - 1}
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                            title="หน้าถัดไป"
+                          >
+                            <ChevronRight className="h-4 w-4" aria-hidden="true" />
+                          </button>
+                        </div>
+                      ) : null}
+                    </div>
 
-            <div className="hidden gap-3 rounded-md border border-slate-200 bg-slate-50 p-4 sm:grid">
-              <div>
-                <p className="text-xs font-medium uppercase text-slate-500">Signed in as</p>
-                <p className="mt-1 text-lg font-semibold text-slate-950">{profile?.full_name || 'PTDMS User'}</p>
-              </div>
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
-                <div className="rounded-md bg-white p-3 ring-1 ring-slate-200">
-                  <p className="text-xs text-slate-500">Role</p>
-                  <p className="mt-1 text-sm font-semibold text-slate-900">
-                    {profile?.role ? roleLabels[profile.role] : '-'}
-                  </p>
+                    <div className="mt-3 grid gap-2">
+                      {visibleManuals.map((manual) => (
+                        <a
+                          key={manual.id}
+                          href={manual.pdf_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="grid gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-left transition hover:border-brand-200 hover:bg-brand-50/40 sm:grid-cols-[1fr_auto] sm:items-center"
+                        >
+                          <span className="min-w-0">
+                            <span className="block truncate text-sm font-semibold text-slate-900">{manual.title}</span>
+                            {manual.description ? <span className="mt-0.5 block truncate text-xs text-slate-500">{manual.description}</span> : null}
+                          </span>
+                          <span className="inline-flex items-center gap-1 text-xs font-semibold text-brand-700">
+                            เปิด PDF
+                            <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+                          </span>
+                        </a>
+                      ))}
+                    </div>
+                  </div>
                 </div>
-                <div className="rounded-md bg-white p-3 ring-1 ring-slate-200">
-                  <p className="text-xs text-slate-500">Work group</p>
-                  <p className="mt-1 truncate text-sm font-semibold text-slate-900">{profile?.work_group || '-'}</p>
-                </div>
-              </div>
+              ) : null}
             </div>
           </div>
         </section>

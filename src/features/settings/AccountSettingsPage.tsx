@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Eye, EyeOff, KeyRound, Save, UserCog } from 'lucide-react';
+import { useLocation } from 'react-router-dom';
 import { PageHeader } from '../../components/ui/PageHeader';
 import { useAuditPageAccess } from '../../hooks/useAuditPageAccess';
 import { updateOwnProfileDetails } from '../../services/personnel.service';
@@ -67,6 +68,7 @@ function parseThaiDateToISO(value: string, fieldLabel = 'วันเกิด')
 }
 
 export function AccountSettingsPage() {
+  const location = useLocation();
   useAuditPageAccess({ module: 'settings', action: 'settings_page_access', route: '/settings' });
   const user = useAuthStore((state) => state.user);
   const profile = useAuthStore((state) => state.profile);
@@ -97,6 +99,14 @@ export function AccountSettingsPage() {
   const [passwordMessage, setPasswordMessage] = useState<string | null>(null);
   const [passwordError, setPasswordError] = useState<string | null>(null);
 
+
+  useEffect(() => {
+    const tabParam = new URLSearchParams(location.search).get('tab') || location.hash.replace('#', '');
+
+    if (tabParam === 'password' || tabParam === 'profile') {
+      setActiveTab(tabParam);
+    }
+  }, [location.hash, location.search]);
   useEffect(() => {
     if (!profile) return;
 
