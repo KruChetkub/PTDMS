@@ -1,4 +1,4 @@
-﻿-- Extend audit logs for long-term compliance archive and Google Sheets export.
+-- Extend audit logs for long-term compliance archive and Google Sheets export.
 
 alter table public.audit_logs
   add column if not exists actor_user_id uuid references public.profiles(user_id) on delete set null,

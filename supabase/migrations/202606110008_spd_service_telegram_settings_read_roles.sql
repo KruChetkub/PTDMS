@@ -1,6 +1,7 @@
 -- Allow SPD Service Telegram settings to be viewed by dashboard roles while keeping writes Super Admin only.
 
 drop policy if exists "spd service notification super admin read" on public.spd_service_notification_settings;
+drop policy if exists "spd service notification dashboard read" on public.spd_service_notification_settings;
 
 create policy "spd service notification dashboard read"
 on public.spd_service_notification_settings

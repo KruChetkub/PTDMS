@@ -1,4 +1,4 @@
-﻿-- Meeting room booking calendar for Strategy Calendar.
+-- Meeting room booking calendar for Strategy Calendar.
 -- Data is imported from Strategy_Calendarv2/Reservations.csv and kept separate from strategy_events.
 
 create table if not exists public.meeting_room_reservations (

@@ -1,4 +1,4 @@
-﻿-- Public home cookie consent analytics.
+-- Public home cookie consent analytics.
 -- Counts anonymous sessions and deduped page views without storing directly identifying profile data.
 
 create table if not exists public.public_visit_sessions (

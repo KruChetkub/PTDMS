@@ -1,4 +1,4 @@
-﻿-- IT Asset Dashboard domain.
+-- IT Asset Dashboard domain.
 -- This module is intentionally separate from the PTDMS training and strategy calendar domains.
 
 create table if not exists public.it_assets (

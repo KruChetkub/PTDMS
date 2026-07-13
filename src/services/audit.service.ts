@@ -28,6 +28,13 @@ export type AuditLogInput = {
   sessionId?: string | null;
 };
 
+export type LoginAttemptInput = {
+  email?: string | null;
+  success: boolean;
+  accessToken?: string | null;
+  errorMessage?: string | null;
+};
+
 const sensitiveKeyPattern = /(password|token|secret|apikey|api_key|authorization|otp|refresh|access)/i;
 
 function sanitizeValue(value: unknown): unknown {
@@ -102,6 +109,37 @@ export async function recordAuditLog(input: AuditLogInput) {
     return { logged: true };
   } catch (error) {
     console.warn('Audit log insert failed:', error);
+    return { logged: false, reason: error instanceof Error ? error.message : 'unknown_error' };
+  }
+}
+
+export async function recordLoginAttempt(input: LoginAttemptInput) {
+  try {
+    const headers: Record<string, string> = {};
+
+    if (input.accessToken) {
+      headers.Authorization = `Bearer ${input.accessToken}`;
+    }
+
+    const { error } = await supabase.functions.invoke('record-login-attempt', {
+      body: {
+        email: input.email,
+        success: input.success,
+        errorMessage: input.errorMessage,
+        userAgent: getUserAgent(),
+      },
+      headers,
+    });
+
+    if (error) {
+      const reason = await getFunctionErrorReason(error);
+      console.warn('Login audit insert failed:', reason || error.message);
+      return { logged: false, reason: reason || error.message };
+    }
+
+    return { logged: true };
+  } catch (error) {
+    console.warn('Login audit insert failed:', error);
     return { logged: false, reason: error instanceof Error ? error.message : 'unknown_error' };
   }
 }

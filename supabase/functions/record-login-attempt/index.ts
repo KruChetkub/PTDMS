@@ -1,0 +1,150 @@
+import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.47.10';
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Max-Age': '86400',
+};
+
+type LoginAttemptBody = {
+  email?: unknown;
+  success?: unknown;
+  errorMessage?: unknown;
+  userAgent?: unknown;
+};
+
+function jsonResponse(body: Record<string, unknown>, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  });
+}
+
+function stringOrNull(value: unknown, maxLength = 255) {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  return trimmed.slice(0, maxLength);
+}
+
+function normalizeEmail(value: unknown) {
+  const email = stringOrNull(value, 320)?.toLowerCase() ?? null;
+
+  if (!email || !email.includes('@')) {
+    return null;
+  }
+
+  return email;
+}
+
+function getRequestIp(req: Request) {
+  const forwardedFor = req.headers.get('x-forwarded-for');
+  const ip = forwardedFor?.split(',')[0]?.trim()
+    || req.headers.get('cf-connecting-ip')
+    || req.headers.get('x-real-ip')
+    || req.headers.get('x-client-ip')
+    || null;
+
+  return ip || null;
+}
+
+serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders });
+  }
+
+  if (req.method !== 'POST') {
+    return jsonResponse({ logged: false, reason: 'method_not_allowed' }, 405);
+  }
+
+  const supabaseUrl = Deno.env.get('SUPABASE_URL');
+  const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY');
+  const supabaseServiceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+
+  if (!supabaseUrl || !supabaseAnonKey || !supabaseServiceRoleKey) {
+    return jsonResponse({ logged: false, reason: 'missing_environment' }, 500);
+  }
+
+  const body = await req.json().catch(() => ({})) as LoginAttemptBody;
+  const success = body.success === true;
+  const email = normalizeEmail(body.email);
+  const errorMessage = success ? null : stringOrNull(body.errorMessage, 160);
+  const userAgent = stringOrNull(body.userAgent, 500) || req.headers.get('user-agent');
+  const ipAddress = getRequestIp(req);
+
+  const adminClient = createClient(supabaseUrl, supabaseServiceRoleKey, {
+    auth: { persistSession: false },
+  });
+
+  let user: { id: string; email?: string | null } | null = null;
+  let profile: { user_id: string; full_name: string | null; role: string | null } | null = null;
+
+  if (success) {
+    const authorization = req.headers.get('authorization') || '';
+    const userClient = createClient(supabaseUrl, supabaseAnonKey, {
+      global: { headers: { Authorization: authorization } },
+      auth: { persistSession: false },
+    });
+
+    const { data: userData, error: userError } = await userClient.auth.getUser();
+    user = userData?.user ? { id: userData.user.id, email: userData.user.email } : null;
+
+    if (userError || !user) {
+      return jsonResponse({ logged: false, reason: 'unauthorized' }, 401);
+    }
+
+    const { data: profileData } = await adminClient
+      .from('profiles')
+      .select('user_id, full_name, role')
+      .eq('user_id', user.id)
+      .maybeSingle();
+
+    profile = profileData ?? null;
+  }
+
+  const { error: loginHistoryError } = await adminClient.from('login_history').insert({
+    user_id: user?.id ?? null,
+    ip_address: ipAddress,
+    user_agent: userAgent,
+    success,
+  });
+
+  if (loginHistoryError) {
+    return jsonResponse({ logged: false, reason: loginHistoryError.message }, 500);
+  }
+
+  const { error: auditLogError } = await adminClient.from('audit_logs').insert({
+    actor_id: user?.id ?? null,
+    actor_user_id: user?.id ?? null,
+    actor_email: user?.email ?? email,
+    actor_name: profile?.full_name ?? null,
+    actor_role: profile?.role ?? null,
+    module: 'auth',
+    action: success ? 'login' : 'login_failed',
+    route: '/login',
+    resource_type: 'auth',
+    resource_id: user?.id ?? email,
+    target_type: 'user',
+    target_id: user?.id ?? null,
+    status: success ? 'success' : 'fail',
+    error_message: errorMessage,
+    metadata: success ? null : { email },
+    ip_address: ipAddress,
+    user_agent: userAgent,
+    export_status: 'pending',
+  });
+
+  if (auditLogError) {
+    return jsonResponse({ logged: false, reason: auditLogError.message }, 500);
+  }
+
+  return jsonResponse({ logged: true });
+});

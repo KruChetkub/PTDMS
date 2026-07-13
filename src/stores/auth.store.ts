@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import type { Session, User } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
-import { recordAuditLog } from '../services/audit.service';
+import { recordAuditLog, recordLoginAttempt } from '../services/audit.service';
 import type { Profile } from '../types/database.types';
 
 type AuthState = {
@@ -134,14 +134,26 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   signIn: async (email: string, password: string) => {
     set({ loading: true, error: null });
 
+    const normalizedEmail = email.trim().toLowerCase();
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) {
+      void recordLoginAttempt({
+        email: normalizedEmail,
+        success: false,
+        errorMessage: error.message,
+      });
       set({ error: getSignInErrorMessage(error.message), loading: false });
       throw error;
     }
 
     const profile = data.user ? await get().loadProfile(data.user.id) : null;
     set({ session: data.session, user: data.user, profile, loading: false });
+
+    void recordLoginAttempt({
+      email: normalizedEmail,
+      success: true,
+      accessToken: data.session?.access_token ?? null,
+    });
   },
 
   signUp: async (email: string, password: string, fullName: string) => {
