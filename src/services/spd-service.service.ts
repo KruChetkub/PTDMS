@@ -614,7 +614,7 @@ function parseDigitalGuideSettings(value: string | null | undefined): SpdService
   }
 }
 
-export async function getSpdServiceDigitalGuideSettings(): Promise<SpdServiceDigitalGuide[]> {
+async function loadSpdServiceDigitalGuides(): Promise<SpdServiceDigitalGuide[]> {
   const { data, error } = await supabase
     .from('spd_service_notification_settings')
     .select('*')
@@ -625,8 +625,10 @@ export async function getSpdServiceDigitalGuideSettings(): Promise<SpdServiceDig
     throw error;
   }
 
-  const guides = parseDigitalGuideSettings((data as SpdServiceNotificationSettings | null)?.setting_value);
+  return parseDigitalGuideSettings((data as SpdServiceNotificationSettings | null)?.setting_value);
+}
 
+async function signSpdServiceDigitalGuides(guides: SpdServiceDigitalGuide[]): Promise<SpdServiceDigitalGuide[]> {
   return Promise.all(
     guides.map(async (guide) => {
       if (!guide.imagePath) {
@@ -645,6 +647,24 @@ export async function getSpdServiceDigitalGuideSettings(): Promise<SpdServiceDig
       return { ...guide, signedImageUrl: signedData.signedUrl };
     }),
   );
+}
+
+export async function getSpdServiceDigitalGuideSettings(): Promise<SpdServiceDigitalGuide[]> {
+  const guides = await loadSpdServiceDigitalGuides();
+  return signSpdServiceDigitalGuides(guides);
+}
+
+export async function getSpdServiceDigitalGuidesForSubjects(subjects: string[]): Promise<SpdServiceDigitalGuide[]> {
+  const selectedSubjects = new Set(subjects.map((subject) => subject.trim()).filter(Boolean));
+
+  if (selectedSubjects.size === 0) {
+    return [];
+  }
+
+  const guides = await loadSpdServiceDigitalGuides();
+  const visibleGuides = guides.filter((guide) => guide.enabled && guide.imagePath && selectedSubjects.has(guide.subject));
+
+  return signSpdServiceDigitalGuides(visibleGuides);
 }
 
 export async function uploadSpdServiceDigitalGuideImage(file: File): Promise<Pick<SpdServiceDigitalGuide, 'imagePath' | 'signedImageUrl'>> {

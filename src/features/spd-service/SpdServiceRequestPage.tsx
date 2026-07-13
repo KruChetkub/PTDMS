@@ -5,7 +5,7 @@ import {
   createSpdServiceTicket,
   getSpdServiceAiChatGptBookings,
   getSpdServiceCategories,
-  getSpdServiceDigitalGuideSettings,
+  getSpdServiceDigitalGuidesForSubjects,
   getSpdServiceRequestSubjects,
   notifySpdServiceTicketCreated,
   type SpdServiceAiBooking,
@@ -141,15 +141,14 @@ export function SpdServiceRequestPage() {
         setIsLoadingCategories(true);
         setHasLoadedRequestSubjects(false);
         setError(null);
-        const [categoryData, subjectData, guideData] = await Promise.all([
+        const [categoryData, subjectData] = await Promise.all([
           getSpdServiceCategories(),
           getSpdServiceRequestSubjects({ activeOnly: true }),
-          getSpdServiceDigitalGuideSettings(),
         ]);
         setCategories(categoryData);
         setRequestSubjects(subjectData);
         setHasLoadedRequestSubjects(true);
-        setDigitalGuides(guideData);
+        setDigitalGuides([]);
         setCategoryId((current) => current);
       } catch (loadError) {
         console.error('Failed to load DSP Service categories:', loadError);
@@ -238,6 +237,34 @@ export function SpdServiceRequestPage() {
     }, {});
   }, [aiBookings]);
   const selectedAiBookings = selectedAiBookingDate ? aiBookingsByDate[selectedAiBookingDate] || [] : [];
+  useEffect(() => {
+    const shouldLoadGuides = selectedCategory?.name === 'Digital Service' && selectedSubjects.length > 0;
+
+    if (!shouldLoadGuides) {
+      setDigitalGuides([]);
+      return;
+    }
+
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        const guides = await getSpdServiceDigitalGuidesForSubjects(selectedSubjects);
+        if (!cancelled) {
+          setDigitalGuides(guides);
+        }
+      } catch (guideError) {
+        console.error('Failed to load DSP Service guide images:', guideError);
+        if (!cancelled) {
+          setDigitalGuides([]);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedCategory?.name, selectedSubjects]);
 
   const loadAiBookings = useCallback(async (monthDate: Date) => {
     const days = getCalendarDays(monthDate);
