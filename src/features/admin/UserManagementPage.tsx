@@ -725,6 +725,9 @@ export function UserManagementPage() {
 
       if (userId) {
         await updateUserDetails(userId, detailsPayload);
+        if (roleToCreate !== 'personnel') {
+          await updateUserRole(userId, roleToCreate);
+        }
       }
       void recordAuditLog({
         module: 'user_management',
@@ -880,6 +883,9 @@ export function UserManagementPage() {
 
           if (userId) {
             await updateUserDetails(userId, buildImportedDetailsPayload(imported));
+            if (imported.role !== 'personnel') {
+              await updateUserRole(userId, imported.role);
+            }
             usersByName.set(normalizeName(imported.full_name), {
               user_id: userId,
               full_name: imported.full_name,
