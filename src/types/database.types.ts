@@ -747,6 +747,13 @@ export type Database = {
         };
         Returns: string;
       };
+      get_spd_service_ai_chatgpt_booking_calendar: {
+        Args: {
+          p_start_date: string;
+          p_end_date: string;
+        };
+        Returns: Array<Pick<SpdServiceTicket, 'id' | 'requester_name' | 'requester_department' | 'subject' | 'requested_service_date' | 'created_at'>>;
+      };
       update_own_profile_details: {
         Args: {
           p_employee_code: string;

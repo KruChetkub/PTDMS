@@ -119,6 +119,7 @@ export function SpdServiceRequestPage() {
   const [aiBookings, setAiBookings] = useState<SpdServiceAiBooking[]>([]);
   const [selectedAiBookingDate, setSelectedAiBookingDate] = useState<string | null>(null);
   const [isLoadingAiBookings, setIsLoadingAiBookings] = useState(false);
+  const [aiBookingError, setAiBookingError] = useState<string | null>(null);
   const [description, setDescription] = useState('');
   const [isLoadingCategories, setIsLoadingCategories] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -245,11 +246,14 @@ export function SpdServiceRequestPage() {
 
     try {
       setIsLoadingAiBookings(true);
+      setAiBookingError(null);
       const data = await getSpdServiceAiChatGptBookings(start, end);
       setAiBookings(data);
       return data;
     } catch (bookingError) {
       console.error('Failed to load AI ChatGPT bookings:', bookingError);
+      setAiBookingError('ไม่สามารถโหลดรายการจอง AI ChatGPT ได้ กรุณาตรวจสอบสิทธิ์หรือ migration ฐานข้อมูล');
+      setAiBookings([]);
       return [];
     } finally {
       setIsLoadingAiBookings(false);
@@ -542,7 +546,7 @@ export function SpdServiceRequestPage() {
                         key={dateKey}
                         type="button"
                         onClick={() => setRequestedServiceDate(dateKey)}
-                        className={`min-h-20 border-r border-t border-teal-50 p-1.5 text-left text-xs transition hover:bg-teal-50 ${!isCurrentMonth ? 'bg-slate-50 text-slate-400' : 'bg-white'} ${isSelected ? 'ring-2 ring-inset ring-teal-500' : ''}`}
+                        className={`min-h-24 border-r border-t border-teal-50 p-1.5 text-left text-xs transition hover:bg-teal-50 ${!isCurrentMonth ? 'bg-slate-50 text-slate-400' : 'bg-white'} ${isSelected ? 'ring-2 ring-inset ring-teal-500' : ''}`}
                       >
                         <span className="font-semibold">{date.getDate()}</span>
                         {dayBookings.length > 0 ? (
@@ -560,9 +564,11 @@ export function SpdServiceRequestPage() {
                                 setSelectedAiBookingDate(dateKey);
                               }
                             }}
-                            className="mt-2 block rounded bg-teal-100 px-1.5 py-1 text-[11px] font-semibold text-teal-800"
+                            className="mt-2 block space-y-0.5 rounded bg-teal-100 px-1.5 py-1 text-[11px] text-teal-800"
                           >
-                            {dayBookings.length} รายการ
+                            <span className="block truncate font-semibold">{dayBookings[0].requester_name}</span>
+                            <span className="block truncate text-[10px] font-medium text-teal-700">{dayBookings[0].requester_department || 'ไม่ระบุกลุ่มงาน'}</span>
+                            {dayBookings.length > 1 ? <span className="block text-[10px] font-semibold">+{dayBookings.length - 1} รายการ</span> : null}
                           </span>
                         ) : (
                           <span className="mt-2 block text-[11px] text-slate-400">ว่าง</span>
@@ -572,6 +578,7 @@ export function SpdServiceRequestPage() {
                   })}
                 </div>
                 {isLoadingAiBookings ? <p className="mt-2 text-xs text-slate-500">กำลังโหลดรายการจอง...</p> : null}
+                {aiBookingError ? <p className="mt-2 rounded border border-amber-200 bg-amber-50 px-2 py-1.5 text-xs text-amber-800">{aiBookingError}</p> : null}
                 {requestedServiceDate ? <p className="mt-2 text-xs font-medium text-teal-800">วันที่เลือก: {formatThaiDate(requestedServiceDate)}</p> : null}
               </section>
             ) : null}
@@ -676,7 +683,6 @@ export function SpdServiceRequestPage() {
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <h3 className="text-sm font-semibold text-slate-950">{booking.subject}</h3>
-                        <p className="mt-1 text-xs text-slate-500">เลขคำขอ {formatSpdServiceTicketNo(booking.ticket_no)}</p>
                       </div>
                       <span className="rounded bg-white px-2 py-1 text-xs font-semibold text-teal-700 ring-1 ring-teal-100">จองแล้ว</span>
                     </div>
@@ -694,7 +700,6 @@ export function SpdServiceRequestPage() {
                         <dd className="mt-0.5 font-semibold text-slate-900">{booking.requested_service_date ? formatThaiDate(booking.requested_service_date) : '-'}</dd>
                       </div>
                     </dl>
-                    <p className="mt-3 whitespace-pre-wrap text-sm text-slate-600">{booking.description}</p>
                   </article>
                 ))
               )}

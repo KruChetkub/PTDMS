@@ -37,7 +37,7 @@ export type SaveSpdServiceRequestSubjectValues = {
 
 export type SpdServiceAiBooking = Pick<
   SpdServiceTicket,
-  'id' | 'ticket_no' | 'requester_name' | 'requester_department' | 'subject' | 'description' | 'requested_service_date' | 'created_at'
+  'id' | 'requester_name' | 'requester_department' | 'subject' | 'requested_service_date' | 'created_at'
 >;
 
 
@@ -265,9 +265,21 @@ export async function deleteSpdServiceRequestSubject(subjectId: string): Promise
 }
 
 export async function getSpdServiceAiChatGptBookings(startDate: string, endDate: string): Promise<SpdServiceAiBooking[]> {
-  const { data, error } = await supabase
+  const calendarColumns = 'id, requester_name, requester_department, subject, requested_service_date, created_at';
+  const { data, error } = await supabase.rpc('get_spd_service_ai_chatgpt_booking_calendar', {
+    p_start_date: startDate,
+    p_end_date: endDate,
+  });
+
+  if (!error) {
+    return data || [];
+  }
+
+  console.warn('Failed to load AI ChatGPT booking RPC, falling back to limited ticket query:', error);
+
+  const fallbackResult = await supabase
     .from('spd_service_tickets')
-    .select('id, ticket_no, requester_name, requester_department, subject, description, requested_service_date, created_at')
+    .select(calendarColumns)
     .eq('subject', 'แจ้งใช้งาน AI ChatGPT')
     .not('requested_service_date', 'is', null)
     .gte('requested_service_date', startDate)
@@ -276,11 +288,11 @@ export async function getSpdServiceAiChatGptBookings(startDate: string, endDate:
     .order('requested_service_date', { ascending: true })
     .order('created_at', { ascending: true });
 
-  if (error) {
-    throw error;
+  if (fallbackResult.error) {
+    throw fallbackResult.error;
   }
 
-  return data || [];
+  return fallbackResult.data || [];
 }
 
 export async function getSpdServiceDashboardData(): Promise<SpdServiceDashboardData> {
