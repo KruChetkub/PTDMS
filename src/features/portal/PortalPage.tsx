@@ -37,7 +37,7 @@ const coreSystems: PortalCard[] = [
   },
   {
     title: 'ปฏิทินสำคัญและจองห้องประชุม กยผ.',
-    shortTitle: 'ปฏิทินฯ',
+    shortTitle: 'ปฏิทินสำคัญและจองห้องประชุม กยผ.',
     description: 'ระบบปฏิทินสำคัญและการจองห้องประชุมงานภายในกองยุทธศาสตร์และแผนงาน',
     to: '/strategy-calendar',
     icon: CalendarDays,
