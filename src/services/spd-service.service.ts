@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import { sanitizePlainTextInput, optionalPlainTextInput, validateUploadFile } from '../utils/inputSecurity';
 import type {
   Profile,
   SpdServiceCategory,
@@ -51,7 +52,7 @@ export type CreateSpdServiceTicketValues = {
   urgency: SpdServiceUrgency;
   subject: string;
   description: string;
-requestedServiceDate?: string | null;
+  requestedServiceDate?: string | null;
 };
 
 export type UpdateSpdServiceTicketWorkflowValues = {
@@ -131,6 +132,8 @@ const requestGuideSettingKeys = {
 } as const;
 
 const SPD_SERVICE_REQUEST_GUIDES_BUCKET = 'spd-service-request-guides';
+const SPD_SERVICE_GUIDE_ALLOWED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp'];
+const SPD_SERVICE_GUIDE_MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024;
 
 export const defaultSpdServiceDigitalGuides: SpdServiceDigitalGuide[] = [
   { subject: 'ลงข้อมูลหน้า Website', enabled: true, imagePath: '', signedImageUrl: '' },
@@ -237,7 +240,7 @@ export async function getSpdServiceRequestSubjects(options: { activeOnly?: boole
 export async function saveSpdServiceRequestSubject(values: SaveSpdServiceRequestSubjectValues): Promise<SpdServiceRequestSubject> {
   const payload = {
     category_id: values.categoryId,
-    subject: values.subject.trim(),
+    subject: sanitizePlainTextInput(values.subject, { fieldName: 'หัวข้องานบริการ', maxLength: 240, allowNewlines: false }),
     is_active: values.isActive,
     requires_booking_date: values.requiresBookingDate,
     sort_order: values.sortOrder,
@@ -384,8 +387,15 @@ export async function getSpdServiceTicketDetail(ticketId: string): Promise<SpdSe
 
 export async function createSpdServiceTicket(values: CreateSpdServiceTicketValues): Promise<SpdServiceTicket> {
   const ticketDate = new Date().toISOString().slice(0, 10);
+  const requesterName = sanitizePlainTextInput(values.requesterName, { fieldName: 'ชื่อผู้แจ้ง', maxLength: 200, allowNewlines: false });
+  const requesterDepartment = optionalPlainTextInput(values.requesterDepartment, { fieldName: 'หน่วยงานผู้แจ้ง', maxLength: 200, allowNewlines: false });
+  const requesterPhone = sanitizePlainTextInput(values.requesterPhone, { fieldName: 'เบอร์โทรศัพท์', maxLength: 50, allowNewlines: false });
+  const categoryName = sanitizePlainTextInput(values.categoryName, { fieldName: 'ประเภทบริการ', maxLength: 200, allowNewlines: false });
+  const subject = sanitizePlainTextInput(values.subject, { fieldName: 'หัวข้องานบริการ', maxLength: 240, allowNewlines: false });
+  const description = sanitizePlainTextInput(values.description, { fieldName: 'รายละเอียดคำขอ', maxLength: 4000 });
+
   const ticketNoResult = await supabase.rpc('generate_spd_service_ticket_no', {
-    category_label: values.categoryName,
+    category_label: categoryName,
     created_on: ticketDate,
   });
 
@@ -399,14 +409,14 @@ export async function createSpdServiceTicket(values: CreateSpdServiceTicketValue
     .insert({
       ticket_no: ticketNo,
       requester_id: values.requesterId,
-      requester_name: values.requesterName,
-      requester_department: values.requesterDepartment,
-      requester_phone: values.requesterPhone,
+      requester_name: requesterName,
+      requester_department: requesterDepartment,
+      requester_phone: requesterPhone,
       category_id: values.categoryId,
-      category_name: values.categoryName,
+      category_name: categoryName,
       urgency: values.urgency,
-      subject: values.subject,
-      description: values.description,
+      subject,
+      description,
       requested_service_date: values.requestedServiceDate || null,
       status: 'NEW',
     })
@@ -470,10 +480,19 @@ export async function notifySpdServiceTicketCreated(ticketId: string): Promise<S
 
 export async function updateSpdServiceTicketWorkflow(values: UpdateSpdServiceTicketWorkflowValues): Promise<SpdServiceTicket> {
   const { ticket, actorId, nextStatus, action, note, updates = {} } = values;
+  const safeUpdates = {
+    ...updates,
+    problem_cause: updates.problem_cause === undefined ? undefined : optionalPlainTextInput(updates.problem_cause, { fieldName: 'สาเหตุของปัญหา', maxLength: 4000 }),
+    resolution_method: updates.resolution_method === undefined ? undefined : optionalPlainTextInput(updates.resolution_method, { fieldName: 'วิธีแก้ไข', maxLength: 4000 }),
+    resolution_result: updates.resolution_result === undefined ? undefined : optionalPlainTextInput(updates.resolution_result, { fieldName: 'ผลการแก้ไข', maxLength: 4000 }),
+  };
+  const safeAction = sanitizePlainTextInput(action, { fieldName: 'สถานะการดำเนินการ', maxLength: 120, allowNewlines: false });
+  const safeNote = sanitizePlainTextInput(note, { fieldName: 'บันทึกการดำเนินการ', maxLength: 4000 });
+
   const { data, error } = await supabase
     .from('spd_service_tickets')
     .update({
-      ...updates,
+      ...safeUpdates,
       status: nextStatus,
     })
     .eq('id', ticket.id)
@@ -488,10 +507,10 @@ export async function updateSpdServiceTicketWorkflow(values: UpdateSpdServiceTic
   const timelineResult = await supabase.from('spd_service_ticket_timeline').insert({
     ticket_id: ticket.id,
     actor_id: actorId,
-    action,
+    action: safeAction,
     from_status: ticket.status,
     to_status: nextStatus,
-    note,
+    note: safeNote,
     metadata: {
       ticket_no: ticket.ticket_no,
       subject: ticket.subject,
@@ -528,7 +547,7 @@ export async function createSpdServiceSatisfactionSurvey(
       quality_rating: values.qualityRating,
       courtesy_rating: values.courtesyRating,
       overall_rating: values.overallRating,
-      comment: values.comment,
+      comment: optionalPlainTextInput(values.comment, { fieldName: 'ความคิดเห็น', maxLength: 2000 }),
     })
     .select('*')
     .single();
@@ -668,6 +687,12 @@ export async function getSpdServiceDigitalGuidesForSubjects(subjects: string[]):
 }
 
 export async function uploadSpdServiceDigitalGuideImage(file: File): Promise<Pick<SpdServiceDigitalGuide, 'imagePath' | 'signedImageUrl'>> {
+  validateUploadFile(file, {
+    allowedTypes: SPD_SERVICE_GUIDE_ALLOWED_IMAGE_TYPES,
+    maxSizeBytes: SPD_SERVICE_GUIDE_MAX_IMAGE_SIZE_BYTES,
+    label: 'รูปภาพคำแนะนำ',
+  });
+
   const extension = file.name.split('.').pop() || 'png';
   const safeName = sanitizeStorageFileName(file.name) || `guide.${extension}`;
   const filePath = `digital-service/${Date.now()}-${safeName}`;
@@ -694,7 +719,7 @@ export async function uploadSpdServiceDigitalGuideImage(file: File): Promise<Pic
 
 export async function saveSpdServiceDigitalGuideSettings(values: SaveSpdServiceDigitalGuideSettingsValues): Promise<void> {
   const normalizedGuides = values.guides.reduce<Array<Omit<SpdServiceDigitalGuide, 'signedImageUrl'>>>((acc, guide) => {
-    const subject = guide.subject.trim();
+    const subject = sanitizePlainTextInput(guide.subject, { fieldName: 'หัวข้อภาพคำแนะนำ', maxLength: 240, allowNewlines: false });
     if (!subject || acc.some((item) => item.subject === subject)) {
       return acc;
     }

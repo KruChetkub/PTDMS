@@ -1,6 +1,9 @@
 import { supabase } from '../../../lib/supabase';
+import { validateUploadFile } from '../../../utils/inputSecurity';
 
 const SITE_CONTENT_ASSETS_BUCKET = 'site-content-assets';
+const SITE_CONTENT_ALLOWED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml'];
+const SITE_CONTENT_MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024;
 
 function sanitizeFileName(fileName: string) {
   return fileName
@@ -11,6 +14,8 @@ function sanitizeFileName(fileName: string) {
 }
 
 export async function uploadSiteLogo(file: File) {
+  validateUploadFile(file, { allowedTypes: SITE_CONTENT_ALLOWED_IMAGE_TYPES, maxSizeBytes: SITE_CONTENT_MAX_IMAGE_SIZE_BYTES, label: 'ไฟล์โลโก้' });
+
   const extension = file.name.split('.').pop() || 'png';
   const safeName = sanitizeFileName(file.name) || `logo.${extension}`;
   const filePath = `logos/${Date.now()}-${safeName}`;
@@ -29,6 +34,8 @@ export async function uploadSiteLogo(file: File) {
 }
 
 export async function uploadPlanCoverImage(file: File) {
+  validateUploadFile(file, { allowedTypes: SITE_CONTENT_ALLOWED_IMAGE_TYPES, maxSizeBytes: SITE_CONTENT_MAX_IMAGE_SIZE_BYTES, label: 'ภาพหน้าปก' });
+
   const extension = file.name.split('.').pop() || 'png';
   const safeName = sanitizeFileName(file.name) || `plan-cover.${extension}`;
   const filePath = `plan-covers/${Date.now()}-${safeName}`;
@@ -47,6 +54,8 @@ export async function uploadPlanCoverImage(file: File) {
 }
 
 export async function uploadLoginPageImage(file: File) {
+  validateUploadFile(file, { allowedTypes: SITE_CONTENT_ALLOWED_IMAGE_TYPES, maxSizeBytes: SITE_CONTENT_MAX_IMAGE_SIZE_BYTES, label: 'ภาพหน้า Login' });
+
   const extension = file.name.split('.').pop() || 'png';
   const safeName = sanitizeFileName(file.name) || `login-image.${extension}`;
   const filePath = `login-page/${Date.now()}-${safeName}`;
@@ -64,6 +73,8 @@ export async function uploadLoginPageImage(file: File) {
   return data.publicUrl;
 }
 export async function uploadLoginPageBackgroundImage(file: File) {
+  validateUploadFile(file, { allowedTypes: SITE_CONTENT_ALLOWED_IMAGE_TYPES, maxSizeBytes: SITE_CONTENT_MAX_IMAGE_SIZE_BYTES, label: 'ภาพพื้นหลังหน้า Login' });
+
   const extension = file.name.split('.').pop() || 'png';
   const safeName = sanitizeFileName(file.name) || `login-background.${extension}`;
   const filePath = `login-backgrounds/${Date.now()}-${safeName}`;

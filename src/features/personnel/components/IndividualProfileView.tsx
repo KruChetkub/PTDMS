@@ -6,6 +6,7 @@ import {
 } from 'recharts';
 import { useNavigate } from 'react-router-dom';
 import { PageHeader } from '../../../components/ui/PageHeader';
+import { ConfirmModal } from '../../../components/ui/ConfirmModal';
 import { getPersonnelDetails } from '../../../services/personnel.service';
 import type { Profile, TrainingRecord, Certificate, DevelopmentAnalysis } from '../../../types/database.types';
 import { roleLabels } from '../../../types/roles';
@@ -49,6 +50,8 @@ export function IndividualProfileView({ userId, isMyProfile }: IndividualProfile
   const [error, setError] = useState<string | null>(null);
   const [trainingPage, setTrainingPage] = useState(1);
   const [trainingExportMessage, setTrainingExportMessage] = useState<string | null>(null);
+  const [trainingDeleteTarget, setTrainingDeleteTarget] = useState<{ id: string; course: string } | null>(null);
+  const [isDeletingTraining, setIsDeletingTraining] = useState(false);
 
   const [isSubmittingTraining, setIsSubmittingTraining] = useState(false);
   const [trainingSubmitError, setTrainingSubmitError] = useState<string | null>(null);
@@ -167,15 +170,23 @@ export function IndividualProfileView({ userId, isMyProfile }: IndividualProfile
     }
   };
 
-  const handleDeleteTraining = async (id: string, course: string) => {
+  const handleDeleteTraining = (id: string, course: string) => {
     if (!authUser) return;
-    if (!confirm(`คุณต้องการลบข้อมูลการอบรมหลักสูตร "${course}" ใช่หรือไม่?`)) return;
+    setTrainingDeleteTarget({ id, course });
+  };
 
+  const confirmDeleteTraining = async () => {
+    if (!trainingDeleteTarget) return;
+
+    setIsDeletingTraining(true);
     try {
-      await deleteTrainingRecord(id);
+      await deleteTrainingRecord(trainingDeleteTarget.id);
+      setTrainingDeleteTarget(null);
       await loadData({ showLoading: false });
     } catch (err) {
       alert(err instanceof Error ? err.message : 'ไม่สามารถลบข้อมูลได้');
+    } finally {
+      setIsDeletingTraining(false);
     }
   };
 
@@ -525,6 +536,19 @@ export function IndividualProfileView({ userId, isMyProfile }: IndividualProfile
         ) : null}
       </div>
 
+      <ConfirmModal
+        isOpen={!!trainingDeleteTarget}
+        title="ยืนยันการลบประวัติการอบรม"
+        message={trainingDeleteTarget ? `ต้องการลบข้อมูลการอบรมหลักสูตร "${trainingDeleteTarget.course}" ใช่หรือไม่? เมื่อลบแล้วข้อมูลจะถูกลบออกจากฐานข้อมูล` : ''}
+        confirmLabel={isDeletingTraining ? 'กำลังลบ...' : 'ลบข้อมูล'}
+        cancelLabel="ยกเลิก"
+        variant="danger"
+        onConfirm={() => void confirmDeleteTraining()}
+        onClose={() => {
+          if (!isDeletingTraining) setTrainingDeleteTarget(null);
+        }}
+        isLoading={isDeletingTraining}
+      />
       <TrainingModal
         isOpen={!!editingTrainingId}
         onClose={() => {

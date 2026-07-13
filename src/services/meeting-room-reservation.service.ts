@@ -1,4 +1,5 @@
-﻿import { supabase } from '../lib/supabase';
+import { supabase } from '../lib/supabase';
+import { sanitizePlainTextInput, optionalPlainTextInput, sanitizeUrlInput } from '../utils/inputSecurity';
 import type { MeetingRoomReservation } from '../types/database.types';
 import { recordAuditLog } from './audit.service';
 
@@ -21,15 +22,15 @@ export type MeetingRoomReservationForm = {
 function toReservationPayload(input: MeetingRoomReservationForm) {
   return {
     reservation_date: input.reservationDate,
-    room: input.room,
-    meeting_type: input.meetingType,
-    online_meeting_url: input.onlineMeetingUrl.trim() || null,
-    details: input.details.trim() || null,
+    room: sanitizePlainTextInput(input.room, { fieldName: 'ห้องประชุม', maxLength: 120, allowNewlines: false }),
+    meeting_type: sanitizePlainTextInput(input.meetingType, { fieldName: 'รูปแบบการประชุม', maxLength: 120, allowNewlines: false }),
+    online_meeting_url: sanitizeUrlInput(input.onlineMeetingUrl, { fieldName: 'ลิงก์ประชุมออนไลน์', maxLength: 1000 }),
+    details: optionalPlainTextInput(input.details, { fieldName: 'รายละเอียดการประชุม', maxLength: 4000 }),
     start_time: input.startTime,
     end_time: input.endTime,
-    booker_name: input.bookerName.trim(),
-    work_group: input.workGroup.trim(),
-    topic: input.topic.trim(),
+    booker_name: sanitizePlainTextInput(input.bookerName, { fieldName: 'ชื่อผู้จอง', maxLength: 200, allowNewlines: false }),
+    work_group: sanitizePlainTextInput(input.workGroup, { fieldName: 'กลุ่มงาน', maxLength: 200, allowNewlines: false }),
+    topic: sanitizePlainTextInput(input.topic, { fieldName: 'หัวข้อประชุม', maxLength: 240, allowNewlines: false }),
   };
 }
 

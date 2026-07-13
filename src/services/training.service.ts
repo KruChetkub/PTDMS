@@ -1,5 +1,6 @@
 import { supabase } from '../lib/supabase';
 import { runSupabaseQuery } from '../lib/supabase-query';
+import { sanitizePlainTextInput, optionalPlainTextInput, sanitizeUrlInput } from '../utils/inputSecurity';
 import type { Profile, TrainingRecord, Certificate, DevelopmentAnalysis } from '../types/database.types';
 import { getMonthFromDate, normalizeTrainingType, type TrainingFormValues } from '../features/self-service/training-form.schema';
 
@@ -69,20 +70,19 @@ function buildTrainingDedupeKey(userId: string, course: string, date: string, or
 function toTrainingFormValues(row: TrainingImportInputRow): TrainingFormValues {
   return {
     trainingType: normalizeTrainingType(row.trainingType),
-    courseName: row.courseName.trim(),
-    organizer: row.organizer.trim(),
+    courseName: sanitizePlainTextInput(row.courseName, { fieldName: 'ชื่อหลักสูตร', maxLength: 500, allowNewlines: false }),
+    organizer: sanitizePlainTextInput(row.organizer, { fieldName: 'หน่วยงานผู้จัด', maxLength: 300, allowNewlines: false }),
     date: row.date,
     year: row.year,
-    certificateName: row.certificateName?.trim() || '',
-    certificateLink: row.certificateLink?.trim() || '',
+    certificateName: optionalPlainTextInput(row.certificateName, { fieldName: 'ชื่อใบประกาศ', maxLength: 300, allowNewlines: false }) || '',
+    certificateLink: sanitizeUrlInput(row.certificateLink, { fieldName: 'ลิงก์ใบประกาศ', maxLength: 1000 }) || '',
     developmentArea: '',
     skillGroup: '',
     targetDirection: '',
   };
 }
-function emptyToNull(value: string | undefined) {
-  const trimmed = value?.trim();
-  return trimmed ? trimmed : null;
+function emptyToNull(value: string | undefined, options: { fieldName: string; maxLength: number; allowNewlines?: boolean }) {
+  return optionalPlainTextInput(value, options);
 }
 
 function hasCertificateContent(certificate: Pick<Certificate, 'certificate_name' | 'certificate_link' | 'file_path'> | null) {
@@ -195,21 +195,24 @@ export async function createTrainingRecord(input: CreateTrainingRecordInput): Pr
   }
 
   const now = new Date().toISOString();
-  const certificateName = emptyToNull(input.certificateName);
-  const certificateLink = emptyToNull(input.certificateLink);
-  const developmentArea = emptyToNull(input.developmentArea);
-  const skillGroup = emptyToNull(input.skillGroup);
-  const targetDirection = emptyToNull(input.targetDirection);
+  const courseName = sanitizePlainTextInput(input.courseName, { fieldName: 'ชื่อหลักสูตร', maxLength: 500, allowNewlines: false });
+  const trainingType = normalizeTrainingType(input.trainingType);
+  const organizer = sanitizePlainTextInput(input.organizer, { fieldName: 'หน่วยงานผู้จัด', maxLength: 300, allowNewlines: false });
+  const certificateName = emptyToNull(input.certificateName, { fieldName: 'ชื่อใบประกาศ', maxLength: 300, allowNewlines: false });
+  const certificateLink = sanitizeUrlInput(input.certificateLink, { fieldName: 'ลิงก์ใบประกาศ', maxLength: 1000 });
+  const developmentArea = emptyToNull(input.developmentArea, { fieldName: 'ประเด็นการพัฒนา', maxLength: 1000 });
+  const skillGroup = emptyToNull(input.skillGroup, { fieldName: 'กลุ่มทักษะ', maxLength: 300, allowNewlines: false });
+  const targetDirection = emptyToNull(input.targetDirection, { fieldName: 'ทิศทางการพัฒนา', maxLength: 1000 });
   let trainingId = '';
 
   try {
     const { data } = await runSupabaseQuery(
       supabase.rpc('create_training_record_with_details', {
         p_user_id: input.userId,
-        p_course: input.courseName.trim(),
-        p_category: input.trainingType.trim(),
+        p_course: courseName,
+        p_category: trainingType,
         p_subcategory: null,
-        p_organizer: input.organizer.trim(),
+        p_organizer: organizer,
         p_date: input.date,
         p_year: input.year,
         p_certificate_name: certificateName,
@@ -241,10 +244,10 @@ export async function createTrainingRecord(input: CreateTrainingRecordInput): Pr
   return {
     id: trainingId,
     user_id: input.userId,
-    course: input.courseName.trim(),
-    category: input.trainingType.trim(),
+    course: courseName,
+    category: trainingType,
     subcategory: null,
-    organizer: input.organizer.trim(),
+    organizer,
     date: input.date,
     month,
     year: input.year,
@@ -302,14 +305,18 @@ export async function updateTrainingRecord(id: string, input: UpdateTrainingReco
   const month = getMonthFromDate(input.date);
   if (!month) throw new Error('วันที่อบรมไม่ถูกต้อง');
 
+  const courseName = sanitizePlainTextInput(input.courseName, { fieldName: 'ชื่อหลักสูตร', maxLength: 500, allowNewlines: false });
+  const trainingType = normalizeTrainingType(input.trainingType);
+  const organizer = sanitizePlainTextInput(input.organizer, { fieldName: 'หน่วยงานผู้จัด', maxLength: 300, allowNewlines: false });
+
   const { data: trainingRecord } = await runSupabaseQuery(
     supabase
       .from('training_records')
       .update({
-        course: input.courseName.trim(),
-        category: input.trainingType.trim(),
+        course: courseName,
+        category: trainingType,
         subcategory: null,
-        organizer: input.organizer.trim(),
+        organizer,
         date: input.date,
         month,
         year: input.year,
@@ -328,8 +335,8 @@ export async function updateTrainingRecord(id: string, input: UpdateTrainingReco
   const record = trainingRecord as TrainingRecord;
 
   // Handle Certificate Update (Manual Upsert)
-  const certificateName = emptyToNull(input.certificateName);
-  const certificateLink = emptyToNull(input.certificateLink);
+  const certificateName = emptyToNull(input.certificateName, { fieldName: 'ชื่อใบประกาศ', maxLength: 300, allowNewlines: false });
+  const certificateLink = sanitizeUrlInput(input.certificateLink, { fieldName: 'ลิงก์ใบประกาศ', maxLength: 1000 });
 
   const { data: existingCertificates } = await runSupabaseQuery(
     supabase
@@ -378,9 +385,9 @@ export async function updateTrainingRecord(id: string, input: UpdateTrainingReco
   }
 
   // Handle Development Analysis Update (Manual Upsert)
-  const developmentArea = emptyToNull(input.developmentArea);
-  const skillGroup = emptyToNull(input.skillGroup);
-  const targetDirection = emptyToNull(input.targetDirection);
+  const developmentArea = emptyToNull(input.developmentArea, { fieldName: 'ประเด็นการพัฒนา', maxLength: 1000 });
+  const skillGroup = emptyToNull(input.skillGroup, { fieldName: 'กลุ่มทักษะ', maxLength: 300, allowNewlines: false });
+  const targetDirection = emptyToNull(input.targetDirection, { fieldName: 'ทิศทางการพัฒนา', maxLength: 1000 });
 
   const { data: existingDevelopmentRows } = await runSupabaseQuery(
     supabase

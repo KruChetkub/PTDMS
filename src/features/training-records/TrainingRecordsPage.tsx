@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ChevronLeft, ChevronRight, Download, Edit2, FileSpreadsheet, Search, Trash2, Upload, X } from 'lucide-react';
 import { PageHeader } from '../../components/ui/PageHeader';
+import { ConfirmModal } from '../../components/ui/ConfirmModal';
 import {
   listTrainingRecords,
   deleteTrainingRecord,
@@ -247,6 +248,8 @@ export function TrainingRecordsPage() {
   const [isImporting, setIsImporting] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
   const [importResult, setImportResult] = useState<TrainingImportResult | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; course: string } | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValues, setEditValues] = useState<Partial<TrainingFormValues> | null>(null);
@@ -406,14 +409,22 @@ export function TrainingRecordsPage() {
     }
   };
 
-  const handleDelete = async (id: string, course: string) => {
-    if (!confirm(`คุณต้องการลบข้อมูลการอบรมหลักสูตร "${course}" ใช่หรือไม่?`)) return;
+  const handleDelete = (id: string, course: string) => {
+    setDeleteTarget({ id, course });
+  };
 
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+
+    setIsDeleting(true);
     try {
-      await deleteTrainingRecord(id);
-      setRecords((prev) => prev.filter((record) => record.id !== id));
+      await deleteTrainingRecord(deleteTarget.id);
+      setRecords((prev) => prev.filter((record) => record.id !== deleteTarget.id));
+      setDeleteTarget(null);
     } catch (err) {
       alert(err instanceof Error ? err.message : 'ไม่สามารถลบข้อมูลได้');
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -681,6 +692,20 @@ export function TrainingRecordsPage() {
         </div>
       ) : null}
 
+
+      <ConfirmModal
+        isOpen={!!deleteTarget}
+        title="ยืนยันการลบข้อมูลการอบรม"
+        message={deleteTarget ? `ต้องการลบข้อมูลการอบรมหลักสูตร "${deleteTarget.course}" ใช่หรือไม่? เมื่อลบแล้วข้อมูลจะถูกลบออกจากฐานข้อมูล` : ''}
+        confirmLabel={isDeleting ? 'กำลังลบ...' : 'ลบข้อมูล'}
+        cancelLabel="ยกเลิก"
+        variant="danger"
+        onConfirm={() => void confirmDelete()}
+        onClose={() => {
+          if (!isDeleting) setDeleteTarget(null);
+        }}
+        isLoading={isDeleting}
+      />
       {editingId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm">
           <div className="max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-xl bg-white p-6 shadow-2xl">

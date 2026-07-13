@@ -1,0 +1,99 @@
+type PlainTextOptions = {
+  fieldName?: string;
+  maxLength?: number;
+  trim?: boolean;
+  allowNewlines?: boolean;
+};
+
+type FileValidationOptions = {
+  allowedTypes: string[];
+  maxSizeBytes: number;
+  label?: string;
+};
+
+const htmlEscapeMap: Record<string, string> = {
+  '&': '&amp;',
+  '<': '&lt;',
+  '>': '&gt;',
+  '"': '&quot;',
+  "'": '&#39;',
+  '`': '&#96;',
+};
+
+export function escapeHtmlText(value: string) {
+  return value.replace(/[&<>"'`]/g, (char) => htmlEscapeMap[char] || char);
+}
+
+export function sanitizePlainTextInput(value: string | null | undefined, options: PlainTextOptions = {}) {
+  const {
+    fieldName = 'ข้อมูล',
+    maxLength,
+    trim = true,
+    allowNewlines = true,
+  } = options;
+
+  const text = String(value ?? '')
+    .replace(/\u0000/g, '')
+    .replace(/[\u0001-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '')
+    .replace(/\r\n?/g, '\n');
+  const normalized = allowNewlines ? text : text.replace(/\n+/g, ' ');
+  const result = trim ? normalized.trim() : normalized;
+
+  if (maxLength && result.length > maxLength) {
+    throw new Error(`${fieldName}ต้องไม่เกิน ${maxLength.toLocaleString('th-TH')} ตัวอักษร`);
+  }
+
+  return escapeHtmlText(result);
+}
+
+export function optionalPlainTextInput(value: string | null | undefined, options: PlainTextOptions = {}) {
+  const sanitized = sanitizePlainTextInput(value, options);
+  return sanitized || null;
+}
+
+
+export function sanitizeUrlInput(value: string | null | undefined, options: { fieldName?: string; maxLength?: number } = {}) {
+  const fieldName = options.fieldName || 'URL';
+  const maxLength = options.maxLength || 1000;
+  const text = String(value ?? '')
+    .replace(/\u0000/g, '')
+    .replace(/[\u0001-\u001F\u007F]/g, '')
+    .trim();
+
+  if (!text) {
+    return null;
+  }
+
+  if (text.length > maxLength) {
+    throw new Error(`${fieldName}ต้องไม่เกิน ${maxLength.toLocaleString('th-TH')} ตัวอักษร`);
+  }
+
+  let url: URL;
+  try {
+    url = new URL(text);
+  } catch {
+    throw new Error(`${fieldName}ต้องเป็น URL ที่ถูกต้อง`);
+  }
+
+  if (!['http:', 'https:'].includes(url.protocol)) {
+    throw new Error(`${fieldName}ต้องขึ้นต้นด้วย http:// หรือ https:// เท่านั้น`);
+  }
+
+  return text;
+}
+export function validateUploadFile(file: File, options: FileValidationOptions) {
+  const label = options.label || 'ไฟล์';
+
+  if (!file || file.size <= 0) {
+    throw new Error(`${label}ไม่ถูกต้องหรือเป็นไฟล์ว่าง`);
+  }
+
+  if (!options.allowedTypes.includes(file.type)) {
+    throw new Error(`${label}ต้องเป็นชนิดไฟล์ที่อนุญาตเท่านั้น`);
+  }
+
+  if (file.size > options.maxSizeBytes) {
+    const maxMb = options.maxSizeBytes / (1024 * 1024);
+    throw new Error(`${label}ต้องมีขนาดไม่เกิน ${maxMb.toLocaleString('th-TH')} MB`);
+  }
+}

@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import { sanitizePlainTextInput, optionalPlainTextInput } from '../utils/inputSecurity';
 import type { StrategyEvent } from '../types/database.types';
 
 const strategyEventSelect =
@@ -18,15 +19,15 @@ export type StrategyEventForm = {
 
 function toEventInsert(input: StrategyEventForm) {
   return {
-    title: input.title.trim(),
-    description: input.description?.trim() || null,
+    title: sanitizePlainTextInput(input.title, { fieldName: 'ชื่อกิจกรรม', maxLength: 240, allowNewlines: false }),
+    description: optionalPlainTextInput(input.description, { fieldName: 'รายละเอียดกิจกรรม', maxLength: 4000 }),
     event_date: input.eventDate,
     end_date: input.endDate || input.eventDate,
     start_time: input.startTime || null,
     end_time: input.endTime || null,
     color: input.color || null,
-    location: input.location?.trim() || null,
-    owner_work_group: input.ownerWorkGroup?.trim() || null,
+    location: optionalPlainTextInput(input.location, { fieldName: 'สถานที่', maxLength: 240, allowNewlines: false }),
+    owner_work_group: optionalPlainTextInput(input.ownerWorkGroup, { fieldName: 'กลุ่มงานเจ้าของกิจกรรม', maxLength: 200, allowNewlines: false }),
     status: 'published' as const,
   };
 }
