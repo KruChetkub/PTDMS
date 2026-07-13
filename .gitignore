@@ -19,4 +19,10 @@ Mmd/
 .vercel
 .env*.local
 README.md
-
+# Supabase local CLI/cache files only.
+# Keep migrations, functions, config.toml, seed.sql, and tests in Git.
+supabase/.temp/
+supabase/.branches/
+supabase/.env
+supabase/.env.local
+supabase/.env.*.local
