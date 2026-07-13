@@ -31,7 +31,7 @@ export function SecurityPage() {
       setLoading(true);
       try {
         const data = await listLoginHistory();
-        setHistory(data);
+        setHistory(Array.isArray(data) ? data : []);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'ไม่สามารถโหลดประวัติการล็อกอินได้');
       } finally {
@@ -40,6 +40,8 @@ export function SecurityPage() {
     };
     void loadHistory();
   }, []);
+
+  const safeHistory = Array.isArray(history) ? history : [];
 
   const handleExportLogs = async () => {
     setExportingLogs(true);
@@ -128,11 +130,11 @@ export function SecurityPage() {
             <div className="space-y-4 pt-2">
               <div className="flex items-center justify-between text-sm">
                 <span className="text-slate-500">Total Success</span>
-                <span className="font-bold text-emerald-600">{history.filter((h) => h.success).length}</span>
+                <span className="font-bold text-emerald-600">{safeHistory.filter((h) => h.success).length}</span>
               </div>
               <div className="flex items-center justify-between text-sm">
                 <span className="text-slate-500">Failed Attempts</span>
-                <span className="font-bold text-red-600">{history.filter((h) => !h.success).length}</span>
+                <span className="font-bold text-red-600">{safeHistory.filter((h) => !h.success).length}</span>
               </div>
             </div>
           </div>
@@ -163,12 +165,12 @@ export function SecurityPage() {
                       <td colSpan={4} className="px-6 py-4"><div className="h-8 rounded bg-slate-50" /></td>
                     </tr>
                   ))
-                ) : history.length === 0 ? (
+                ) : safeHistory.length === 0 ? (
                   <tr>
                     <td colSpan={4} className="px-6 py-10 text-center text-slate-500">ไม่มีข้อมูลการล็อกอิน</td>
                   </tr>
                 ) : (
-                  history.map((log) => (
+                  safeHistory.map((log) => (
                     <tr key={log.id} className="hover:bg-slate-50/50">
                       <td className="px-6 py-4">
                         <div className="font-medium text-slate-900">{log.user_name}</div>

@@ -115,21 +115,23 @@ export async function recordAuditLog(input: AuditLogInput) {
 
 export async function recordLoginAttempt(input: LoginAttemptInput) {
   try {
-    const headers: Record<string, string> = {};
-
-    if (input.accessToken) {
-      headers.Authorization = `Bearer ${input.accessToken}`;
-    }
-
-    const { error } = await supabase.functions.invoke('record-login-attempt', {
+    const invokeOptions: {
+      body: Record<string, unknown>;
+      headers?: Record<string, string>;
+    } = {
       body: {
         email: input.email,
         success: input.success,
         errorMessage: input.errorMessage,
         userAgent: getUserAgent(),
       },
-      headers,
-    });
+    };
+
+    if (input.accessToken) {
+      invokeOptions.headers = { Authorization: `Bearer ${input.accessToken}` };
+    }
+
+    const { error } = await supabase.functions.invoke('record-login-attempt', invokeOptions);
 
     if (error) {
       const reason = await getFunctionErrorReason(error);
@@ -249,7 +251,9 @@ export async function listLoginHistory() {
 
   if (error) throw error;
 
-  return data.map((history: any) => ({
+  const rows = Array.isArray(data) ? data : [];
+
+  return rows.map((history: any) => ({
     ...history,
     user_name: history.profiles?.full_name || 'Unknown',
   })) as LoginHistory[];
