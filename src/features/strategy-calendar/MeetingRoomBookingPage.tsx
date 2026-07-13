@@ -480,42 +480,51 @@ export function MeetingRoomBookingPage() {
     setMessage(null);
 
     try {
-      let successText = editingId ? 'แก้ไขการจองเรียบร้อยแล้ว' : 'บันทึกการจองเรียบร้อยแล้ว';
+      const isEditing = Boolean(editingId);
+      let successText = isEditing ? 'แก้ไขการจองเรียบร้อยแล้ว' : 'บันทึกการจองเรียบร้อยแล้ว';
+      let savedReservationId: string | null = null;
 
       if (editingId) {
         await updateMeetingRoomReservation(editingId, input);
       } else {
         const savedReservation = await createMeetingRoomReservation(input);
+        savedReservationId = savedReservation.id;
+      }
 
-        if (shouldCreateCalendarEvent) {
-          try {
-            await createStrategyEvent({
-              title: input.topic,
-              description: [
-                input.details.trim(),
-                `สร้างจากการจองห้องประชุม โดย ${input.bookerName.trim()}`,
-                input.meetingType,
-                input.onlineMeetingUrl.trim() ? `ลิงก์ประชุมออนไลน์: ${input.onlineMeetingUrl.trim()}` : '',
-              ]
-                .filter(Boolean)
-                .join('\n'),
-              eventDate: input.reservationDate,
-              endDate: input.reservationDate,
-              startTime: input.startTime,
-              endTime: input.endTime,
-              color: 'blue',
-              location: calendarEventLocation.trim() || input.room,
-              ownerWorkGroup: input.workGroup,
-            });
-            successText = 'บันทึกการจองและเพิ่มกิจกรรมในปฏิทินเรียบร้อยแล้ว';
-          } catch (calendarEventError) {
-            void reportClientError('Failed to create strategy calendar event:', calendarEventError);
-            successText = 'บันทึกการจองเรียบร้อยแล้ว แต่เพิ่มกิจกรรมในปฏิทินไม่สำเร็จ';
-          }
-        }
-
+      if (shouldCreateCalendarEvent) {
         try {
-          const notificationResult = await notifyMeetingRoomReservationCreated(savedReservation.id);
+          await createStrategyEvent({
+            title: input.topic,
+            description: [
+              input.details.trim(),
+              `สร้างจากการจองห้องประชุม โดย ${input.bookerName.trim()}`,
+              input.meetingType,
+              input.onlineMeetingUrl.trim() ? `ลิงก์ประชุมออนไลน์: ${input.onlineMeetingUrl.trim()}` : '',
+            ]
+              .filter(Boolean)
+              .join('\n'),
+            eventDate: input.reservationDate,
+            endDate: input.reservationDate,
+            startTime: input.startTime,
+            endTime: input.endTime,
+            color: 'blue',
+            location: calendarEventLocation.trim() || input.room,
+            ownerWorkGroup: input.workGroup,
+          });
+          successText = isEditing
+            ? 'แก้ไขการจองและเพิ่มกิจกรรมในปฏิทินเรียบร้อยแล้ว'
+            : 'บันทึกการจองและเพิ่มกิจกรรมในปฏิทินเรียบร้อยแล้ว';
+        } catch (calendarEventError) {
+          void reportClientError('Failed to create strategy calendar event:', calendarEventError);
+          successText = isEditing
+            ? 'แก้ไขการจองเรียบร้อยแล้ว แต่เพิ่มกิจกรรมในปฏิทินไม่สำเร็จ'
+            : 'บันทึกการจองเรียบร้อยแล้ว แต่เพิ่มกิจกรรมในปฏิทินไม่สำเร็จ';
+        }
+      }
+
+      if (savedReservationId) {
+        try {
+          const notificationResult = await notifyMeetingRoomReservationCreated(savedReservationId);
 
           if (!notificationResult.sent && !notificationResult.skipped) {
             successText = `${successText} แต่ยังส่ง Telegram ไม่สำเร็จ`;
@@ -615,20 +624,18 @@ export function MeetingRoomBookingPage() {
 
   const bookingForm = (
     <form className="space-y-3 p-4" onSubmit={handleSubmit}>
-      {!editingId ? (
-        <label className="flex items-start gap-3 rounded-md border border-blue-100 bg-blue-50/60 px-3 py-2">
-          <input
-            type="checkbox"
-            checked={shouldCreateCalendarEvent}
-            onChange={(event) => setShouldCreateCalendarEvent(event.target.checked)}
-            className="mt-1 h-4 w-4 rounded border-blue-300 text-blue-700 focus:ring-blue-400"
-          />
-          <span className="min-w-0">
-            <span className="block text-xs font-semibold text-blue-800">เพิ่มกิจกรรมในปฏิทินกองยุทธศาสตร์และแผนงาน</span>
-            <span className="mt-0.5 block text-xs text-slate-500">เมื่อบันทึกการจองแล้ว ระบบจะสร้างกิจกรรมตามวันและเวลานี้</span>
-          </span>
-        </label>
-      ) : null}
+      <label className="flex items-start gap-3 rounded-md border border-blue-100 bg-blue-50/60 px-3 py-2">
+        <input
+          type="checkbox"
+          checked={shouldCreateCalendarEvent}
+          onChange={(event) => setShouldCreateCalendarEvent(event.target.checked)}
+          className="mt-1 h-4 w-4 rounded border-blue-300 text-blue-700 focus:ring-blue-400"
+        />
+        <span className="min-w-0">
+          <span className="block text-xs font-semibold text-blue-800">เพิ่มกิจกรรมในปฏิทินกองยุทธศาสตร์และแผนงาน</span>
+          <span className="mt-0.5 block text-xs text-slate-500">เมื่อบันทึกการจองแล้ว ระบบจะสร้างกิจกรรมตามวันและเวลานี้</span>
+        </span>
+      </label>
 
       <label className="block">
         <span className="text-xs font-semibold text-blue-700">หัวข้อการประชุม</span>
