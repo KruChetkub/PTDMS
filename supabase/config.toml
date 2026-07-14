@@ -16,3 +16,6 @@ verify_jwt = false
 
 [functions.record-login-attempt]
 verify_jwt = false
+
+[functions.backup-restore-data]
+verify_jwt = false

@@ -238,12 +238,12 @@ export async function listAuditLogs(limit = 200) {
   return (data ?? []) as AuditLog[];
 }
 
-export async function listLoginHistory() {
+export async function listLoginHistory(limit = 100) {
   const { data, error } = await supabase
     .from('login_history')
     .select('*, profiles(full_name)')
     .order('login_at', { ascending: false })
-    .limit(100);
+    .limit(limit);
 
   if (error) throw error;
 
