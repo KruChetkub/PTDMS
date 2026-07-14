@@ -158,6 +158,25 @@ export function SecurityPage() {
                 ส่งสำเร็จ {exportResult.total_logs ?? 0} รายการ
                 {exportResult.batch_id ? <span className="block break-all">Batch: {exportResult.batch_id}</span> : null}
                 <span className="block">ลบ log เก่าที่ส่งแล้ว: {exportResult.cleanup_deleted ?? 0} รายการ</span>
+                {(exportResult.remaining_logs ?? 0) > 0 ? (
+                  <span className="mt-1 block text-sky-700">ยังเหลือ log ที่ยังไม่ได้ส่งอีก {(exportResult.remaining_logs ?? 0).toLocaleString('th-TH')} รายการ สามารถกดส่งอีกครั้งเพื่อส่งชุดถัดไป</span>
+                ) : null}
+                {exportResult.archive_file_url ? (
+                  <a
+                    href={exportResult.archive_file_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-1 block font-semibold text-sky-700 underline"
+                  >
+                    เปิดไฟล์ Archive JSON ใน Google Drive
+                  </a>
+                ) : null}
+                {exportResult.archive_skipped ? (
+                  <span className="mt-1 block text-amber-700">ยังไม่ได้สร้างไฟล์ Archive เพราะยังไม่ได้ตั้งค่าโฟลเดอร์ Google Drive สำหรับ Audit Logs</span>
+                ) : null}
+                {exportResult.archive_error ? (
+                  <span className="mt-1 block text-amber-700">สร้างไฟล์ Archive ไม่สำเร็จ: {exportResult.archive_error}</span>
+                ) : null}
                 {exportResult.export_status_update_error ? (
                   <span className="mt-1 block text-amber-700">ส่งเข้า Google Sheet แล้ว แต่ยังอัปเดตสถานะ log ไม่สำเร็จ: {exportResult.export_status_update_error}</span>
                 ) : null}

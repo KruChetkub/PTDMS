@@ -2,6 +2,8 @@ import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.47.10';
 
 const exportedLogRetentionMs = 72 * 60 * 60 * 1000;
+const exportBatchSize = 1000;
+const statusUpdateChunkSize = 100;
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -42,6 +44,15 @@ type ExportCaller = {
   role?: string | null;
 };
 
+type AppsScriptResult = {
+  ok?: boolean;
+  error?: string;
+  archive_file_id?: string;
+  archive_file_url?: string;
+  archive_skipped?: boolean;
+  archive_error?: string;
+};
+
 function jsonResponse(body: Record<string, unknown>, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
@@ -68,6 +79,47 @@ function summarizeByField(logs: AuditLogRow[], field: 'module' | 'action') {
   }, {});
 }
 
+function chunkArray<T>(items: T[], size: number) {
+  const chunks: T[][] = [];
+  for (let index = 0; index < items.length; index += size) {
+    chunks.push(items.slice(index, index + size));
+  }
+  return chunks;
+}
+
+async function markAuditLogs(
+  adminClient: ReturnType<typeof createClient>,
+  ids: string[],
+  values: Record<string, unknown>,
+) {
+  const errors: string[] = [];
+  for (const chunk of chunkArray(ids, statusUpdateChunkSize)) {
+    const { error } = await adminClient
+      .from('audit_logs')
+      .update(values)
+      .in('id', chunk);
+
+    if (error) {
+      errors.push(error.message);
+    }
+  }
+
+  return errors;
+}
+
+async function incrementRetryCount(adminClient: ReturnType<typeof createClient>, ids: string[]) {
+  for (const chunk of chunkArray(ids, statusUpdateChunkSize)) {
+    await adminClient.rpc('increment_audit_log_retry_count', { p_ids: chunk }).then(() => null, () => null);
+  }
+}
+
+async function sha256Hex(value: string) {
+  const data = new TextEncoder().encode(value);
+  const digest = await crypto.subtle.digest('SHA-256', data);
+  return Array.from(new Uint8Array(digest))
+    .map((byte) => byte.toString(16).padStart(2, '0'))
+    .join('');
+}
 function getRequestIp(req: Request) {
   const forwardedFor = req.headers.get('x-forwarded-for');
   const ip = forwardedFor?.split(',')[0]?.trim()
@@ -204,18 +256,32 @@ serve(async (req) => {
 
   await recordManualExportRequest(adminClient, caller, batchId, req);
 
-  const { data: logs, error: logsError } = await adminClient
+  const { data: logs, error: logsError, count: matchingLogCount } = await adminClient
     .from('audit_logs')
-    .select('*')
-    .neq('export_status', 'exported')
+    .select('*', { count: 'exact' })
+    .or('export_status.is.null,export_status.neq.exported')
     .order('created_at', { ascending: true })
-    .limit(1000);
+    .limit(exportBatchSize);
 
   if (logsError) {
     return jsonResponse({ exported: false, reason: logsError.message }, 500);
   }
 
   const pendingLogs = (logs || []) as AuditLogRow[];
+  const remainingLogs = Math.max((matchingLogCount || 0) - pendingLogs.length, 0);
+  const archivePayload = {
+    archive_type: 'audit_logs_export',
+    schema_version: 1,
+    batch_id: batchId,
+    generated_at: new Date().toISOString(),
+    bangkok_date: bangkokDate,
+    total_logs: pendingLogs.length,
+    remaining_logs: remainingLogs,
+    logs: pendingLogs,
+  };
+  const archiveContent = JSON.stringify(archivePayload, null, 2);
+  const archiveChecksum = await sha256Hex(archiveContent);
+
   const payload = {
     event: caller.type === 'scheduler' ? 'audit_logs_daily_export' : 'audit_logs_manual_export',
     trigger: caller.type,
@@ -229,9 +295,16 @@ serve(async (req) => {
     notify_emails: notifyEmails,
     export_secret: exportSecret,
     total_logs: pendingLogs.length,
+    remaining_logs: remainingLogs,
     module_summary: summarizeByField(pendingLogs, 'module'),
     action_summary: summarizeByField(pendingLogs, 'action'),
     logs: pendingLogs,
+    archive: {
+      file_name: `audit-logs-${bangkokDate}-${batchId}.json`,
+      mime_type: 'application/json',
+      sha256: archiveChecksum,
+      content: archiveContent,
+    },
   };
 
   const appsScriptBody = JSON.stringify(payload);
@@ -252,10 +325,10 @@ serve(async (req) => {
   }
 
   const responseText = await appsScriptResponse.text();
-  let appsScriptResult: { ok?: boolean; error?: string } | null = null;
+  let appsScriptResult: AppsScriptResult | null = null;
 
   try {
-    appsScriptResult = JSON.parse(responseText) as { ok?: boolean; error?: string };
+    appsScriptResult = JSON.parse(responseText) as AppsScriptResult;
   } catch {
     appsScriptResult = null;
   }
@@ -274,15 +347,12 @@ serve(async (req) => {
 
     const ids = pendingLogs.map((log) => log.id);
     if (ids.length > 0) {
-      await adminClient
-        .from('audit_logs')
-        .update({
-          export_status: 'failed',
-          last_export_error: appsScriptError.slice(0, 500),
-        })
-        .in('id', ids);
+      await markAuditLogs(adminClient, ids, {
+        export_status: 'failed',
+        last_export_error: appsScriptError.slice(0, 500),
+      });
 
-      await adminClient.rpc('increment_audit_log_retry_count', { p_ids: ids }).then(() => null, () => null);
+      await incrementRetryCount(adminClient, ids);
     }
 
     return jsonResponse({ exported: false, batch_id: batchId, reason: appsScriptError.slice(0, 500) }, 502);
@@ -292,21 +362,18 @@ serve(async (req) => {
   let exportStatusUpdateError: string | null = null;
 
   if (ids.length > 0) {
-    const { error: updateError } = await adminClient
-      .from('audit_logs')
-      .update({
-        exported_at: new Date().toISOString(),
-        export_status: 'exported',
-        export_batch_id: batchId,
-        last_export_error: null,
-      })
-      .in('id', ids);
+    const updateErrors = await markAuditLogs(adminClient, ids, {
+      exported_at: new Date().toISOString(),
+      export_status: 'exported',
+      export_batch_id: batchId,
+      last_export_error: null,
+    });
 
-    if (updateError) {
-      exportStatusUpdateError = updateError.message;
+    if (updateErrors.length > 0) {
+      exportStatusUpdateError = updateErrors.join('; ').slice(0, 500);
       console.error('Audit log export succeeded but status update failed', {
         batchId,
-        error: updateError.message,
+        error: exportStatusUpdateError,
       });
     }
   }
@@ -323,6 +390,11 @@ serve(async (req) => {
     trigger: caller.type,
     batch_id: batchId,
     total_logs: pendingLogs.length,
+    remaining_logs: remainingLogs,
+    archive_file_url: appsScriptResult?.archive_file_url || null,
+    archive_file_id: appsScriptResult?.archive_file_id || null,
+    archive_skipped: appsScriptResult?.archive_skipped || false,
+    archive_error: appsScriptResult?.archive_error || null,
     cleanup_deleted: cleanupDeleted || 0,
     cleanup_error: cleanupError?.message || null,
     export_status_update_error: exportStatusUpdateError,

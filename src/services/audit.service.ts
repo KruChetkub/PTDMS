@@ -147,6 +147,11 @@ export type AuditLogGoogleSheetExportResult = {
   trigger?: 'manual' | 'scheduler';
   batch_id?: string;
   total_logs?: number;
+  remaining_logs?: number;
+  archive_file_url?: string | null;
+  archive_file_id?: string | null;
+  archive_skipped?: boolean;
+  archive_error?: string | null;
   cleanup_deleted?: number;
   cleanup_error?: string | null;
   export_status_update_error?: string | null;
