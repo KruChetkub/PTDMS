@@ -5,9 +5,13 @@
  * - SPREADSHEET_ID: Google Sheet id for audit log rows
  * - AUDIT_LOG_EXPORT_SECRET: same value as Supabase Function secret AUDIT_LOG_EXPORT_SECRET
  * - DEFAULT_NOTIFY_EMAILS: optional comma-separated notification emails
- * - AUDIT_LOG_ARCHIVE_FOLDER_ID: optional Google Drive folder id for JSON archive files
+ * - AUDIT_LOG_ARCHIVE_FOLDER_ID: optional override for Google Drive archive folder id
+ *
+ * Default archive folder:
+ * 1jPXYXmj-Ey7abo9X9YypUJivS6eWeslm
  */
 const SCRIPT_PROPS = PropertiesService.getScriptProperties();
+const DEFAULT_AUDIT_LOG_ARCHIVE_FOLDER_ID = '1jPXYXmj-Ey7abo9X9YypUJivS6eWeslm';
 
 const HEADERS = [
   'export_batch_id',
@@ -288,7 +292,7 @@ function toSheetRow_(payload, log, exportedToSheetAt) {
 }
 
 function saveAuditArchive_(payload) {
-  const folderId = SCRIPT_PROPS.getProperty('AUDIT_LOG_ARCHIVE_FOLDER_ID');
+  const folderId = SCRIPT_PROPS.getProperty('AUDIT_LOG_ARCHIVE_FOLDER_ID') || DEFAULT_AUDIT_LOG_ARCHIVE_FOLDER_ID;
   if (!folderId) {
     return { skipped: true };
   }
