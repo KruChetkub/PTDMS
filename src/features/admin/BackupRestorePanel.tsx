@@ -202,7 +202,27 @@ export function BackupRestorePanel() {
   }
 
   return (
-    <div className="space-y-6">      <div className="grid gap-4 md:grid-cols-3">
+    <div className="space-y-6">
+      {backupRunning ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 px-4 backdrop-blur-sm">
+          <div
+            role="status"
+            aria-live="polite"
+            className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-6 text-center shadow-2xl"
+          >
+            <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-blue-50 text-blue-600">
+              <Loader2 className="h-6 w-6 animate-spin" />
+            </div>
+            <h3 className="text-lg font-bold text-slate-900">กำลังสร้าง Backup</h3>
+            <p className="mt-2 text-sm leading-6 text-slate-600">
+              กรุณารอสักครู่ ระบบกำลังดึงข้อมูลจาก Supabase และส่งไฟล์ไปจัดเก็บที่ Google Drive
+            </p>
+            <p className="mt-3 text-xs text-slate-500">อย่าปิดหน้านี้จนกว่าการสร้าง Backup จะเสร็จสิ้น</p>
+          </div>
+        </div>
+      ) : null}
+
+      <div className="grid gap-4 md:grid-cols-3">
         <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="mb-3 flex items-center gap-3">
             <div className="rounded-lg bg-blue-50 p-2 text-blue-600">
@@ -260,7 +280,7 @@ export function BackupRestorePanel() {
           <div className="mb-5 flex items-start justify-between gap-4">
             <div>
               <h3 className="text-lg font-bold text-slate-900">Restore จากไฟล์ Backup</h3>
-              <p className="text-sm text-slate-500">เลือกไฟล์ JSON ที่สร้างจากระบบ แล้วกู้ข้อมูลกลับเข้า Supabase</p>
+              <p className="text-sm text-slate-500">เลือกไฟล์ JSON ที่สร้างจากระบบ แล้วกู้ข้อมูลตารางกลับเข้า Supabase</p>
             </div>
             <UploadCloud className="h-5 w-5 text-slate-400" />
           </div>
@@ -271,6 +291,7 @@ export function BackupRestorePanel() {
             className="block w-full rounded-md border border-slate-200 px-3 py-2 text-sm text-slate-600 file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-sm file:font-semibold file:text-slate-700"
           />
           {selectedBackupName ? <p className="mt-2 text-xs text-slate-500">เลือกไฟล์: {selectedBackupName}</p> : null}
+          <p className="mt-3 rounded-md bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-600">ไฟล์ JSON ใช้กู้ข้อมูลตาราง ส่วนรูปภาพ/PDF ที่ส่งไป Google Drive จะมี storage-manifest.json ระบุ bucket และ path เดิมสำหรับกู้ไฟล์กลับตำแหน่งเดิม</p>
           <button
             type="button"
             onClick={handleRestoreBackup}

@@ -38,29 +38,34 @@ function doPost(e) {
     const backupJson = JSON.stringify(backup, null, 2);
     const backupFile = backupFolder.createFile('backup.json', backupJson, MimeType.PLAIN_TEXT);
 
-    const storageFolder = backupFolder.createFolder('storage-files');
+    const storageRootFolder = backupFolder.createFolder('storage-files');
     const storageManifest = Array.isArray(backup.storage_manifest) ? backup.storage_manifest : [];
     let savedStorageFiles = 0;
     const storageErrors = [];
+    const savedStorageManifest = [];
 
     storageManifest.forEach(function(item) {
-      try {
-        if (!item || !item.signed_url) return;
-        const response = UrlFetchApp.fetch(String(item.signed_url), { muteHttpExceptions: true });
-        if (response.getResponseCode() >= 400) {
-          storageErrors.push({ path: item.path || '', error: 'http_' + response.getResponseCode() });
-          return;
-        }
+      const result = saveStorageObject_(storageRootFolder, item);
+      savedStorageManifest.push(result);
 
-        const bucket = sanitizeFileName(String(item.bucket || 'bucket'));
-        const path = sanitizeFileName(String(item.path || 'file'));
-        const fileName = bucket + '__' + path;
-        storageFolder.createFile(response.getBlob().setName(fileName));
+      if (result.saved) {
         savedStorageFiles += 1;
-      } catch (error) {
-        storageErrors.push({ path: item && item.path ? item.path : '', error: String(error) });
+      }
+
+      if (result.error) {
+        storageErrors.push({
+          bucket: result.bucket || '',
+          path: result.path || '',
+          error: result.error,
+        });
       }
     });
+
+    const storageManifestFile = backupFolder.createFile(
+      'storage-manifest.json',
+      JSON.stringify(savedStorageManifest, null, 2),
+      MimeType.PLAIN_TEXT
+    );
 
     return jsonResponse({
       ok: true,
@@ -69,6 +74,8 @@ function doPost(e) {
       folder_url: backupFolder.getUrl(),
       backup_file_id: backupFile.getId(),
       backup_file_url: backupFile.getUrl(),
+      storage_manifest_file_id: storageManifestFile.getId(),
+      storage_manifest_file_url: storageManifestFile.getUrl(),
       saved_storage_files: savedStorageFiles,
       storage_errors: storageErrors.slice(0, 50),
     });
@@ -77,8 +84,62 @@ function doPost(e) {
   }
 }
 
-function sanitizeFileName(value) {
-  return value.replace(/[\\/:*?"<>|#%{}~&]/g, '_').slice(0, 180);
+function saveStorageObject_(storageRootFolder, item) {
+  const bucket = item && item.bucket ? String(item.bucket) : 'bucket';
+  const path = item && item.path ? String(item.path) : '';
+  const manifest = {
+    bucket: bucket,
+    path: path,
+    original_name: item && item.name ? String(item.name) : '',
+    drive_path: '',
+    drive_file_id: null,
+    drive_file_url: null,
+    metadata: item && item.metadata ? item.metadata : null,
+    saved: false,
+    error: null,
+  };
+
+  try {
+    if (!item || !item.signed_url) {
+      manifest.error = 'missing_signed_url';
+      return manifest;
+    }
+
+    const response = UrlFetchApp.fetch(String(item.signed_url), { muteHttpExceptions: true });
+    if (response.getResponseCode() >= 400) {
+      manifest.error = 'http_' + response.getResponseCode();
+      return manifest;
+    }
+
+    const bucketFolder = getOrCreateFolder_(storageRootFolder, sanitizeDriveName_(bucket));
+    const pathParts = path.split('/').filter(Boolean);
+    const fileName = sanitizeDriveName_(pathParts.pop() || manifest.original_name || 'file');
+    let parentFolder = bucketFolder;
+
+    pathParts.forEach(function(part) {
+      parentFolder = getOrCreateFolder_(parentFolder, sanitizeDriveName_(part));
+    });
+
+    const file = parentFolder.createFile(response.getBlob().setName(fileName));
+    manifest.drive_path = bucket + '/' + path;
+    manifest.drive_file_id = file.getId();
+    manifest.drive_file_url = file.getUrl();
+    manifest.saved = true;
+    return manifest;
+  } catch (error) {
+    manifest.error = String(error);
+    return manifest;
+  }
+}
+
+function getOrCreateFolder_(parentFolder, name) {
+  const safeName = sanitizeDriveName_(name);
+  const folders = parentFolder.getFoldersByName(safeName);
+  return folders.hasNext() ? folders.next() : parentFolder.createFolder(safeName);
+}
+
+function sanitizeDriveName_(value) {
+  return String(value || 'unnamed').replace(/[\\/:*?"<>|#%{}~&]/g, '_').slice(0, 180);
 }
 
 function jsonResponse(value, status) {
