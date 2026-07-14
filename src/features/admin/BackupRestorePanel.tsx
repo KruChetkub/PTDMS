@@ -1,9 +1,9 @@
 import { ChangeEvent, useEffect, useState } from 'react';
 import {
+  ChevronDown,
   ClipboardCheck,
   Database,
   Download,
-  FileCheck2,
   HardDrive,
   Loader2,
   Plus,
@@ -25,9 +25,11 @@ import {
   type RestoreTestRecord,
   type RestoreTestStatus,
 } from '../../services/system-settings.service';
+import { ConfirmModal } from '../../components/ui/ConfirmModal';
 import { getSafeUserErrorMessage } from '../../utils/errorHandling';
 
 type RestoreTestForm = Omit<RestoreTestRecord, 'id'>;
+type BackupActionKey = 'create' | 'restoreDatabase' | 'restoreStorage';
 
 const restoreTestStatusLabels: Record<RestoreTestStatus, string> = {
   not_started: 'ยังไม่ได้ทดสอบ',
@@ -57,6 +59,8 @@ export function BackupRestorePanel() {
   const [settings, setSettings] = useState<BackupRestoreSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [isSaveSuccessModalOpen, setIsSaveSuccessModalOpen] = useState(false);
+  const [expandedBackupAction, setExpandedBackupAction] = useState<BackupActionKey | null>(null);
   const [backupRunning, setBackupRunning] = useState(false);
   const [restoreRunning, setRestoreRunning] = useState(false);
   const [storageRestoreRunning, setStorageRestoreRunning] = useState(false);
@@ -87,6 +91,10 @@ export function BackupRestorePanel() {
   const updateSetting = <Key extends keyof BackupRestoreSettings>(key: Key, value: BackupRestoreSettings[Key]) => {
     setSettings((current) => (current ? { ...current, [key]: value } : current));
     setSavedMessage(null);
+  };
+
+  const toggleBackupAction = (action: BackupActionKey) => {
+    setExpandedBackupAction((current) => (current === action ? null : action));
   };
 
   const updateRestoreTestForm = <Key extends keyof RestoreTestForm>(key: Key, value: RestoreTestForm[Key]) => {
@@ -129,7 +137,7 @@ export function BackupRestorePanel() {
     try {
       const savedSettings = await saveBackupRestoreSettings(settings);
       setSettings(savedSettings);
-      setSavedMessage('บันทึกข้อมูล Backup / Restore แล้ว');
+      setIsSaveSuccessModalOpen(true);
     } catch (err) {
       setError(getSafeUserErrorMessage(err, 'ไม่สามารถบันทึกข้อมูล Backup / Restore ได้'));
     } finally {
@@ -252,113 +260,120 @@ export function BackupRestorePanel() {
         </div>
       ) : null}
 
-      <div className="grid gap-4 md:grid-cols-3">
-        <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="mb-3 flex items-center gap-3">
-            <div className="rounded-lg bg-blue-50 p-2 text-blue-600">
-              <Database className="h-5 w-5" />
-            </div>
-            <h3 className="font-bold text-slate-900">Database Backup</h3>
-          </div>
-          <p className="text-sm text-slate-600">สำรองข้อมูลทุกตารางสำคัญจาก Supabase เป็นไฟล์ JSON</p>
-        </div>
-        <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="mb-3 flex items-center gap-3">
-            <div className="rounded-lg bg-violet-50 p-2 text-violet-600">
-              <HardDrive className="h-5 w-5" />
-            </div>
-            <h3 className="font-bold text-slate-900">Google Drive</h3>
-          </div>
-          <p className="text-sm text-slate-600">ส่งข้อมูลและ signed URL ของไฟล์ไป Google Apps Script เพื่อเก็บใน Drive</p>
-        </div>
-        <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="mb-3 flex items-center gap-3">
-            <div className="rounded-lg bg-emerald-50 p-2 text-emerald-600">
-              <FileCheck2 className="h-5 w-5" />
-            </div>
-            <h3 className="font-bold text-slate-900">Restore</h3>
-          </div>
-          <p className="text-sm text-slate-600">นำไฟล์ JSON กลับเข้า Supabase ได้จากหน้านี้ หรือใช้ไฟล์เดียวกัน restore ตรงภายนอกได้</p>
-        </div>
-      </div>
 
       {error ? <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div> : null}
       {savedMessage ? <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{savedMessage}</div> : null}
 
-      <div className="grid gap-6 xl:grid-cols-3">
-        <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-          <div className="mb-5 flex items-start justify-between gap-4">
-            <div>
-              <h3 className="text-lg font-bold text-slate-900">สร้าง Backup จริง</h3>
-              <p className="text-sm text-slate-500">ดึงข้อมูลจาก Supabase ส่งไป Google Apps Script/Drive และดาวน์โหลด JSON สำรองไว้</p>
-            </div>
-            <Download className="h-5 w-5 text-slate-400" />
-          </div>
-          <button
-            type="button"
-            onClick={handleCreateBackup}
-            disabled={backupRunning}
-            className="inline-flex w-full items-center justify-center gap-2 rounded-md bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {backupRunning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Database className="h-4 w-4" />}
-            {backupRunning ? 'กำลังสร้าง Backup' : 'สร้าง Backup และส่งไป Google Drive'}
-          </button>
-          <p className="mt-3 text-xs text-slate-500">ถ้ายังไม่ได้ตั้งค่า Apps Script ระบบจะยังดาวน์โหลดไฟล์ JSON ให้เก็บไว้ก่อน</p>
-        </div>
+      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        {[
+          {
+            key: 'create' as const,
+            title: 'สร้าง Backup',
+            description: 'ดึงข้อมูลจาก Supabase ส่งไป Google Apps Script/Drive และดาวน์โหลด JSON สำรองไว้',
+            icon: Download,
+          },
+          {
+            key: 'restoreDatabase' as const,
+            title: 'Restore จากไฟล์ Backup',
+            description: 'เลือกไฟล์ JSON ที่สร้างจากระบบ แล้วกู้ข้อมูลตารางกลับเข้า Supabase',
+            icon: UploadCloud,
+          },
+          {
+            key: 'restoreStorage' as const,
+            title: 'Restore ไฟล์ Storage จาก Google Drive',
+            description: 'กรอก Folder URL หรือ Folder ID ของ Backup เพื่อกู้รูปภาพ/PDF กลับ bucket และ path เดิม',
+            icon: HardDrive,
+          },
+        ].map((item, index) => {
+          const Icon = item.icon;
+          const isExpanded = expandedBackupAction === item.key;
 
-        <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-          <div className="mb-5 flex items-start justify-between gap-4">
-            <div>
-              <h3 className="text-lg font-bold text-slate-900">Restore จากไฟล์ Backup</h3>
-              <p className="text-sm text-slate-500">เลือกไฟล์ JSON ที่สร้างจากระบบ แล้วกู้ข้อมูลตารางกลับเข้า Supabase</p>
-            </div>
-            <UploadCloud className="h-5 w-5 text-slate-400" />
-          </div>
-          <input
-            type="file"
-            accept="application/json,.json"
-            onChange={handleBackupFileChange}
-            className="block w-full rounded-md border border-slate-200 px-3 py-2 text-sm text-slate-600 file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-sm file:font-semibold file:text-slate-700"
-          />
-          {selectedBackupName ? <p className="mt-2 text-xs text-slate-500">เลือกไฟล์: {selectedBackupName}</p> : null}
-          <p className="mt-3 rounded-md bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-600">ไฟล์ JSON ใช้กู้ข้อมูลตาราง ส่วนรูปภาพ/PDF ที่ส่งไป Google Drive จะมี storage-manifest.json ระบุ bucket และ path เดิมสำหรับกู้ไฟล์กลับตำแหน่งเดิม</p>
-          <button
-            type="button"
-            onClick={handleRestoreBackup}
-            disabled={restoreRunning || !selectedBackup}
-            className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-md bg-amber-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {restoreRunning ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />}
-            {restoreRunning ? 'กำลัง Restore' : 'Restore ตารางเข้า Supabase'}
-          </button>
-        </div>
+          return (
+            <div key={item.key} className="border-b border-slate-100 last:border-b-0">
+              <button
+                type="button"
+                onClick={() => toggleBackupAction(item.key)}
+                className="flex w-full items-center gap-4 px-4 py-4 text-left transition hover:bg-slate-50 sm:px-6"
+                aria-expanded={isExpanded}
+              >
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-900 text-sm font-bold text-white">
+                  {(index + 1).toLocaleString('th-TH')}
+                </span>
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-slate-50 text-slate-600">
+                  <Icon className="h-5 w-5" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-bold text-slate-900 sm:text-base">{item.title}</span>
+                  <span className="mt-1 block text-xs leading-5 text-slate-500 sm:text-sm">{item.description}</span>
+                </span>
+                <ChevronDown className={`h-5 w-5 shrink-0 text-slate-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+              </button>
 
-        <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-          <div className="mb-5 flex items-start justify-between gap-4">
-            <div>
-              <h3 className="text-lg font-bold text-slate-900">Restore ไฟล์ Storage จาก Google Drive</h3>
-              <p className="text-sm text-slate-500">กรอก Folder URL หรือ Folder ID ของ Backup เพื่อกู้รูปภาพ/PDF กลับ bucket และ path เดิม</p>
+              {isExpanded ? (
+                <div className="border-t border-slate-100 bg-slate-50/60 px-4 py-5 sm:px-6">
+                  {item.key === 'create' ? (
+                    <div className="max-w-xl space-y-3">
+                      <button
+                        type="button"
+                        onClick={handleCreateBackup}
+                        disabled={backupRunning}
+                        className="inline-flex w-full items-center justify-center gap-2 rounded-md bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+                      >
+                        {backupRunning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Database className="h-4 w-4" />}
+                        {backupRunning ? 'กำลังสร้าง Backup' : 'สร้าง Backup และส่งไป Google Drive'}
+                      </button>
+                      <p className="text-xs leading-5 text-slate-500">ถ้ายังไม่ได้ตั้งค่า Apps Script ระบบจะยังดาวน์โหลดไฟล์ JSON ให้เก็บไว้ก่อน</p>
+                    </div>
+                  ) : null}
+
+                  {item.key === 'restoreDatabase' ? (
+                    <div className="max-w-xl space-y-3">
+                      <input
+                        type="file"
+                        accept="application/json,.json"
+                        onChange={handleBackupFileChange}
+                        className="block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-sm file:font-semibold file:text-slate-700"
+                      />
+                      {selectedBackupName ? <p className="text-xs text-slate-500">เลือกไฟล์: {selectedBackupName}</p> : null}
+                      <p className="rounded-md bg-white px-3 py-2 text-xs leading-5 text-slate-600">ไฟล์ JSON ใช้กู้ข้อมูลตาราง ส่วนรูปภาพ/PDF ที่ส่งไป Google Drive จะมี storage-manifest.json ระบุ bucket และ path เดิมสำหรับกู้ไฟล์กลับตำแหน่งเดิม</p>
+                      <button
+                        type="button"
+                        onClick={handleRestoreBackup}
+                        disabled={restoreRunning || !selectedBackup}
+                        className="inline-flex w-full items-center justify-center gap-2 rounded-md bg-amber-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+                      >
+                        {restoreRunning ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />}
+                        {restoreRunning ? 'กำลัง Restore' : 'Restore ตารางเข้า Supabase'}
+                      </button>
+                    </div>
+                  ) : null}
+
+                  {item.key === 'restoreStorage' ? (
+                    <div className="max-w-xl space-y-3">
+                      <input
+                        type="text"
+                        value={storageBackupFolderUrl}
+                        onChange={(event) => setStorageBackupFolderUrl(event.target.value)}
+                        placeholder="เช่น https://drive.google.com/drive/folders/..."
+                        className="block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-100"
+                      />
+                      <p className="rounded-md bg-white px-3 py-2 text-xs leading-5 text-slate-600">ระบบจะอ่าน storage-manifest.json ในโฟลเดอร์นี้ แล้วอัปโหลดไฟล์กลับ Supabase Storage ตามตำแหน่งเดิม จำกัดต่อครั้งประมาณ 200 ไฟล์หรือ 25MB</p>
+                      <button
+                        type="button"
+                        onClick={handleRestoreStorage}
+                        disabled={storageRestoreRunning || !storageBackupFolderUrl.trim()}
+                        className="inline-flex w-full items-center justify-center gap-2 rounded-md bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+                      >
+                        {storageRestoreRunning ? <Loader2 className="h-4 w-4 animate-spin" /> : <HardDrive className="h-4 w-4" />}
+                        {storageRestoreRunning ? 'กำลัง Restore ไฟล์ Storage' : 'Restore รูปภาพ/PDF เข้า Storage'}
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
-            <HardDrive className="h-5 w-5 text-slate-400" />
-          </div>
-          <input
-            type="text"
-            value={storageBackupFolderUrl}
-            onChange={(event) => setStorageBackupFolderUrl(event.target.value)}
-            placeholder="เช่น https://drive.google.com/drive/folders/..."
-            className="block w-full rounded-md border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-100"
-          />
-          <p className="mt-3 rounded-md bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-600">ระบบจะอ่าน storage-manifest.json ในโฟลเดอร์นี้ แล้วอัปโหลดไฟล์กลับ Supabase Storage ตามตำแหน่งเดิม จำกัดต่อครั้งประมาณ 200 ไฟล์หรือ 25MB</p>
-          <button
-            type="button"
-            onClick={handleRestoreStorage}
-            disabled={storageRestoreRunning || !storageBackupFolderUrl.trim()}
-            className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-md bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {storageRestoreRunning ? <Loader2 className="h-4 w-4 animate-spin" /> : <HardDrive className="h-4 w-4" />}
-            {storageRestoreRunning ? 'กำลัง Restore ไฟล์ Storage' : 'Restore รูปภาพ/PDF เข้า Storage'}
-          </button>
-        </div>
+          );
+        })}
       </div>
 
       {operationResult ? (
@@ -580,6 +595,17 @@ export function BackupRestorePanel() {
           </table>
         </div>
       </div>
+
+      <ConfirmModal
+        isOpen={isSaveSuccessModalOpen}
+        onClose={() => setIsSaveSuccessModalOpen(false)}
+        onConfirm={() => setIsSaveSuccessModalOpen(false)}
+        title="บันทึกข้อมูลสำเร็จ"
+        message="บันทึกข้อมูลกำกับ Backup / Restore แล้ว"
+        confirmLabel="ตกลง"
+        cancelLabel="ปิด"
+        variant="info"
+      />
     </div>
   );
 }
