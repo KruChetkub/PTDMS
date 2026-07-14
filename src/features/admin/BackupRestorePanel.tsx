@@ -396,7 +396,7 @@ export function BackupRestorePanel() {
 
         <div className="grid gap-4 md:grid-cols-2">
           <label className="space-y-1 text-sm font-medium text-slate-700">
-            RPO (ชั่วโมง)
+            RPO ยอมให้ข้อมูลย้อนหลังหายได้กี่ชั่วโมง
             <input
               type="number"
               min={1}
@@ -406,7 +406,7 @@ export function BackupRestorePanel() {
             />
           </label>
           <label className="space-y-1 text-sm font-medium text-slate-700">
-            RTO (ชั่วโมง)
+            RTO ต้องกู้ระบบกลับมาให้ใช้ได้ภายในกี่ชั่วโมง
             <input
               type="number"
               min={1}
@@ -439,7 +439,8 @@ export function BackupRestorePanel() {
               type="text"
               value={settings.responsibleOwner}
               onChange={(event) => updateSetting('responsibleOwner', event.target.value)}
-              className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-100"
+              placeholder="Super Admin / ผู้ดูแลระบบ PTDMS"
+              className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm placeholder:text-slate-400 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-100"
             />
           </label>
           <label className="space-y-1 text-sm font-medium text-slate-700">
