@@ -8,10 +8,10 @@
  * - AUDIT_LOG_ARCHIVE_FOLDER_ID: optional override for Google Drive archive folder id
  *
  * Default archive folder:
- * 1jPXYXmj-Ey7abo9X9YypUJivS6eWeslm
+ * 
  */
 const SCRIPT_PROPS = PropertiesService.getScriptProperties();
-const DEFAULT_AUDIT_LOG_ARCHIVE_FOLDER_ID = '1jPXYXmj-Ey7abo9X9YypUJivS6eWeslm';
+const DEFAULT_AUDIT_LOG_ARCHIVE_FOLDER_ID = '';
 
 const HEADERS = [
   'export_batch_id',

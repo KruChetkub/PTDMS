@@ -8,9 +8,9 @@
  * - BACKUP_NOTIFY_EMAILS: comma-separated email list for daily backup notifications
  *
  * Backup files are stored in this Google Drive folder by default:
- * 1fNgrPIJTgtGN3jcBlWAwofMQzf_Ii8eg
+ * 
  */
-const BACKUP_DRIVE_FOLDER_ID = '1fNgrPIJTgtGN3jcBlWAwofMQzf_Ii8eg';
+const BACKUP_DRIVE_FOLDER_ID = '';
 function doPost(e) {
   try {
     const payload = JSON.parse(e.postData.contents || '{}');
