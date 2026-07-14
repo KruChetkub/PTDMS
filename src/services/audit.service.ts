@@ -152,6 +152,8 @@ export type AuditLogGoogleSheetExportResult = {
   archive_file_id?: string | null;
   archive_skipped?: boolean;
   archive_error?: string | null;
+  archive_download_file_name?: string | null;
+  archive_download_content?: string | null;
   cleanup_deleted?: number;
   cleanup_error?: string | null;
   export_status_update_error?: string | null;

@@ -24,6 +24,20 @@ import { getSafeUserErrorMessage } from '../../utils/errorHandling';
 const loginHistoryPageSize = 10;
 type SecurityTab = 'history' | 'backup';
 
+function downloadAuditArchive(fileName: string, content: string) {
+  if (typeof window === 'undefined') return;
+
+  const blob = new Blob([content], { type: 'application/json;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = fileName || 'audit-logs-archive.json';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
 export function SecurityPage() {
   const [activeTab, setActiveTab] = useState<SecurityTab>('history');
   const [history, setHistory] = useState<LoginHistory[]>([]);
@@ -73,6 +87,9 @@ export function SecurityPage() {
 
     try {
       const result = await exportAuditLogsToGoogleSheet();
+      if (result.archive_download_content) {
+        downloadAuditArchive(result.archive_download_file_name || 'audit-logs-archive.json', result.archive_download_content);
+      }
       setExportResult(result);
     } catch (err) {
       setExportError(getSafeUserErrorMessage(err, 'ไม่สามารถส่ง Audit Logs ไป Google Sheet ได้'));
@@ -171,11 +188,8 @@ export function SecurityPage() {
                     เปิดไฟล์ Archive JSON ใน Google Drive
                   </a>
                 ) : null}
-                {exportResult.archive_skipped ? (
-                  <span className="mt-1 block text-amber-700">ยังไม่ได้สร้างไฟล์ Archive เพราะยังไม่ได้ตั้งค่าโฟลเดอร์ Google Drive สำหรับ Audit Logs</span>
-                ) : null}
-                {exportResult.archive_error ? (
-                  <span className="mt-1 block text-amber-700">สร้างไฟล์ Archive ไม่สำเร็จ: {exportResult.archive_error}</span>
+                {!exportResult.archive_file_url && exportResult.archive_download_content ? (
+                  <span className="mt-1 block text-sky-700">ดาวน์โหลดไฟล์ Archive JSON ลงเครื่องแล้ว</span>
                 ) : null}
                 {exportResult.export_status_update_error ? (
                   <span className="mt-1 block text-amber-700">ส่งเข้า Google Sheet แล้ว แต่ยังอัปเดตสถานะ log ไม่สำเร็จ: {exportResult.export_status_update_error}</span>

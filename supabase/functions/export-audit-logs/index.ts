@@ -395,6 +395,8 @@ serve(async (req) => {
     archive_file_id: appsScriptResult?.archive_file_id || null,
     archive_skipped: appsScriptResult?.archive_skipped || false,
     archive_error: appsScriptResult?.archive_error || null,
+    archive_download_file_name: appsScriptResult?.archive_file_url ? null : payload.archive.file_name,
+    archive_download_content: appsScriptResult?.archive_file_url ? null : archiveContent,
     cleanup_deleted: cleanupDeleted || 0,
     cleanup_error: cleanupError?.message || null,
     export_status_update_error: exportStatusUpdateError,
