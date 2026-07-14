@@ -87,7 +87,7 @@ const externalSystems: PortalCard[] = [
   {
     title: 'ระบบจัดเก็บข้อมูลกลาง กยผ.',
     shortTitle: 'คลังข้อมูลกลาง กยผ.',
-    description: 'คลังข้อมูลกลาง กยผ. (NAS)',
+    description: 'คลังข้อมูลกลาง กยผ.เวลาสำหรับเข้าใช้งาน 08.30 - 16.30 น.(NAS)',
     externalUrl: 'http://10.100.43.2:5000/#/signin',
     icon: Database,
     roles: ['super_admin', 'admin', 'executive', 'hr', 'personnel'],
