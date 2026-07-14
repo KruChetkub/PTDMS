@@ -408,6 +408,7 @@ async function recordBackupAudit(
     actor_role: caller.role,
     module: 'backup_restore',
     action,
+    resource_type: 'backup_restore',
     route: '/admin/security',
     target_type: 'backup_restore',
     status,

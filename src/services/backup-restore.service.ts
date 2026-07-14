@@ -56,6 +56,7 @@ function getBackupRestoreErrorMessage(reason?: string | null) {
   if (reason === 'missing_supabase_env') return 'Supabase Function ยังไม่ได้ตั้งค่า SUPABASE_URL หรือ SUPABASE_SERVICE_ROLE_KEY';
   if (reason === 'missing_backup_restore_env') return 'ยังไม่ได้ตั้งค่า BACKUP_RESTORE_APPS_SCRIPT_URL หรือ BACKUP_RESTORE_SECRET ใน Supabase Secrets';
   if (reason === 'invalid_backup_payload') return 'ไฟล์ Backup ไม่ถูกต้องหรือไม่ใช่ไฟล์ของ PTDMS';
+  if (reason === 'invalid_payload') return 'Google Apps Script ยังไม่รองรับคำสั่งนี้ กรุณาอัปเดตและ Deploy Apps Script เวอร์ชันล่าสุด';
   if (reason === 'missing_backup_folder_id') return 'กรุณาระบุ Google Drive Folder ของ Backup';
   if (reason === 'storage_manifest_not_found') return 'ไม่พบไฟล์ storage-manifest.json ในโฟลเดอร์ Backup นี้';
   if (reason === 'restore_payload_size_limit') return 'ไฟล์ Storage มีขนาดรวมเกินขีดจำกัดต่อครั้ง กรุณาแบ่ง Restore เป็นชุดเล็กลง';
