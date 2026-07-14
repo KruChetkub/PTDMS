@@ -14,6 +14,7 @@ import {
 import {
   createSystemBackup,
   downloadBackupJson,
+  restoreStorageFromDrive,
   restoreSystemBackup,
   type BackupRestoreFunctionResult,
 } from '../../services/backup-restore.service';
@@ -58,11 +59,13 @@ export function BackupRestorePanel() {
   const [saving, setSaving] = useState(false);
   const [backupRunning, setBackupRunning] = useState(false);
   const [restoreRunning, setRestoreRunning] = useState(false);
+  const [storageRestoreRunning, setStorageRestoreRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
   const [operationResult, setOperationResult] = useState<BackupRestoreFunctionResult | null>(null);
   const [selectedBackup, setSelectedBackup] = useState<Record<string, unknown> | null>(null);
   const [selectedBackupName, setSelectedBackupName] = useState<string>('');
+  const [storageBackupFolderUrl, setStorageBackupFolderUrl] = useState('');
   const [restoreTestForm, setRestoreTestForm] = useState<RestoreTestForm>(emptyRestoreTestForm);
 
   useEffect(() => {
@@ -143,6 +146,10 @@ export function BackupRestorePanel() {
     try {
       const result = await createSystemBackup(true);
       setOperationResult(result);
+      const driveFolderUrl = result.apps_script?.result?.folder_url;
+      if (typeof driveFolderUrl === 'string') {
+        setStorageBackupFolderUrl(driveFolderUrl);
+      }
       if (result.backup) {
         downloadBackupJson(result.backup);
       }
@@ -185,11 +192,34 @@ export function BackupRestorePanel() {
     try {
       const result = await restoreSystemBackup(selectedBackup);
       setOperationResult(result);
-      setSavedMessage('Restore ข้อมูลกลับเข้า Supabase แล้ว');
+      setSavedMessage('Restore ข้อมูลตารางกลับเข้า Supabase แล้ว');
     } catch (err) {
       setError(getSafeUserErrorMessage(err, 'ไม่สามารถ Restore ข้อมูลได้'));
     } finally {
       setRestoreRunning(false);
+    }
+  };
+
+  const handleRestoreStorage = async () => {
+    const folderUrl = storageBackupFolderUrl.trim();
+    if (!folderUrl) {
+      setError('กรุณากรอก Google Drive Folder URL หรือ Folder ID ของ Backup');
+      return;
+    }
+
+    setStorageRestoreRunning(true);
+    setError(null);
+    setSavedMessage(null);
+    setOperationResult(null);
+
+    try {
+      const result = await restoreStorageFromDrive(folderUrl);
+      setOperationResult(result);
+      setSavedMessage('Restore ไฟล์รูปภาพ/PDF กลับเข้า Supabase Storage แล้ว');
+    } catch (err) {
+      setError(getSafeUserErrorMessage(err, 'ไม่สามารถ Restore ไฟล์ Storage ได้'));
+    } finally {
+      setStorageRestoreRunning(false);
     }
   };
 
@@ -255,7 +285,7 @@ export function BackupRestorePanel() {
       {error ? <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div> : null}
       {savedMessage ? <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{savedMessage}</div> : null}
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid gap-6 xl:grid-cols-3">
         <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
           <div className="mb-5 flex items-start justify-between gap-4">
             <div>
@@ -299,7 +329,34 @@ export function BackupRestorePanel() {
             className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-md bg-amber-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {restoreRunning ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />}
-            {restoreRunning ? 'กำลัง Restore' : 'Restore เข้า Supabase'}
+            {restoreRunning ? 'กำลัง Restore' : 'Restore ตารางเข้า Supabase'}
+          </button>
+        </div>
+
+        <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="mb-5 flex items-start justify-between gap-4">
+            <div>
+              <h3 className="text-lg font-bold text-slate-900">Restore ไฟล์ Storage จาก Google Drive</h3>
+              <p className="text-sm text-slate-500">กรอก Folder URL หรือ Folder ID ของ Backup เพื่อกู้รูปภาพ/PDF กลับ bucket และ path เดิม</p>
+            </div>
+            <HardDrive className="h-5 w-5 text-slate-400" />
+          </div>
+          <input
+            type="text"
+            value={storageBackupFolderUrl}
+            onChange={(event) => setStorageBackupFolderUrl(event.target.value)}
+            placeholder="เช่น https://drive.google.com/drive/folders/..."
+            className="block w-full rounded-md border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-100"
+          />
+          <p className="mt-3 rounded-md bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-600">ระบบจะอ่าน storage-manifest.json ในโฟลเดอร์นี้ แล้วอัปโหลดไฟล์กลับ Supabase Storage ตามตำแหน่งเดิม จำกัดต่อครั้งประมาณ 200 ไฟล์หรือ 25MB</p>
+          <button
+            type="button"
+            onClick={handleRestoreStorage}
+            disabled={storageRestoreRunning || !storageBackupFolderUrl.trim()}
+            className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-md bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {storageRestoreRunning ? <Loader2 className="h-4 w-4 animate-spin" /> : <HardDrive className="h-4 w-4" />}
+            {storageRestoreRunning ? 'กำลัง Restore ไฟล์ Storage' : 'Restore รูปภาพ/PDF เข้า Storage'}
           </button>
         </div>
       </div>
@@ -316,7 +373,9 @@ export function BackupRestorePanel() {
           {operationResult.apps_script?.skipped ? <div className="text-amber-700">ยังไม่ได้ส่งไป Google Drive เพราะยังไม่ได้ตั้งค่า Apps Script Secrets</div> : null}
           {operationResult.apps_script?.ok ? <div>ส่งไป Google Apps Script / Drive สำเร็จ</div> : null}
           {operationResult.restored ? <div>Restore ตารางสำเร็จ {Object.keys(operationResult.restored).length.toLocaleString('th-TH')} ตาราง</div> : null}
-          {operationResult.errors?.length ? <div className="text-red-700">มีบางตาราง Restore ไม่สำเร็จ {operationResult.errors.length} รายการ</div> : null}
+          {operationResult.restored_storage ? <div>Restore ไฟล์ Storage สำเร็จ {Object.values(operationResult.restored_storage).reduce((sum, count) => sum + count, 0).toLocaleString('th-TH')} ไฟล์</div> : null}
+          {operationResult.storage_restore ? <div>อ่าน manifest {formatNumber(operationResult.storage_restore.manifest_count)} รายการ · ส่งไฟล์กลับ {formatNumber(operationResult.storage_restore.returned_files)} รายการ</div> : null}
+          {operationResult.errors?.length ? <div className="text-red-700">มีบางรายการ Restore ไม่สำเร็จ {operationResult.errors.length} รายการ</div> : null}
         </div>
       ) : null}      <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3">

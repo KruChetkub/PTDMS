@@ -25,6 +25,10 @@ function doPost(e) {
       return jsonResponse({ ok: false, error: 'invalid_secret' }, 403);
     }
 
+    if (payload.event === 'ptdms_restore_storage') {
+      return handleStorageRestoreRequest_(payload);
+    }
+
     if (payload.event !== 'ptdms_backup_created' || !payload.backup) {
       return jsonResponse({ ok: false, error: 'invalid_payload' }, 400);
     }
@@ -84,6 +88,84 @@ function doPost(e) {
   }
 }
 
+function handleStorageRestoreRequest_(payload) {
+  const folderId = extractDriveFolderId_(payload.backup_folder_id || payload.backup_folder_url || payload.folder_id || payload.folder_url);
+  if (!folderId) {
+    return jsonResponse({ ok: false, error: 'missing_backup_folder_id' }, 400);
+  }
+
+  const maxFiles = Number(payload.max_files || 200);
+  const maxBytes = Number(payload.max_bytes || 25 * 1024 * 1024);
+  const backupFolder = DriveApp.getFolderById(folderId);
+  const manifestFiles = backupFolder.getFilesByName('storage-manifest.json');
+
+  if (!manifestFiles.hasNext()) {
+    return jsonResponse({ ok: false, error: 'storage_manifest_not_found' }, 404);
+  }
+
+  const manifestFile = manifestFiles.next();
+  const manifest = JSON.parse(manifestFile.getBlob().getDataAsString('UTF-8') || '[]');
+  const items = Array.isArray(manifest) ? manifest : [];
+  const files = [];
+  const errors = [];
+  let totalBytes = 0;
+
+  items.slice(0, maxFiles).forEach(function(item) {
+    try {
+      if (!item || !item.saved || !item.drive_file_id || !item.bucket || !item.path) {
+        return;
+      }
+
+      const file = DriveApp.getFileById(String(item.drive_file_id));
+      const blob = file.getBlob();
+      const bytes = blob.getBytes();
+
+      if (totalBytes + bytes.length > maxBytes) {
+        errors.push({ bucket: item.bucket, path: item.path, error: 'restore_payload_size_limit' });
+        return;
+      }
+
+      totalBytes += bytes.length;
+      files.push({
+        bucket: String(item.bucket),
+        path: String(item.path),
+        name: file.getName(),
+        content_type: blob.getContentType() || 'application/octet-stream',
+        size: bytes.length,
+        base64: Utilities.base64Encode(bytes),
+      });
+    } catch (error) {
+      errors.push({
+        bucket: item && item.bucket ? String(item.bucket) : '',
+        path: item && item.path ? String(item.path) : '',
+        error: String(error),
+      });
+    }
+  });
+
+  return jsonResponse({
+    ok: true,
+    folder_id: folderId,
+    manifest_count: items.length,
+    returned_files: files.length,
+    total_bytes: totalBytes,
+    files: files,
+    errors: errors.slice(0, 50),
+  });
+}
+
+function extractDriveFolderId_(value) {
+  const text = String(value || '').trim();
+  if (!text) return '';
+
+  const folderMatch = text.match(/folders\/([a-zA-Z0-9_-]+)/);
+  if (folderMatch && folderMatch[1]) return folderMatch[1];
+
+  const idMatch = text.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+  if (idMatch && idMatch[1]) return idMatch[1];
+
+  return text;
+}
 function saveStorageObject_(storageRootFolder, item) {
   const bucket = item && item.bucket ? String(item.bucket) : 'bucket';
   const path = item && item.path ? String(item.path) : '';

@@ -19,7 +19,14 @@ export type BackupRestoreFunctionResult = {
   };
   backup?: Record<string, unknown>;
   restored?: Record<string, number>;
-  errors?: Array<{ table: string; error: string }>;
+  restored_storage?: Record<string, number>;
+  storage_restore?: {
+    folder_id?: string | null;
+    manifest_count?: number;
+    returned_files?: number;
+    total_bytes?: number;
+  };
+  errors?: Array<{ table?: string; bucket?: string; path?: string; error: string }>;
   reason?: string;
 };
 
@@ -49,6 +56,9 @@ function getBackupRestoreErrorMessage(reason?: string | null) {
   if (reason === 'missing_supabase_env') return 'Supabase Function ยังไม่ได้ตั้งค่า SUPABASE_URL หรือ SUPABASE_SERVICE_ROLE_KEY';
   if (reason === 'missing_backup_restore_env') return 'ยังไม่ได้ตั้งค่า BACKUP_RESTORE_APPS_SCRIPT_URL หรือ BACKUP_RESTORE_SECRET ใน Supabase Secrets';
   if (reason === 'invalid_backup_payload') return 'ไฟล์ Backup ไม่ถูกต้องหรือไม่ใช่ไฟล์ของ PTDMS';
+  if (reason === 'missing_backup_folder_id') return 'กรุณาระบุ Google Drive Folder ของ Backup';
+  if (reason === 'storage_manifest_not_found') return 'ไม่พบไฟล์ storage-manifest.json ในโฟลเดอร์ Backup นี้';
+  if (reason === 'restore_payload_size_limit') return 'ไฟล์ Storage มีขนาดรวมเกินขีดจำกัดต่อครั้ง กรุณาแบ่ง Restore เป็นชุดเล็กลง';
   return reason;
 }
 
@@ -73,7 +83,7 @@ async function invokeBackupRestore(body: Record<string, unknown>) {
   }
 
   const result = data as BackupRestoreFunctionResult;
-  if (!result?.ok && !result?.restored) {
+  if (!result?.ok && !result?.restored && !result?.restored_storage) {
     throw new Error(getBackupRestoreErrorMessage(result?.reason));
   }
 
@@ -86,6 +96,10 @@ export async function createSystemBackup(includeStorage = true) {
 
 export async function restoreSystemBackup(backup: Record<string, unknown>) {
   return invokeBackupRestore({ action: 'restore_backup', backup });
+}
+
+export async function restoreStorageFromDrive(backupFolderUrl: string) {
+  return invokeBackupRestore({ action: 'restore_storage_from_drive', backupFolderUrl });
 }
 
 export function downloadBackupJson(backup: Record<string, unknown>) {

@@ -66,6 +66,26 @@ type BackupPayload = {
   };
 };
 
+type StorageRestoreFile = {
+  bucket: string;
+  path: string;
+  name?: string;
+  content_type?: string;
+  size?: number;
+  base64: string;
+};
+
+type StorageRestoreResponse = {
+  ok?: boolean;
+  folder_id?: string;
+  manifest_count?: number;
+  returned_files?: number;
+  total_bytes?: number;
+  files?: StorageRestoreFile[];
+  errors?: Array<{ bucket?: string; path?: string; error: string }>;
+  error?: string;
+};
+
 function jsonResponse(body: Record<string, unknown>, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
@@ -141,7 +161,9 @@ function pickTables(input: unknown): BackupTableName[] {
   const allowed = new Set<string>(backupTables);
   const selected = input.filter((table): table is BackupTableName => typeof table === 'string' && allowed.has(table));
   return selected.length > 0 ? selected : [...backupTables];
-}`r`n`r`nasync function exportTables(adminClient: ReturnType<typeof createClient>, tables: BackupTableName[]) {
+}
+
+async function exportTables(adminClient: ReturnType<typeof createClient>, tables: BackupTableName[]) {
   const result: Record<string, unknown[]> = {};
   let rowCount = 0;
 
@@ -273,6 +295,104 @@ async function sendBackupToAppsScript(backup: BackupPayload) {
   };
 }
 
+async function requestStorageFilesFromAppsScript(folderIdOrUrl: string) {
+  const appsScriptUrl = Deno.env.get('BACKUP_RESTORE_APPS_SCRIPT_URL');
+  const backupSecret = Deno.env.get('BACKUP_RESTORE_SECRET');
+
+  if (!appsScriptUrl || !backupSecret) {
+    throw new Error('missing_backup_restore_env');
+  }
+
+  const response = await fetch(appsScriptUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Backup-Restore-Secret': backupSecret,
+    },
+    body: JSON.stringify({
+      event: 'ptdms_restore_storage',
+      export_secret: backupSecret,
+      backup_folder_url: folderIdOrUrl,
+      max_files: 200,
+      max_bytes: 25 * 1024 * 1024,
+    }),
+  });
+
+  const responseText = await response.text();
+  let parsed: StorageRestoreResponse | null = null;
+  try {
+    parsed = JSON.parse(responseText) as StorageRestoreResponse;
+  } catch {
+    parsed = null;
+  }
+
+  if (!response.ok || parsed?.ok === false || !parsed) {
+    throw new Error(String(parsed?.error || responseText || response.statusText || 'storage_restore_fetch_failed').slice(0, 500));
+  }
+
+  return parsed;
+}
+
+function base64ToUint8Array(base64: string) {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  return bytes;
+}
+
+async function restoreStorageFiles(adminClient: ReturnType<typeof createClient>, folderIdOrUrl: string) {
+  const driveResult = await requestStorageFilesFromAppsScript(folderIdOrUrl);
+  const restored: Record<string, number> = {};
+  const errors: Array<{ bucket: string; path: string; error: string }> = [];
+
+  for (const file of driveResult.files || []) {
+    if (!file.bucket || !file.path || !file.base64) {
+      continue;
+    }
+
+    try {
+      const bytes = base64ToUint8Array(file.base64);
+      const { error } = await adminClient.storage
+        .from(file.bucket)
+        .upload(file.path, bytes, {
+          upsert: true,
+          contentType: file.content_type || 'application/octet-stream',
+        });
+
+      if (error) {
+        errors.push({ bucket: file.bucket, path: file.path, error: error.message });
+        continue;
+      }
+
+      restored[file.bucket] = (restored[file.bucket] || 0) + 1;
+    } catch (error) {
+      errors.push({
+        bucket: file.bucket,
+        path: file.path,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  for (const error of driveResult.errors || []) {
+    errors.push({
+      bucket: String(error.bucket || ''),
+      path: String(error.path || ''),
+      error: error.error,
+    });
+  }
+
+  return {
+    restored,
+    errors,
+    manifest_count: driveResult.manifest_count || 0,
+    returned_files: driveResult.returned_files || 0,
+    total_bytes: driveResult.total_bytes || 0,
+    folder_id: driveResult.folder_id || null,
+  };
+}
 async function recordBackupAudit(
   adminClient: ReturnType<typeof createClient>,
   caller: Caller,
@@ -294,7 +414,9 @@ async function recordBackupAudit(
     metadata,
     export_status: 'pending',
   }).then(() => null, () => null);
-}function parseBackupPayload(input: unknown): BackupPayload | null {
+}
+
+function parseBackupPayload(input: unknown): BackupPayload | null {
   if (!input || typeof input !== 'object') {
     return null;
   }
@@ -430,6 +552,39 @@ serve(async (req) => {
         ok: result.errors.length === 0,
         backup_id: backup.backup_id,
         restored: result.restored,
+        errors: result.errors,
+      }, result.errors.length === 0 ? 200 : 207);
+    }
+
+    if (action === 'restore_storage_from_drive') {
+      if (caller.type === 'scheduler') {
+        return jsonResponse({ ok: false, reason: 'scheduler_restore_not_allowed' }, 403);
+      }
+
+      const folderIdOrUrl = typeof body.backupFolderUrl === 'string' ? body.backupFolderUrl.trim() : '';
+      if (!folderIdOrUrl) {
+        return jsonResponse({ ok: false, reason: 'missing_backup_folder_id' }, 400);
+      }
+
+      const result = await restoreStorageFiles(adminClient, folderIdOrUrl);
+      await recordBackupAudit(adminClient, caller, 'backup_storage_restored', result.errors.length === 0 ? 'success' : 'fail', {
+        folder_id: result.folder_id,
+        restored: result.restored,
+        manifest_count: result.manifest_count,
+        returned_files: result.returned_files,
+        total_bytes: result.total_bytes,
+        errors: result.errors,
+      });
+
+      return jsonResponse({
+        ok: result.errors.length === 0,
+        restored_storage: result.restored,
+        storage_restore: {
+          folder_id: result.folder_id,
+          manifest_count: result.manifest_count,
+          returned_files: result.returned_files,
+          total_bytes: result.total_bytes,
+        },
         errors: result.errors,
       }, result.errors.length === 0 ? 200 : 207);
     }
