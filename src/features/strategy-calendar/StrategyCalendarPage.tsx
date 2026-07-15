@@ -422,6 +422,7 @@ export function StrategyCalendarPage() {
 
   const monthLabel = `${thaiMonths[monthDate.getMonth()]} ${monthDate.getFullYear() + 543}`;
   const calendarDays = useMemo(() => getCalendarDays(monthDate), [monthDate]);
+  const currentMonthDays = useMemo(() => calendarDays.filter((date) => date.getMonth() === monthDate.getMonth()), [calendarDays, monthDate]);
   const todayKey = toDateKey(new Date());
   const canFilterDashboard = profile?.role === 'super_admin' || profile?.role === 'admin';
   const canViewUpcomingEventDetails = canFilterDashboard;
@@ -1723,7 +1724,7 @@ export function StrategyCalendarPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-7 border-b border-slate-100 bg-slate-50">
+          <div className="hidden grid-cols-7 border-b border-slate-100 bg-slate-50 sm:grid">
             {weekdays.map((day) => (
               <div key={day} className="px-2 py-3 text-center text-xs font-semibold text-slate-500">
                 {day}
@@ -1731,7 +1732,7 @@ export function StrategyCalendarPage() {
             ))}
           </div>
 
-          <div className="grid grid-cols-7">
+          <div className="hidden grid-cols-7 sm:grid">
             {calendarDays.map((date) => {
               const dateKey = toDateKey(date);
               const dayEvents = eventsByDate[dateKey] || [];
@@ -1792,6 +1793,74 @@ export function StrategyCalendarPage() {
                         </div>
                       );
                     })}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="divide-y divide-slate-100 sm:hidden">
+            {currentMonthDays.map((date) => {
+              const dateKey = toDateKey(date);
+              const dayEvents = (eventsByDate[dateKey] || []).filter((item): item is StrategyEventRow => item !== null);
+              const isSelected = dateKey === selectedDate;
+              const isToday = dateKey === todayKey;
+
+              return (
+                <button
+                  key={dateKey}
+                  type="button"
+                  onClick={() => selectCalendarDate(dateKey)}
+                  className={cn(
+                    'flex w-full gap-3 px-3 py-3 text-left transition hover:bg-emerald-50/50',
+                    isSelected && 'bg-emerald-50 ring-2 ring-inset ring-emerald-300',
+                  )}
+                >
+                  <div
+                    className={cn(
+                      'flex h-12 w-12 shrink-0 flex-col items-center justify-center rounded-md border text-sm font-semibold',
+                      isToday
+                        ? 'border-slate-900 bg-slate-950 text-white shadow-md shadow-slate-500/20'
+                        : 'border-slate-200 bg-white text-slate-800',
+                    )}
+                  >
+                    <span className="text-[11px] leading-none">{weekdays[(date.getDay() + 6) % 7]}</span>
+                    <span className="mt-1 text-base leading-none">{date.getDate()}</span>
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-sm font-semibold text-slate-900">{formatThaiDate(dateKey)}</p>
+                      <span className="shrink-0 rounded-md bg-emerald-50 px-2 py-1 text-[11px] font-semibold text-emerald-700">
+                        {dayEvents.length} รายการ
+                      </span>
+                    </div>
+                    <div className="mt-2 space-y-1.5">
+                      {dayEvents.length === 0 ? (
+                        <p className="text-xs text-slate-400">ยังไม่มีกิจกรรม</p>
+                      ) : (
+                        dayEvents.slice(0, 3).map((item) => {
+                          const color = getWorkGroupColor(item.owner_work_group);
+                          return (
+                            <div key={item.id} className="rounded-md border border-slate-100 bg-white px-2 py-2 shadow-sm">
+                              <div className="flex items-start gap-2">
+                                <span className={cn('mt-1.5 h-2 w-2 shrink-0 rounded-full', color.dotClassName)} />
+                                <div className="min-w-0 flex-1">
+                                  <p className={cn('break-words text-xs font-semibold text-slate-900', item.status === 'cancelled' && 'text-slate-400 line-through')}>
+                                    {item.title}
+                                  </p>
+                                  <div className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-[11px] text-slate-500">
+                                    <span>{formatTime(item)}</span>
+                                    {item.location ? <span className="break-words">สถานที่: {item.location}</span> : null}
+                                    {item.owner_work_group ? <span className="break-words">กลุ่มงาน: {item.owner_work_group}</span> : null}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })
+                      )}
+                      {dayEvents.length > 3 ? <p className="text-xs font-semibold text-emerald-600">+{dayEvents.length - 3} รายการ</p> : null}
+                    </div>
                   </div>
                 </button>
               );
