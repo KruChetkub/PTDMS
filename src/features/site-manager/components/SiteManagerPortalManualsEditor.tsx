@@ -143,7 +143,7 @@ export function SiteManagerPortalManualsEditor() {
       <div className="flex flex-col justify-between gap-3 border-b border-slate-100 px-5 py-4 sm:flex-row sm:items-center">
         <div>
           <h2 className="text-lg font-semibold tracking-normal text-slate-950">ตั้งค่าคู่มือการใช้งาน</h2>
-          <p className="mt-1 text-sm text-slate-500">เพิ่มข้อความ ลิงก์ PDF หรืออัปโหลดไฟล์คู่มือไป Supabase Storage เพื่อแสดงบนหน้า Portal</p>
+          <p className="mt-1 text-sm text-slate-500">เพิ่มข้อความ ลิงก์ PDF หรืออัปโหลดไฟล์คู่มือ</p>
         </div>
         <div className="grid w-full gap-2 sm:w-auto sm:grid-flow-col">
           <button
@@ -286,7 +286,7 @@ export function SiteManagerPortalManualsEditor() {
                     <label className="block rounded-md border border-dashed border-slate-300 bg-white p-4">
                       <span className="flex items-center gap-2 text-sm font-semibold text-slate-700">
                         <Upload className="h-4 w-4" aria-hidden="true" />
-                        {uploadingIndex === index ? 'กำลังอัปโหลด PDF...' : 'อัปโหลด PDF ไป Supabase'}
+                        {uploadingIndex === index ? 'กำลังอัปโหลด PDF...' : 'อัปโหลด PDF'}
                       </span>
                       <input
                         type="file"
@@ -313,7 +313,7 @@ export function SiteManagerPortalManualsEditor() {
         onClose={() => setIsSaveModalOpen(false)}
         onConfirm={handleConfirmSave}
         title="ยืนยันการบันทึกคู่มือการใช้งาน"
-        message="ระบบจะบันทึกรายการคู่มือ ลิงก์ PDF สถานะการแสดงผล และรายการที่ลบออกไปยัง Supabase"
+        message="ระบบจะบันทึกรายการคู่มือ ลิงก์ PDF สถานะการแสดงผล และรายการที่ลบออก"
         confirmLabel="บันทึก"
         cancelLabel="ยกเลิก"
         isLoading={saving}

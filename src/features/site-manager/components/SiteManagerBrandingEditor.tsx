@@ -92,7 +92,7 @@ export function SiteManagerBrandingEditor({
           <label className="block rounded-md border border-dashed border-slate-300 bg-slate-50 p-4">
             <span className="flex items-center gap-2 text-sm font-semibold text-slate-700">
               <Upload className="h-4 w-4" aria-hidden="true" />
-              อัปโหลดโลโก้ไป Supabase Storage
+              อัปโหลดโลโก้
             </span>
             <input
               type="file"

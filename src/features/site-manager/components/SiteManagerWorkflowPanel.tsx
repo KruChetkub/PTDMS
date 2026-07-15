@@ -7,7 +7,7 @@ const workflowSteps = [
 
 const imagePlanSteps = [
   'ช่วงตรวจ UI ใช้ URL รูปภาพก่อน',
-  'ระยะฐานข้อมูลจริงใช้ Supabase Storage bucket แยกสำหรับ public-site',
+  'ระยะฐานข้อมูลจริงใช้',
   'เก็บเฉพาะ URL และ metadata ใน site_content_documents',
 ];
 
