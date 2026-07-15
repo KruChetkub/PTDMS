@@ -1,5 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { KeyRound } from 'lucide-react';
+import { Eye, EyeOff, KeyRound } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { Link, useNavigate } from 'react-router-dom';
@@ -13,6 +13,8 @@ export function ResetPasswordPage() {
   const navigate = useNavigate();
   const [preparingSession, setPreparingSession] = useState(true);
   const [recoveryError, setRecoveryError] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const { updatePassword, loading, error, clearError } = useAuthStore();
   const {
     register,
@@ -124,29 +126,51 @@ export function ResetPasswordPage() {
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 rounded-md border border-slate-200 bg-white p-6 shadow-sm">
             {error ? <div className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div> : null}
 
-            <label className="block">
+            <div>
               <span className="text-sm font-medium text-slate-700">New Password</span>
-              <input
-                type="password"
-                autoComplete="new-password"
-                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
-                {...register('password')}
-              />
+              <div className="mt-1 flex items-center rounded-md border border-slate-300 bg-white px-3 focus-within:border-brand-500 focus-within:ring-2 focus-within:ring-brand-100">
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  autoComplete="new-password"
+                  className="w-full bg-transparent py-2 pr-2 text-sm outline-none"
+                  {...register('password')}
+                />
+                <button
+                  type="button"
+                  className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-slate-500 transition hover:bg-slate-100 hover:text-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-100"
+                  aria-label={showPassword ? 'ซ่อนรหัสผ่านใหม่' : 'แสดงรหัสผ่านใหม่'}
+                  aria-pressed={showPassword}
+                  onClick={() => setShowPassword((current) => !current)}
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" aria-hidden="true" /> : <Eye className="h-4 w-4" aria-hidden="true" />}
+                </button>
+              </div>
               {errors.password ? <span className="mt-1 block text-xs text-red-600">{errors.password.message}</span> : null}
-            </label>
+            </div>
 
-            <label className="block">
+            <div>
               <span className="text-sm font-medium text-slate-700">Confirm Password</span>
-              <input
-                type="password"
-                autoComplete="new-password"
-                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
-                {...register('confirmPassword')}
-              />
+              <div className="mt-1 flex items-center rounded-md border border-slate-300 bg-white px-3 focus-within:border-brand-500 focus-within:ring-2 focus-within:ring-brand-100">
+                <input
+                  type={showConfirmPassword ? 'text' : 'password'}
+                  autoComplete="new-password"
+                  className="w-full bg-transparent py-2 pr-2 text-sm outline-none"
+                  {...register('confirmPassword')}
+                />
+                <button
+                  type="button"
+                  className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-slate-500 transition hover:bg-slate-100 hover:text-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-100"
+                  aria-label={showConfirmPassword ? 'ซ่อนรหัสผ่านยืนยัน' : 'แสดงรหัสผ่านยืนยัน'}
+                  aria-pressed={showConfirmPassword}
+                  onClick={() => setShowConfirmPassword((current) => !current)}
+                >
+                  {showConfirmPassword ? <EyeOff className="h-4 w-4" aria-hidden="true" /> : <Eye className="h-4 w-4" aria-hidden="true" />}
+                </button>
+              </div>
               {errors.confirmPassword ? (
                 <span className="mt-1 block text-xs text-red-600">{errors.confirmPassword.message}</span>
               ) : null}
-            </label>
+            </div>
 
             <button
               type="submit"
