@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+﻿import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowRight, BookOpen, CalendarDays, ChevronDown, ChevronLeft, ChevronRight, Database, ExternalLink, FileText, GraduationCap, Headphones, KeyRound, LogOut, Megaphone, Monitor, ShieldCheck, Sparkles } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ConfirmModal } from '../../components/ui/ConfirmModal';
@@ -249,7 +249,7 @@ export function PortalPage() {
         <div className="pointer-events-none absolute inset-0" style={{ backgroundColor: portalHeaderOverlayColor, opacity: portalHeaderOverlayOpacity }} aria-hidden="true" />
         <div className="relative mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4 sm:px-6 lg:px-8">
           <div>
-            <img src="/DDC_0.png" alt="กรมควบคุมโรค" className="h-14 w-auto object-contain" />
+            <img src="/logoDSP.png" alt="กรมควบคุมโรค" className="h-14 w-auto object-contain" />
           </div>
           <div ref={userPanelRef} className="relative">
             <button
