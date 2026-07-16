@@ -243,10 +243,10 @@ export function PortalPage() {
         />
       ) : null}
       <header
-        className="relative z-50 overflow-hidden border-b border-slate-200 bg-white/95 bg-cover bg-center backdrop-blur"
+        className="relative z-50 border-b border-slate-200 bg-white/95 bg-cover bg-center backdrop-blur"
         style={{ backgroundImage: portalHeaderBackgroundImageEnabled ? `url(${portalHeaderBackgroundImage})` : undefined }}
       >
-        <div className="absolute inset-0" style={{ backgroundColor: portalHeaderOverlayColor, opacity: portalHeaderOverlayOpacity }} aria-hidden="true" />
+        <div className="pointer-events-none absolute inset-0" style={{ backgroundColor: portalHeaderOverlayColor, opacity: portalHeaderOverlayOpacity }} aria-hidden="true" />
         <div className="relative mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4 sm:px-6 lg:px-8">
           <div>
             <img src="/DDC_0.png" alt="กรมควบคุมโรค" className="h-14 w-auto object-contain" />
