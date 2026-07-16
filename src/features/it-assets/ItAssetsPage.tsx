@@ -39,6 +39,7 @@ const assetAgeFilterThresholds = {
 } as const;
 
 const upsAgeFilterThresholds = {
+  over3: 3,
   over5: 5,
   over7: 7,
 } as const;
@@ -56,7 +57,13 @@ function matchesUpsAgeFilter(selected: string[], ageYears: number, hasUpsReceive
     return true;
   }
 
-  return hasUpsReceivedDate && selected.some((value) => ageYears > upsAgeFilterThresholds[value as keyof typeof upsAgeFilterThresholds]);
+  return selected.some((value) => {
+    if (value === 'all') {
+      return hasUpsReceivedDate;
+    }
+
+    return hasUpsReceivedDate && ageYears > upsAgeFilterThresholds[value as keyof typeof upsAgeFilterThresholds];
+  });
 }
 
 export function ItAssetsPage() {
@@ -142,6 +149,14 @@ export function ItAssetsPage() {
 
   const upsAgeFilterOptions = useMemo(
     () => [
+      {
+        value: 'all',
+        label: `ทั้งหมด (${baseFilteredAssets.filter((asset) => asset.ups_received_date).length.toLocaleString()})`,
+      },
+      {
+        value: 'over3',
+        label: `มากกว่า 3 ปี (${baseFilteredAssets.filter((asset) => asset.ups_received_date && asset.upsAgeYears > upsAgeFilterThresholds.over3).length.toLocaleString()})`,
+      },
       {
         value: 'over5',
         label: `มากกว่า 5 ปี (${baseFilteredAssets.filter((asset) => asset.ups_received_date && asset.upsAgeYears > upsAgeFilterThresholds.over5).length.toLocaleString()})`,

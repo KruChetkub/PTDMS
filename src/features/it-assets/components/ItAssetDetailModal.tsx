@@ -71,6 +71,10 @@ export function ItAssetDetailModal({ asset, onClose }: ItAssetDetailModalProps) 
                   <Calendar className="mt-0.5 h-5 w-5 text-slate-400" aria-hidden="true" />
                   <DetailItem label="วันที่รับ / อายุ" value={`${asset.received_date_raw || '-'} / ${asset.ageText}`} />
                 </div>
+                <div className="flex gap-3">
+                  <Calendar className="mt-0.5 h-5 w-5 text-slate-400" aria-hidden="true" />
+                  <DetailItem label="วันที่รับ / อายุ สำรองไฟฟ้า (UPS)" value={`${asset.ups_received_date_raw || '-'} / ${asset.upsAgeText}`} />
+                </div>
               </div>
             </section>
 
