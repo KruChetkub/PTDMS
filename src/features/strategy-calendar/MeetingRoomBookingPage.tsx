@@ -145,7 +145,7 @@ function formatTime(value: string) {
 function roomStyle(room: string) {
   if (room === 'ห้องประชุม 1') {
     return {
-      chip: 'bg-blue-200 text-blue-950 ring-1 ring-blue-300',
+      chip: 'border-l-4 border-blue-700 bg-blue-50 text-blue-950 ring-1 ring-blue-200 shadow-sm',
       stripe: 'bg-blue-700',
       icon: <Home className="h-4 w-4" aria-hidden="true" />,
     };
@@ -153,23 +153,23 @@ function roomStyle(room: string) {
 
   if (room === 'ห้องประชุม 2') {
     return {
-      chip: 'bg-cyan-200 text-cyan-950 ring-1 ring-cyan-300',
-      stripe: 'bg-cyan-700',
+      chip: 'border-l-4 border-emerald-700 bg-emerald-50 text-emerald-950 ring-1 ring-emerald-200 shadow-sm',
+      stripe: 'bg-emerald-700',
       icon: <UsersRound className="h-4 w-4" aria-hidden="true" />,
     };
   }
 
   if (room === noMeetingRoomLabel) {
     return {
-      chip: 'bg-amber-200 text-amber-950 ring-1 ring-amber-300',
+      chip: 'border-l-4 border-amber-700 bg-amber-50 text-amber-950 ring-1 ring-amber-200 shadow-sm',
       stripe: 'bg-amber-700',
       icon: <XCircle className="h-4 w-4" aria-hidden="true" />,
     };
   }
 
   return {
-    chip: 'bg-indigo-200 text-indigo-950 ring-1 ring-indigo-300',
-    stripe: 'bg-indigo-700',
+    chip: 'border-l-4 border-violet-700 bg-violet-50 text-violet-950 ring-1 ring-violet-200 shadow-sm',
+    stripe: 'bg-violet-700',
     icon: <Library className="h-4 w-4" aria-hidden="true" />,
   };
 }
