@@ -1,6 +1,6 @@
-# PTDMS
+# SmartDSP
 
-Personnel Training & Development Management System
+Smart Division Strategy and Planning (Smart DSP)
 
 ## Stack
 
