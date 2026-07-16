@@ -1,8 +1,9 @@
-﻿import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowRight, BookOpen, CalendarDays, ChevronDown, ChevronLeft, ChevronRight, Database, ExternalLink, FileText, GraduationCap, Headphones, KeyRound, LogOut, Megaphone, Monitor, ShieldCheck, Sparkles } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ConfirmModal } from '../../components/ui/ConfirmModal';
 import { useAuditPageAccess } from '../../hooks/useAuditPageAccess';
+import { usePublishedSiteContent } from '../site-content/hooks/useSiteContent';
 import { useAuthStore } from '../../stores/auth.store';
 import type { PortalUserManual } from '../../types/database.types';
 import type { UserRole } from '../../types/roles';
@@ -118,6 +119,17 @@ export function PortalPage() {
   const [manuals, setManuals] = useState<PortalUserManual[]>([]);
   const [manualPage, setManualPage] = useState(0);
   const { profile, signOut } = useAuthStore();
+  const siteContent = usePublishedSiteContent();
+  const portalBackgroundImage = siteContent.portalPage.backgroundImageUrl || '/SmartDSP.png';
+  const portalBackgroundImageEnabled = siteContent.portalPage.status === 'published' && siteContent.portalPage.backgroundImageEnabled !== false;
+  const portalBackgroundOverlayValue = Math.min(90, Math.max(0, siteContent.portalPage.backgroundOverlayOpacity));
+  const portalBackgroundOverlayOpacity = portalBackgroundOverlayValue / 100;
+  const portalBackgroundBrightness = 1 + ((90 - portalBackgroundOverlayValue) / 90) * 0.2;
+  const portalHeaderBackgroundImage = siteContent.portalPage.headerBackgroundImageUrl || '';
+  const portalHeaderBackgroundImageEnabled =
+    siteContent.portalPage.status === 'published' && siteContent.portalPage.headerBackgroundImageEnabled !== false && Boolean(portalHeaderBackgroundImage);
+  const portalHeaderOverlayColor = siteContent.portalPage.headerOverlayColor || '#ffffff';
+  const portalHeaderOverlayOpacity = Math.min(100, Math.max(0, siteContent.portalPage.headerOverlayOpacity)) / 100;
   useAuditPageAccess({ module: 'ptdms', action: 'ptdms_portal_access', route: '/portal' });
   useEffect(() => {
     let active = true;
@@ -212,9 +224,30 @@ export function PortalPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900">
-      <header className="relative z-50 border-b border-slate-200 bg-white/95 backdrop-blur">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4 sm:px-6 lg:px-8">
+    <div className="relative min-h-screen overflow-hidden bg-slate-50 text-slate-900">
+      {portalBackgroundImageEnabled ? (
+        <div
+          className="fixed inset-0 bg-cover bg-center"
+          style={{
+            backgroundImage: `url(${portalBackgroundImage})`,
+            filter: `brightness(${portalBackgroundBrightness})`,
+          }}
+          aria-hidden="true"
+        />
+      ) : null}
+      {portalBackgroundImageEnabled ? (
+        <div
+          className="fixed inset-0 bg-slate-950"
+          style={{ opacity: portalBackgroundOverlayOpacity }}
+          aria-hidden="true"
+        />
+      ) : null}
+      <header
+        className="relative z-50 overflow-hidden border-b border-slate-200 bg-white/95 bg-cover bg-center backdrop-blur"
+        style={{ backgroundImage: portalHeaderBackgroundImageEnabled ? `url(${portalHeaderBackgroundImage})` : undefined }}
+      >
+        <div className="absolute inset-0" style={{ backgroundColor: portalHeaderOverlayColor, opacity: portalHeaderOverlayOpacity }} aria-hidden="true" />
+        <div className="relative mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4 sm:px-6 lg:px-8">
           <div>
             <img src="/DDC_0.png" alt="กรมควบคุมโรค" className="h-14 w-auto object-contain" />
           </div>
@@ -290,7 +323,7 @@ export function PortalPage() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+      <main className="relative z-10 mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
         <section className="relative overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm">
           <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-brand-600 via-emerald-500 to-amber-400" />
           <div className="p-5 sm:p-7 lg:p-8">

@@ -91,3 +91,41 @@ export async function uploadLoginPageBackgroundImage(file: File) {
   const { data } = supabase.storage.from(SITE_CONTENT_ASSETS_BUCKET).getPublicUrl(filePath);
   return data.publicUrl;
 }
+export async function uploadPortalPageBackgroundImage(file: File) {
+  validateUploadFile(file, { allowedTypes: SITE_CONTENT_ALLOWED_IMAGE_TYPES, maxSizeBytes: SITE_CONTENT_MAX_IMAGE_SIZE_BYTES, label: 'ภาพพื้นหลังหน้า Portal' });
+
+  const extension = file.name.split('.').pop() || 'png';
+  const safeName = sanitizeFileName(file.name) || `portal-background.${extension}`;
+  const filePath = `portal-backgrounds/${Date.now()}-${safeName}`;
+
+  const { error } = await supabase.storage.from(SITE_CONTENT_ASSETS_BUCKET).upload(filePath, file, {
+    cacheControl: '3600',
+    upsert: true,
+  });
+
+  if (error) {
+    throw new Error(`อัปโหลดภาพพื้นหลังหน้า Portal ไม่สำเร็จ: ${error.message}`);
+  }
+
+  const { data } = supabase.storage.from(SITE_CONTENT_ASSETS_BUCKET).getPublicUrl(filePath);
+  return data.publicUrl;
+}
+export async function uploadPortalHeaderBackgroundImage(file: File) {
+  validateUploadFile(file, { allowedTypes: SITE_CONTENT_ALLOWED_IMAGE_TYPES, maxSizeBytes: SITE_CONTENT_MAX_IMAGE_SIZE_BYTES, label: 'ภาพพื้นหลัง Header หน้า Portal' });
+
+  const extension = file.name.split('.').pop() || 'png';
+  const safeName = sanitizeFileName(file.name) || `portal-header-background.${extension}`;
+  const filePath = `portal-header-backgrounds/${Date.now()}-${safeName}`;
+
+  const { error } = await supabase.storage.from(SITE_CONTENT_ASSETS_BUCKET).upload(filePath, file, {
+    cacheControl: '3600',
+    upsert: true,
+  });
+
+  if (error) {
+    throw new Error(`อัปโหลดภาพพื้นหลัง Header หน้า Portal ไม่สำเร็จ: ${error.message}`);
+  }
+
+  const { data } = supabase.storage.from(SITE_CONTENT_ASSETS_BUCKET).getPublicUrl(filePath);
+  return data.publicUrl;
+}

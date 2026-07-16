@@ -6,6 +6,7 @@ import { SiteManagerBannerPreview } from '../components/SiteManagerBannerPreview
 import { SiteManagerBrandingEditor } from '../components/SiteManagerBrandingEditor';
 import { SiteManagerContentEditor } from '../components/SiteManagerContentEditor';
 import { SiteManagerLoginPageEditor } from '../components/SiteManagerLoginPageEditor';
+import { SiteManagerPortalPageEditor } from '../components/SiteManagerPortalPageEditor';
 import { SiteManagerPlanDocumentsEditor } from '../components/SiteManagerPlanDocumentsEditor';
 import { SiteManagerPlanPreview } from '../components/SiteManagerPlanPreview';
 import { SiteManagerPortalManualsEditor } from '../components/SiteManagerPortalManualsEditor';
@@ -27,6 +28,7 @@ type SiteManagerTab =
   | 'r2r-research'
   | 'portal-manuals'
   | 'login-page'
+  | 'portal-page'
   | 'security';
 
 const siteManagerTabs: Array<{ id: SiteManagerTab; label: string; superAdminOnly?: boolean }> = [
@@ -40,6 +42,7 @@ const siteManagerTabs: Array<{ id: SiteManagerTab; label: string; superAdminOnly
   { id: 'r2r-research', label: 'งานวิจัยจากงานประจำ R2R' },
   { id: 'portal-manuals', label: 'ตั้งค่าคู่มือการใช้งาน' },
   { id: 'login-page', label: 'จัดการภาพหน้า login' },
+  { id: 'portal-page', label: 'จัดการภาพหน้า Portal' },
   { id: 'security', label: 'ความปลอดภัย', superAdminOnly: true },
 ];
 
@@ -259,6 +262,18 @@ export function SiteManagerPage() {
             loginPage={contentDraft.loginPage}
             onLoginPageChange={(nextLoginPage) => {
               setContentDraft((currentContent) => ({ ...currentContent, loginPage: nextLoginPage }));
+              setDraftMessage(null);
+            }}
+            onSaveDraft={handleSaveDraft}
+            onResetDraft={handleResetDraft}
+            isSaving={isSaving}
+            canResetDraft={canManageSecurity}
+          />
+        ) : activeTab === 'portal-page' ? (
+          <SiteManagerPortalPageEditor
+            portalPage={contentDraft.portalPage}
+            onPortalPageChange={(nextPortalPage) => {
+              setContentDraft((currentContent) => ({ ...currentContent, portalPage: nextPortalPage }));
               setDraftMessage(null);
             }}
             onSaveDraft={handleSaveDraft}

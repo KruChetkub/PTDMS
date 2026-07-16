@@ -39,6 +39,17 @@ export type SiteContentLoginPage = {
   loginPanelGradientTo: string;
   status: SiteContentStatus;
 };
+export type SiteContentPortalPage = {
+  backgroundImageUrl: string;
+  backgroundImageEnabled: boolean;
+  backgroundOverlayOpacity: number;
+  headerBackgroundImageUrl: string;
+  headerBackgroundImageEnabled: boolean;
+  headerOverlayColor: string;
+  headerOverlayOpacity: number;
+  status: SiteContentStatus;
+};
+
 export type SiteContentFaqItem = {
   question: string;
   answer: string;
@@ -73,6 +84,7 @@ export type SiteContentState = {
   brandSettings: SiteContentBrandSettings;
   heroBanner: SiteContentHeroBanner;
   loginPage: SiteContentLoginPage;
+  portalPage: SiteContentPortalPage;
   newsItems: SiteContentNewsItem[];
   faqItems: SiteContentFaqItem[];
   planLevelCards: SiteContentPlanCard[];

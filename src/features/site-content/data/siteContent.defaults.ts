@@ -31,6 +31,16 @@ export const defaultSiteContent: SiteContentState = {
     loginPanelGradientTo: '#0B3F91',
     status: 'published',
   },
+  portalPage: {
+    backgroundImageUrl: '/SmartDSP.png',
+    backgroundImageEnabled: false,
+    backgroundOverlayOpacity: 28,
+    headerBackgroundImageUrl: '',
+    headerBackgroundImageEnabled: false,
+    headerOverlayColor: '#ffffff',
+    headerOverlayOpacity: 0,
+    status: 'published',
+  },
   newsItems: [
     {
       title: 'ประกาศแนวทางการจัดทำแผนและรายงานผลประจำปี',

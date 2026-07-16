@@ -58,6 +58,14 @@ export function normalizeSiteContent(content: Partial<SiteContentState> | null |
     typeof content?.loginPage?.backgroundOverlayOpacity === 'number'
       ? Math.min(90, Math.max(0, content.loginPage.backgroundOverlayOpacity))
       : defaultSiteContent.loginPage.backgroundOverlayOpacity;
+  const portalBackgroundOverlayOpacity =
+    typeof content?.portalPage?.backgroundOverlayOpacity === 'number'
+      ? Math.min(90, Math.max(0, content.portalPage.backgroundOverlayOpacity))
+      : defaultSiteContent.portalPage.backgroundOverlayOpacity;
+  const portalHeaderOverlayOpacity =
+    typeof content?.portalPage?.headerOverlayOpacity === 'number'
+      ? Math.min(100, Math.max(0, content.portalPage.headerOverlayOpacity))
+      : defaultSiteContent.portalPage.headerOverlayOpacity;
 
   return {
     brandSettings: {
@@ -79,6 +87,18 @@ export function normalizeSiteContent(content: Partial<SiteContentState> | null |
       loginPanelGradientFrom: content?.loginPage?.loginPanelGradientFrom || defaultSiteContent.loginPage.loginPanelGradientFrom,
       loginPanelGradientTo: content?.loginPage?.loginPanelGradientTo || defaultSiteContent.loginPage.loginPanelGradientTo,
       status: content?.loginPage?.status || defaultSiteContent.loginPage.status,
+    },
+    portalPage: {
+      ...defaultSiteContent.portalPage,
+      ...content?.portalPage,
+      backgroundImageUrl: content?.portalPage?.backgroundImageUrl || defaultSiteContent.portalPage.backgroundImageUrl,
+      backgroundImageEnabled: content?.portalPage?.backgroundImageEnabled ?? defaultSiteContent.portalPage.backgroundImageEnabled,
+      backgroundOverlayOpacity: portalBackgroundOverlayOpacity,
+      headerBackgroundImageUrl: content?.portalPage?.headerBackgroundImageUrl || defaultSiteContent.portalPage.headerBackgroundImageUrl,
+      headerBackgroundImageEnabled: content?.portalPage?.headerBackgroundImageEnabled ?? defaultSiteContent.portalPage.headerBackgroundImageEnabled,
+      headerOverlayColor: content?.portalPage?.headerOverlayColor || defaultSiteContent.portalPage.headerOverlayColor,
+      headerOverlayOpacity: portalHeaderOverlayOpacity,
+      status: content?.portalPage?.status || defaultSiteContent.portalPage.status,
     },
     newsItems: Array.isArray(content?.newsItems) && content.newsItems.length > 0 ? content.newsItems : defaultSiteContent.newsItems,
     faqItems: normalizeFaqItems(content?.faqItems),
