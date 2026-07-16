@@ -23,6 +23,7 @@ const emptyFilters: ItAssetFilters = {
   disk1Type: [],
   disk2Type: [],
   assetAge: [],
+  upsAge: [],
   workGroup: [],
 };
 
@@ -37,12 +38,25 @@ const assetAgeFilterThresholds = {
   over7: 7,
 } as const;
 
+const upsAgeFilterThresholds = {
+  over5: 5,
+  over7: 7,
+} as const;
+
 function matchesFilter(selected: string[], value: string | number | null | undefined) {
   return selected.length === 0 || selected.includes(cleanFilterValue(value) || '');
 }
 
 function matchesAssetAgeFilter(selected: string[], ageYears: number) {
   return selected.length === 0 || selected.some((value) => ageYears > assetAgeFilterThresholds[value as keyof typeof assetAgeFilterThresholds]);
+}
+
+function matchesUpsAgeFilter(selected: string[], ageYears: number, hasUpsReceivedDate: boolean) {
+  if (selected.length === 0) {
+    return true;
+  }
+
+  return hasUpsReceivedDate && selected.some((value) => ageYears > upsAgeFilterThresholds[value as keyof typeof upsAgeFilterThresholds]);
 }
 
 export function ItAssetsPage() {
@@ -126,9 +140,27 @@ export function ItAssetsPage() {
     [baseFilteredAssets],
   );
 
+  const upsAgeFilterOptions = useMemo(
+    () => [
+      {
+        value: 'over5',
+        label: `มากกว่า 5 ปี (${baseFilteredAssets.filter((asset) => asset.ups_received_date && asset.upsAgeYears > upsAgeFilterThresholds.over5).length.toLocaleString()})`,
+      },
+      {
+        value: 'over7',
+        label: `มากกว่า 7 ปี (${baseFilteredAssets.filter((asset) => asset.ups_received_date && asset.upsAgeYears > upsAgeFilterThresholds.over7).length.toLocaleString()})`,
+      },
+    ],
+    [baseFilteredAssets],
+  );
+
   const filteredAssets = useMemo(() => {
-    return baseFilteredAssets.filter((asset) => matchesAssetAgeFilter(filters.assetAge, asset.ageYears));
-  }, [baseFilteredAssets, filters.assetAge]);
+    return baseFilteredAssets.filter(
+      (asset) =>
+        matchesAssetAgeFilter(filters.assetAge, asset.ageYears) &&
+        matchesUpsAgeFilter(filters.upsAge, asset.upsAgeYears, Boolean(asset.ups_received_date)),
+    );
+  }, [baseFilteredAssets, filters.assetAge, filters.upsAge]);
 
   const latestDataUpdatedAt = useMemo(() => {
     return assets
@@ -235,7 +267,8 @@ export function ItAssetsPage() {
             <ItAssetFilterSection title="Graphics" options={options.graphics} selected={filters.graphics} onToggle={(value) => toggleFilter('graphics', value)} />
             <ItAssetFilterSection title="Disk 1" options={options.disk1Type} selected={filters.disk1Type} onToggle={(value) => toggleFilter('disk1Type', value)} />
             <ItAssetFilterSection title="Disk 2" options={options.disk2Type} selected={filters.disk2Type} onToggle={(value) => toggleFilter('disk2Type', value)} />
-            <ItAssetFilterSection title="อายุการใช้งาน" options={ageFilterOptions} selected={filters.assetAge} onToggle={(value) => toggleFilter('assetAge', value)} />
+            <ItAssetFilterSection title="อายุการใช้งานคอมพิวเตอร์" options={ageFilterOptions} selected={filters.assetAge} onToggle={(value) => toggleFilter('assetAge', value)} />
+            <ItAssetFilterSection title="อายุการใช้งานเครื่องสำรองไฟฟ้า (UPS)" options={upsAgeFilterOptions} selected={filters.upsAge} onToggle={(value) => toggleFilter('upsAge', value)} />
           </div>
           <button
             type="button"

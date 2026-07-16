@@ -118,11 +118,14 @@ export function calculateHealthScore(
 
 export function toItAssetViewModel(asset: ItAsset, criteria: ItAssetEvaluationCriteria = defaultItAssetEvaluationCriteria): ItAssetViewModel {
   const age = calculateAssetAge(asset.received_date);
+  const upsAge = calculateAssetAge(asset.ups_received_date);
 
   return {
     ...asset,
     ageText: asset.received_date ? age.text : '-',
     ageYears: age.years,
+    upsAgeText: asset.ups_received_date ? upsAge.text : '-',
+    upsAgeYears: upsAge.years,
     health: calculateHealthScore(asset, criteria),
   };
 }

@@ -85,6 +85,8 @@ export type ItAssetEvaluationCriteria = {
 export type ItAssetViewModel = ItAsset & {
   ageText: string;
   ageYears: number;
+  upsAgeText: string;
+  upsAgeYears: number;
   health: ItAssetHealth;
 };
 
@@ -97,6 +99,7 @@ export type ItAssetFilters = {
   disk1Type: string[];
   disk2Type: string[];
   assetAge: string[];
+  upsAge: string[];
   workGroup: string[];
 };
 
