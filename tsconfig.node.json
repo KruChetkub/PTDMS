@@ -11,4 +11,3 @@
   },
   "include": ["vite.config.ts", "tailwind.config.ts", "postcss.config.js"]
 }
-//คอมเม้น
