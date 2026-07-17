@@ -713,7 +713,8 @@ export async function uploadSpdServiceDigitalGuideImage(file: File): Promise<Pic
     .createSignedUrl(filePath, 60 * 30);
 
   if (signedError) {
-    throw new Error(`สร้างลิงก์รูปภาพชั่วคราวไม่สำเร็จ: ${signedError.message}`);
+    void reportClientError('Failed to sign uploaded DSP Service guide image:', signedError);
+    return { imagePath: filePath, signedImageUrl: '' };
   }
 
   return { imagePath: filePath, signedImageUrl: signedData.signedUrl };

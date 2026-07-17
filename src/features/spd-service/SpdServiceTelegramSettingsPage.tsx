@@ -237,7 +237,8 @@ export function SpdServiceTelegramSettingsPage() {
       setSuccess('อัปโหลดรูปภาพแล้ว กรุณากดบันทึกการตั้งค่าเพื่อใช้งาน');
     } catch (uploadError) {
       void reportClientError('Failed to upload DSP Service guide image:', uploadError);
-      setError('ไม่สามารถอัปโหลดรูปภาพได้');
+      const uploadMessage = uploadError instanceof Error ? uploadError.message : 'ไม่สามารถอัปโหลดรูปภาพได้';
+      setError(uploadMessage);
     } finally {
       setUploadingSubject(null);
     }
