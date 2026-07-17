@@ -107,6 +107,7 @@ export type SpdServiceDigitalGuide = {
   enabled: boolean;
   imagePath: string;
   signedImageUrl: string;
+  staleImagePath?: string;
 };
 
 export type SaveSpdServiceDigitalGuideSettingsValues = {
@@ -661,7 +662,7 @@ async function signSpdServiceDigitalGuides(guides: SpdServiceDigitalGuide[]): Pr
 
       if (signedError) {
         void reportClientError('Failed to sign DSP Service guide image:', signedError);
-        return { ...guide, signedImageUrl: '' };
+        return { ...guide, imagePath: '', signedImageUrl: '', staleImagePath: guide.imagePath };
       }
 
       return { ...guide, signedImageUrl: signedData.signedUrl };
@@ -716,6 +717,23 @@ export async function uploadSpdServiceDigitalGuideImage(file: File): Promise<Pic
   }
 
   return { imagePath: filePath, signedImageUrl: signedData.signedUrl };
+}
+
+export async function deleteSpdServiceDigitalGuideImage(imagePath: string): Promise<void> {
+  const normalizedPath = imagePath.trim();
+  if (!normalizedPath) {
+    return;
+  }
+
+  if (/^https?:\/\//i.test(normalizedPath)) {
+    return;
+  }
+
+  const { error } = await supabase.storage.from(SPD_SERVICE_REQUEST_GUIDES_BUCKET).remove([normalizedPath]);
+
+  if (error) {
+    throw new Error(`ลบรูปภาพไม่สำเร็จ: ${error.message}`);
+  }
 }
 
 export async function saveSpdServiceDigitalGuideSettings(values: SaveSpdServiceDigitalGuideSettingsValues): Promise<void> {

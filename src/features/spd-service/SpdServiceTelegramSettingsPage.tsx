@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { AlertCircle, ArrowLeft, BellRing, CheckCircle2, ChevronDown, ChevronRight, ImageIcon, Plus, RefreshCw, Save, Trash2, Upload, X } from 'lucide-react';
 import {
   defaultSpdServiceTelegramMessageTemplate,
+  deleteSpdServiceDigitalGuideImage,
   deleteSpdServiceRequestSubject,
   getSpdServiceAdminRecipients,
   getSpdServiceCategories,
@@ -37,6 +38,7 @@ const sampleTelegramTemplateValues: Record<string, string> = {
 };
 
 type SettingsTab = 'notification' | 'message' | 'request';
+type DigitalGuideImagePendingDelete = Pick<SpdServiceDigitalGuide, 'subject' | 'imagePath'>;
 
 function renderTelegramTemplatePreview(template: string) {
   return Object.entries(sampleTelegramTemplateValues).reduce(
@@ -65,6 +67,7 @@ export function SpdServiceTelegramSettingsPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [subjectPendingDelete, setSubjectPendingDelete] = useState<SpdServiceRequestSubjectRow | null>(null);
+  const [guideImagePendingDelete, setGuideImagePendingDelete] = useState<DigitalGuideImagePendingDelete | null>(null);
   const [expandedRequestSubjectIds, setExpandedRequestSubjectIds] = useState<string[]>([]);
   const [expandedDigitalGuideSubjects, setExpandedDigitalGuideSubjects] = useState<SpdServiceDigitalGuideSubject[]>([]);
   const [selectedDigitalGuideSubject, setSelectedDigitalGuideSubject] = useState('');
@@ -105,7 +108,12 @@ export function SpdServiceTelegramSettingsPage() {
       setAdminRecipientIds(telegramSettings.adminRecipientIds);
       setAdminUsernames(telegramSettings.adminUsernames);
       setMessageTemplate(telegramSettings.messageTemplate);
-      setDigitalGuides(guideSettings);
+      const cleanedGuideSettings = guideSettings.map((guide) => ({ subject: guide.subject, enabled: guide.enabled, imagePath: guide.imagePath, signedImageUrl: guide.signedImageUrl }));
+      setDigitalGuides(cleanedGuideSettings);
+      if (guideSettings.some((guide) => guide.staleImagePath) && profile?.user_id && canEditRequestSettings) {
+        await saveSpdServiceDigitalGuideSettings({ guides: cleanedGuideSettings, updatedBy: profile.user_id });
+        setSuccess('พบ path รูปภาพคำแนะนำเดิมที่ไม่มีไฟล์แล้ว ระบบเคลียร์ให้อัตโนมัติ');
+      }
       setExpandedRequestSubjectIds([]);
       setExpandedDigitalGuideSubjects([]);
       setSelectedDigitalGuideSubject('');
@@ -232,6 +240,37 @@ export function SpdServiceTelegramSettingsPage() {
       setError('ไม่สามารถอัปโหลดรูปภาพได้');
     } finally {
       setUploadingSubject(null);
+    }
+  };
+
+  const deleteDigitalGuideImage = async () => {
+    if (!guideImagePendingDelete || !profile?.user_id) {
+      return;
+    }
+
+    if (!canEditRequestSettings) {
+      setError('เฉพาะ Super Admin และ Admin เท่านั้นที่ลบรูปภาพคำแนะนำได้');
+      return;
+    }
+
+    try {
+      setIsSaving(true);
+      setError(null);
+      setSuccess(null);
+
+      await deleteSpdServiceDigitalGuideImage(guideImagePendingDelete.imagePath);
+      const nextGuides = digitalGuides.map((guide) =>
+        guide.subject === guideImagePendingDelete.subject ? { ...guide, imagePath: '', signedImageUrl: '' } : guide,
+      );
+      await saveSpdServiceDigitalGuideSettings({ guides: nextGuides, updatedBy: profile.user_id });
+      setDigitalGuides(nextGuides);
+      setGuideImagePendingDelete(null);
+      setSuccess('ลบรูปภาพคำแนะนำออกจาก Supabase แล้ว สามารถอัปโหลดรูปใหม่ได้');
+    } catch (deleteError) {
+      void reportClientError('Failed to delete DSP Service guide image:', deleteError);
+      setError('ไม่สามารถลบรูปภาพคำแนะนำได้');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -823,17 +862,31 @@ export function SpdServiceTelegramSettingsPage() {
                               </span>
                             </label>
 
-                            <label className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50">
-                              <Upload className="h-4 w-4" aria-hidden="true" />
-                              {uploadingSubject === guide.subject ? 'กำลังอัปโหลด...' : 'อัปโหลดรูปภาพ'}
-                              <input
-                                type="file"
-                                accept="image/png,image/jpeg,image/webp"
-                                className="sr-only"
-                                disabled={!canEditRequestSettings || uploadingSubject === guide.subject}
-                                onChange={(event) => void handleGuideImageUpload(guide.subject, event.target.files?.[0] || null)}
-                              />
-                            </label>
+                            <div className="flex flex-wrap gap-2 lg:justify-end">
+                              <label className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50">
+                                <Upload className="h-4 w-4" aria-hidden="true" />
+                                {uploadingSubject === guide.subject ? 'กำลังอัปโหลด...' : 'อัปโหลดรูปภาพ'}
+                                <input
+                                  type="file"
+                                  accept="image/png,image/jpeg,image/webp"
+                                  className="sr-only"
+                                  disabled={!canEditRequestSettings || uploadingSubject === guide.subject}
+                                  onChange={(event) => {
+                                    void handleGuideImageUpload(guide.subject, event.target.files?.[0] || null);
+                                    event.currentTarget.value = '';
+                                  }}
+                                />
+                              </label>
+                              <button
+                                type="button"
+                                onClick={() => setGuideImagePendingDelete({ subject: guide.subject, imagePath: guide.imagePath })}
+                                disabled={!canEditRequestSettings || !guide.imagePath || isSaving}
+                                className="inline-flex items-center justify-center gap-2 rounded-md border border-red-200 px-3 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+                              >
+                                <Trash2 className="h-4 w-4" aria-hidden="true" />
+                                ลบภาพ
+                              </button>
+                            </div>
                           </div>
 
                           <label className="mt-4 block">
@@ -885,6 +938,45 @@ export function SpdServiceTelegramSettingsPage() {
         </form>
       </main>
 
+      {guideImagePendingDelete ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4" onClick={() => setGuideImagePendingDelete(null)}>
+          <div className="w-full max-w-md rounded-md bg-white shadow-2xl" onClick={(event) => event.stopPropagation()}>
+            <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
+              <div className="min-w-0">
+                <p className="text-xs font-semibold uppercase text-red-600">ยืนยันการลบ</p>
+                <h2 className="truncate text-base font-semibold text-slate-950">ลบรูปภาพคำแนะนำ</h2>
+              </div>
+              <button type="button" onClick={() => setGuideImagePendingDelete(null)} className="rounded-md p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-900">
+                <X className="h-5 w-5" aria-hidden="true" />
+              </button>
+            </div>
+            <div className="space-y-3 p-4">
+              <p className="text-sm leading-6 text-slate-600">
+                ต้องการลบรูปภาพคำแนะนำของ <span className="font-semibold text-slate-950">{guideImagePendingDelete.subject}</span> ใช่หรือไม่?
+              </p>
+            </div>
+            <div className="flex flex-col-reverse gap-3 border-t border-slate-200 px-4 py-3 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={() => setGuideImagePendingDelete(null)}
+                disabled={isSaving}
+                className="inline-flex items-center justify-center rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                ยกเลิก
+              </button>
+              <button
+                type="button"
+                onClick={() => void deleteDigitalGuideImage()}
+                disabled={isSaving}
+                className="inline-flex items-center justify-center gap-2 rounded-md bg-red-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <Trash2 className="h-4 w-4" aria-hidden="true" />
+                {isSaving ? 'กำลังลบ...' : 'ลบภาพ'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
       {subjectPendingDelete ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4" onClick={() => setSubjectPendingDelete(null)}>
           <div className="w-full max-w-md rounded-md bg-white shadow-2xl" onClick={(event) => event.stopPropagation()}>
