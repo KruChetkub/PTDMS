@@ -497,8 +497,11 @@ serve(async (req) => {
       const selectedTables = pickTables(body.tables);
       const backupId = crypto.randomUUID();
       const createdAt = new Date().toISOString();
+      console.log('backup create started', { backup_id: backupId, table_count: selectedTables.length, include_storage: body.includeStorage !== false });
       const exported = await exportTables(adminClient, selectedTables);
+      console.log('backup tables exported', { backup_id: backupId, row_count: exported.rowCount });
       const storageManifest = body.includeStorage === false ? [] : await listStorageObjects(adminClient);
+      console.log('backup storage manifest created', { backup_id: backupId, storage_object_count: storageManifest.length });
       const backup: BackupPayload = {
         schema_version: 1,
         app: 'PTDMS',
@@ -514,22 +517,71 @@ serve(async (req) => {
         },
       };
 
-      const appsScript = await sendBackupToAppsScript(backup);
-      await recordBackupAudit(adminClient, caller, 'backup_created', appsScript.ok ? 'success' : 'fail', {
-        backup_id: backupId,
-        table_count: backup.summary.table_count,
-        row_count: backup.summary.row_count,
-        storage_object_count: backup.summary.storage_object_count,
-        apps_script: appsScript,
-      });
+      const hasAppsScriptConfig = Boolean(Deno.env.get('BACKUP_RESTORE_APPS_SCRIPT_URL') && Deno.env.get('BACKUP_RESTORE_SECRET'));
+      if (!hasAppsScriptConfig) {
+        const appsScript = { ok: false, skipped: true, reason: 'missing_backup_restore_env' };
+        let auditWarning: string | null = null;
+        try {
+          await recordBackupAudit(adminClient, caller, 'backup_created', 'fail', {
+            backup_id: backupId,
+            table_count: backup.summary.table_count,
+            row_count: backup.summary.row_count,
+            storage_object_count: backup.summary.storage_object_count,
+            apps_script: appsScript,
+          });
+        } catch (auditError) {
+          auditWarning = auditError instanceof Error ? auditError.message : 'backup_audit_failed';
+          console.error('backup audit failed after backup creation', { backup_id: backupId, message: auditWarning });
+        }
+
+        return jsonResponse({
+          ok: true,
+          backup_id: backupId,
+          created_at: createdAt,
+          summary: backup.summary,
+          apps_script: appsScript,
+          audit_warning: auditWarning,
+        });
+      }
+
+      const uploadTask = (async () => {
+        try {
+          console.log('backup apps script upload started', { backup_id: backupId });
+          const appsScript = await sendBackupToAppsScript(backup);
+          console.log('backup apps script upload finished', { backup_id: backupId, ok: appsScript.ok, skipped: appsScript.skipped, reason: appsScript.reason || null });
+
+          try {
+            await recordBackupAudit(adminClient, caller, 'backup_created', appsScript.ok ? 'success' : 'fail', {
+              backup_id: backupId,
+              table_count: backup.summary.table_count,
+              row_count: backup.summary.row_count,
+              storage_object_count: backup.summary.storage_object_count,
+              apps_script: appsScript,
+            });
+          } catch (auditError) {
+            const message = auditError instanceof Error ? auditError.message : 'backup_audit_failed';
+            console.error('backup audit failed after backup creation', { backup_id: backupId, message });
+          }
+        } catch (uploadError) {
+          const message = uploadError instanceof Error ? uploadError.message : 'backup_apps_script_upload_failed';
+          console.error('backup apps script upload failed', { backup_id: backupId, message });
+        }
+      })();
+
+      const edgeRuntime = (globalThis as unknown as { EdgeRuntime?: { waitUntil?: (promise: Promise<unknown>) => void } }).EdgeRuntime;
+      if (edgeRuntime?.waitUntil) {
+        edgeRuntime.waitUntil(uploadTask);
+      } else {
+        uploadTask.catch((error) => console.error('backup background upload failed', { backup_id: backupId, message: error instanceof Error ? error.message : String(error) }));
+      }
 
       return jsonResponse({
         ok: true,
         backup_id: backupId,
         created_at: createdAt,
         summary: backup.summary,
-        apps_script: appsScript,
-        backup,
+        apps_script: { queued: true, skipped: false },
+        audit_warning: null,
       });
     }
 

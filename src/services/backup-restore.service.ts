@@ -13,11 +13,13 @@ export type BackupRestoreFunctionResult = {
   summary?: BackupRestoreSummary;
   apps_script?: {
     ok?: boolean;
+    queued?: boolean;
     skipped?: boolean;
     reason?: string;
     result?: Record<string, unknown>;
   };
   backup?: Record<string, unknown>;
+  audit_warning?: string | null;
   restored?: Record<string, number>;
   restored_storage?: Record<string, number>;
   storage_restore?: {
@@ -51,6 +53,7 @@ async function getFunctionErrorReason(error: unknown) {
 
 function getBackupRestoreErrorMessage(reason?: string | null) {
   if (!reason) return 'ไม่สามารถดำเนินการ Backup / Restore ได้';
+  if (reason.includes('not having enough compute resources')) return 'ระบบสร้างไฟล์ Backup ได้บางส่วนแล้ว แต่ Supabase Function ใช้ทรัพยากรหรือเวลานานเกินไป กรุณาตรวจไฟล์ใน Google Drive และลองใหม่ภายหลัง';
   if (reason === 'missing_authorization' || reason === 'invalid_authorization') return 'สิทธิ์เข้าใช้งานหมดอายุ กรุณาเข้าสู่ระบบใหม่';
   if (reason === 'super_admin_required') return 'เฉพาะ Super Admin เท่านั้นที่ใช้งาน Backup / Restore ได้';
   if (reason === 'missing_supabase_env') return 'Supabase Function ยังไม่ได้ตั้งค่า SUPABASE_URL หรือ SUPABASE_SERVICE_ROLE_KEY';

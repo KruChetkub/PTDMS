@@ -386,7 +386,9 @@ export function BackupRestorePanel() {
             </div>
           ) : null}
           {operationResult.apps_script?.skipped ? <div className="text-amber-700">ยังไม่ได้ส่งไป Google Drive เพราะยังไม่ได้ตั้งค่า Apps Script Secrets</div> : null}
+          {operationResult.apps_script?.queued ? <div>เริ่มส่ง Backup ไป Google Apps Script / Drive แล้ว</div> : null}
           {operationResult.apps_script?.ok ? <div>ส่งไป Google Apps Script / Drive สำเร็จ</div> : null}
+          {operationResult.audit_warning ? <div className="text-amber-700">ส่ง Backup สำเร็จแล้ว แต่บันทึก Audit Log ไม่สำเร็จ: {operationResult.audit_warning}</div> : null}
           {operationResult.restored ? <div>Restore ตารางสำเร็จ {Object.keys(operationResult.restored).length.toLocaleString('th-TH')} ตาราง</div> : null}
           {operationResult.restored_storage ? <div>Restore ไฟล์ Storage สำเร็จ {Object.values(operationResult.restored_storage).reduce((sum, count) => sum + count, 0).toLocaleString('th-TH')} ไฟล์</div> : null}
           {operationResult.storage_restore ? <div>อ่าน manifest {formatNumber(operationResult.storage_restore.manifest_count)} รายการ · ส่งไฟล์กลับ {formatNumber(operationResult.storage_restore.returned_files)} รายการ</div> : null}
