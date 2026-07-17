@@ -66,6 +66,7 @@ export function SpdServiceTelegramSettingsPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [uploadImageAlert, setUploadImageAlert] = useState<string | null>(null);
   const [subjectPendingDelete, setSubjectPendingDelete] = useState<SpdServiceRequestSubjectRow | null>(null);
   const [guideImagePendingDelete, setGuideImagePendingDelete] = useState<DigitalGuideImagePendingDelete | null>(null);
   const [expandedRequestSubjectIds, setExpandedRequestSubjectIds] = useState<string[]>([]);
@@ -232,13 +233,14 @@ export function SpdServiceTelegramSettingsPage() {
     try {
       setUploadingSubject(subject);
       setError(null);
+      setUploadImageAlert(null);
       const image = await uploadSpdServiceDigitalGuideImage(file);
       updateDigitalGuide(subject, image);
       setSuccess('อัปโหลดรูปภาพแล้ว กรุณากดบันทึกการตั้งค่าเพื่อใช้งาน');
     } catch (uploadError) {
       void reportClientError('Failed to upload DSP Service guide image:', uploadError);
       const uploadMessage = uploadError instanceof Error ? uploadError.message : 'ไม่สามารถอัปโหลดรูปภาพได้';
-      setError(uploadMessage);
+      setUploadImageAlert(uploadMessage);
     } finally {
       setUploadingSubject(null);
     }
@@ -939,6 +941,38 @@ export function SpdServiceTelegramSettingsPage() {
         </form>
       </main>
 
+      {uploadImageAlert ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4" onClick={() => setUploadImageAlert(null)}>
+          <div className="w-full max-w-md rounded-md bg-white shadow-2xl" onClick={(event) => event.stopPropagation()}>
+            <div className="flex items-center justify-between gap-3 border-b border-red-100 px-4 py-3">
+              <div className="flex min-w-0 items-center gap-3">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-50 text-red-600">
+                  <AlertCircle className="h-5 w-5" aria-hidden="true" />
+                </span>
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold uppercase text-red-600">อัปโหลดรูปภาพไม่สำเร็จ</p>
+                  <h2 className="truncate text-base font-semibold text-slate-950">ตรวจสอบไฟล์รูปภาพ</h2>
+                </div>
+              </div>
+              <button type="button" onClick={() => setUploadImageAlert(null)} className="rounded-md p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-900">
+                <X className="h-5 w-5" aria-hidden="true" />
+              </button>
+            </div>
+            <div className="p-4">
+              <p className="text-sm leading-6 text-slate-700">{uploadImageAlert}</p>
+            </div>
+            <div className="flex justify-end border-t border-slate-200 px-4 py-3">
+              <button
+                type="button"
+                onClick={() => setUploadImageAlert(null)}
+                className="inline-flex items-center justify-center rounded-md bg-teal-700 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-teal-800"
+              >
+                ตกลง
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
       {guideImagePendingDelete ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4" onClick={() => setGuideImagePendingDelete(null)}>
           <div className="w-full max-w-md rounded-md bg-white shadow-2xl" onClick={(event) => event.stopPropagation()}>
