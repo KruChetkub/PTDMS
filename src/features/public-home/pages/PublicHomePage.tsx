@@ -3,7 +3,6 @@ import { Activity, FileText, HeartPulse, Landmark, Puzzle, ShieldCheck, Target, 
 import { CookieConsentBanner } from '../components/CookieConsentBanner';
 import { HomeFaqSection } from '../components/HomeFaqSection';
 import { HomeFooter } from '../components/HomeFooter';
-import { HomeHeroBanner } from '../components/HomeHeroBanner';
 import { HomeMobileSectionLauncher } from '../components/HomeMobileSectionLauncher';
 import { HomePlanLevelsBanner } from '../components/HomePlanLevelsBanner';
 import { HomeNewsSection } from '../components/HomeNewsSection';
@@ -11,10 +10,7 @@ import { HomePlanSections } from '../components/HomePlanSections';
 import { PublicHomeHeader } from '../components/PublicHomeHeader';
 import { usePublishedSiteContent } from '../../site-content/hooks/useSiteContent';
 import { usePublicPageAnalytics } from '../hooks/usePublicPageAnalytics';
-import {
-  homeHeroBanner,
-  homePlanSections,
-} from '../data/publicHome.mock';
+import { homePlanSections } from '../data/publicHome.mock';
 import type {
   SiteContentPlanCard,
   SiteContentPlanIconKey,
@@ -68,26 +64,6 @@ export function PublicHomePage() {
 
   usePublicPageAnalytics();
   const siteContent = usePublishedSiteContent();
-  const heroBanner = {
-    ...homeHeroBanner,
-    eyebrow: siteContent.heroBanner.eyebrow,
-    title: siteContent.heroBanner.title,
-    description: siteContent.heroBanner.description,
-    imageUrl: siteContent.heroBanner.imageUrl,
-    imageOverlayOpacity: siteContent.heroBanner.imageOverlayOpacity,
-    actions: [
-      {
-        label: siteContent.heroBanner.primaryActionLabel,
-        href: siteContent.heroBanner.primaryActionHref,
-        variant: 'primary' as const,
-      },
-      {
-        label: siteContent.heroBanner.secondaryActionLabel,
-        href: siteContent.heroBanner.secondaryActionHref,
-        variant: 'secondary' as const,
-      },
-    ],
-  };
   const visibleNews = siteContent.newsItems.filter((item) => item.status === 'published');
   const visibleFaqs = siteContent.faqItems
     .filter((item) => item.status === 'published')
@@ -107,8 +83,7 @@ export function PublicHomePage() {
   return (
     <div className="min-h-screen bg-white text-slate-900">
       <PublicHomeHeader logoUrl={siteContent.brandSettings.logoUrl} siteName={siteContent.brandSettings.siteName} />
-      <main>
-        <HomeHeroBanner banner={heroBanner} />
+      <main className="pt-14 sm:pt-16">
         <div className="bg-slate-50 px-4 pt-6 lg:hidden">
           <HomePlanLevelsBanner logoUrl={siteContent.brandSettings.logoUrl} />
         </div>

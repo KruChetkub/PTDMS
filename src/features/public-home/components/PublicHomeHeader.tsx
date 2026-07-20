@@ -1,7 +1,6 @@
 import { scrollToHomeSection } from '../utils/scrollToHomeSection';
 
 const navLinks = [
-  { label: 'หน้าแรก', targetId: 'home-hero' },
   { label: 'แผนงาน', targetId: 'plan-levels' },
   { label: 'งานวิจัยจากงานประจำ', targetId: 'r2r-research' },
   { label: 'Dashboard', href: 'https://strategy-and-planning-dept-bw9o.vercel.app' },
@@ -18,7 +17,7 @@ export function PublicHomeHeader({ logoUrl, siteName }: PublicHomeHeaderProps) {
       <div className="mx-auto flex h-14 max-w-7xl items-center justify-between gap-3 px-4 sm:h-16 sm:gap-4 sm:px-6 lg:px-8">
         <button
           type="button"
-          onClick={() => scrollToHomeSection('home-hero')}
+          onClick={() => scrollToHomeSection('plan-levels')}
           className="flex min-w-0 items-center gap-3"
           aria-label={siteName}
         >
