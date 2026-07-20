@@ -60,6 +60,10 @@ function mapVisiblePlanCards(cards: SiteContentPlanCard[]) {
 export function PublicHomePage() {
   useEffect(() => {
     document.title = 'Strategic Information Repository';
+
+    return () => {
+      document.title = 'SmartDSP';
+    };
   }, []);
 
   usePublicPageAnalytics();
