@@ -137,16 +137,22 @@ function statusLabel(status: StrategyEventRow['status']) {
 const fallbackWorkGroupLabel = 'ไม่ระบุกลุ่มงาน';
 
 const workGroupColorPalette = [
-  { key: 'blue', eventClassName: 'bg-blue-500 text-white', dotClassName: 'bg-blue-500', badgeClassName: 'bg-blue-50 text-blue-700', fill: '#3B82F6' },
-  { key: 'emerald', eventClassName: 'bg-emerald-500 text-white', dotClassName: 'bg-emerald-500', badgeClassName: 'bg-emerald-50 text-emerald-700', fill: '#10B981' },
-  { key: 'amber', eventClassName: 'bg-amber-500 text-white', dotClassName: 'bg-amber-500', badgeClassName: 'bg-amber-50 text-amber-700', fill: '#F59E0B' },
-  { key: 'rose', eventClassName: 'bg-rose-500 text-white', dotClassName: 'bg-rose-500', badgeClassName: 'bg-rose-50 text-rose-700', fill: '#F43F5E' },
-  { key: 'purple', eventClassName: 'bg-purple-500 text-white', dotClassName: 'bg-purple-500', badgeClassName: 'bg-purple-50 text-purple-700', fill: '#8B5CF6' },
-  { key: 'cyan', eventClassName: 'bg-cyan-500 text-white', dotClassName: 'bg-cyan-500', badgeClassName: 'bg-cyan-50 text-cyan-700', fill: '#06B6D4' },
-  { key: 'indigo', eventClassName: 'bg-indigo-500 text-white', dotClassName: 'bg-indigo-500', badgeClassName: 'bg-indigo-50 text-indigo-700', fill: '#6366F1' },
-  { key: 'teal', eventClassName: 'bg-teal-500 text-white', dotClassName: 'bg-teal-500', badgeClassName: 'bg-teal-50 text-teal-700', fill: '#14B8A6' },
-  { key: 'orange', eventClassName: 'bg-orange-500 text-white', dotClassName: 'bg-orange-500', badgeClassName: 'bg-orange-50 text-orange-700', fill: '#F97316' },
-  { key: 'slate', eventClassName: 'bg-slate-500 text-white', dotClassName: 'bg-slate-500', badgeClassName: 'bg-slate-50 text-slate-700', fill: '#64748B' },
+  { key: 'blue', eventClassName: 'bg-blue-600 text-white', dotClassName: 'bg-blue-600', badgeClassName: 'bg-blue-50 text-blue-800', fill: '#2563EB' },
+  { key: 'rose', eventClassName: 'bg-rose-600 text-white', dotClassName: 'bg-rose-600', badgeClassName: 'bg-rose-50 text-rose-800', fill: '#E11D48' },
+  { key: 'emerald', eventClassName: 'bg-emerald-600 text-white', dotClassName: 'bg-emerald-600', badgeClassName: 'bg-emerald-50 text-emerald-800', fill: '#059669' },
+  { key: 'violet', eventClassName: 'bg-violet-600 text-white', dotClassName: 'bg-violet-600', badgeClassName: 'bg-violet-50 text-violet-800', fill: '#7C3AED' },
+  { key: 'amber', eventClassName: 'bg-amber-500 text-slate-950', dotClassName: 'bg-amber-500', badgeClassName: 'bg-amber-50 text-amber-800', fill: '#F59E0B' },
+  { key: 'cyan', eventClassName: 'bg-cyan-600 text-white', dotClassName: 'bg-cyan-600', badgeClassName: 'bg-cyan-50 text-cyan-800', fill: '#0891B2' },
+  { key: 'fuchsia', eventClassName: 'bg-fuchsia-600 text-white', dotClassName: 'bg-fuchsia-600', badgeClassName: 'bg-fuchsia-50 text-fuchsia-800', fill: '#C026D3' },
+  { key: 'lime', eventClassName: 'bg-lime-600 text-white', dotClassName: 'bg-lime-600', badgeClassName: 'bg-lime-50 text-lime-800', fill: '#65A30D' },
+  { key: 'orange', eventClassName: 'bg-orange-600 text-white', dotClassName: 'bg-orange-600', badgeClassName: 'bg-orange-50 text-orange-800', fill: '#EA580C' },
+  { key: 'sky', eventClassName: 'bg-sky-600 text-white', dotClassName: 'bg-sky-600', badgeClassName: 'bg-sky-50 text-sky-800', fill: '#0284C7' },
+  { key: 'pink', eventClassName: 'bg-pink-600 text-white', dotClassName: 'bg-pink-600', badgeClassName: 'bg-pink-50 text-pink-800', fill: '#DB2777' },
+  { key: 'teal', eventClassName: 'bg-teal-600 text-white', dotClassName: 'bg-teal-600', badgeClassName: 'bg-teal-50 text-teal-800', fill: '#0D9488' },
+  { key: 'red', eventClassName: 'bg-red-600 text-white', dotClassName: 'bg-red-600', badgeClassName: 'bg-red-50 text-red-800', fill: '#DC2626' },
+  { key: 'indigo', eventClassName: 'bg-indigo-600 text-white', dotClassName: 'bg-indigo-600', badgeClassName: 'bg-indigo-50 text-indigo-800', fill: '#4F46E5' },
+  { key: 'yellow', eventClassName: 'bg-yellow-400 text-slate-950', dotClassName: 'bg-yellow-400', badgeClassName: 'bg-yellow-50 text-yellow-800', fill: '#FACC15' },
+  { key: 'slate', eventClassName: 'bg-slate-600 text-white', dotClassName: 'bg-slate-600', badgeClassName: 'bg-slate-50 text-slate-800', fill: '#475569' },
 ];
 
 function formatDateRange(event: StrategyEventRow) {
@@ -290,15 +296,21 @@ function getWorkGroupName(ownerWorkGroup: string | null | undefined) {
   return ownerWorkGroup?.trim() || fallbackWorkGroupLabel;
 }
 
-function getWorkGroupColor(ownerWorkGroup: string | null | undefined) {
+type WorkGroupColor = (typeof workGroupColorPalette)[number];
+type WorkGroupColorMap = Record<string, WorkGroupColor>;
+
+function buildWorkGroupColorMap(workGroups: Array<string | null | undefined>) {
+  const names = Array.from(new Set(workGroups.map(getWorkGroupName))).sort((a, b) => a.localeCompare(b, 'th'));
+
+  return names.reduce<WorkGroupColorMap>((colorMap, name, index) => {
+    colorMap[name] = workGroupColorPalette[index % workGroupColorPalette.length];
+    return colorMap;
+  }, {});
+}
+
+function getWorkGroupColor(ownerWorkGroup: string | null | undefined, colorMap?: WorkGroupColorMap) {
   const name = getWorkGroupName(ownerWorkGroup);
-  let hash = 0;
-
-  for (let index = 0; index < name.length; index += 1) {
-    hash = (hash * 31 + name.charCodeAt(index)) >>> 0;
-  }
-
-  return workGroupColorPalette[hash % workGroupColorPalette.length];
+  return colorMap?.[name] || workGroupColorPalette[0];
 }
 
 const ITEMS_PER_PAGE = 5;
@@ -310,9 +322,11 @@ type DashboardFilterMode = 'all' | 'month' | 'year';
 function StrategyEventDetailModal({
   event,
   onClose,
+  workGroupColorMap,
 }: {
   event: StrategyEventRow | null;
   onClose: () => void;
+  workGroupColorMap: WorkGroupColorMap;
 }) {
   if (!event) {
     return null;
@@ -351,7 +365,7 @@ function StrategyEventDetailModal({
             <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
               <p className="text-xs font-medium text-slate-500">สีประจำกลุ่มงาน</p>
               <p className="mt-1 inline-flex items-center gap-2 text-sm font-semibold text-slate-950">
-                <span className={cn('h-2.5 w-2.5 rounded-full', getWorkGroupColor(event.owner_work_group).dotClassName)} />
+                <span className={cn('h-2.5 w-2.5 rounded-full', getWorkGroupColor(event.owner_work_group, workGroupColorMap).dotClassName)} />
                 {getWorkGroupName(event.owner_work_group)}
               </p>
             </div>
@@ -507,6 +521,15 @@ export function StrategyCalendarPage() {
   const selectedEvents = (eventsByDate[selectedDate] || []).filter((item): item is StrategyEventRow => item !== null);
   const publishedEvents = events.filter((event) => event.status === 'published');
   const dashboardSourceEvents = canFilterDashboard ? dashboardEvents : events;
+  const workGroupColorMap = useMemo(
+    () =>
+      buildWorkGroupColorMap([
+        ...events.map((event) => event.owner_work_group),
+        ...dashboardEvents.map((event) => event.owner_work_group),
+        profile?.work_group || profile?.department,
+      ]),
+    [dashboardEvents, events, profile?.department, profile?.work_group],
+  );
   const dashboardPublishedEvents = dashboardSourceEvents.filter((event) => event.status === 'published');
   const upcomingDashboardEvents = useMemo(
     () =>
@@ -552,7 +575,7 @@ export function StrategyCalendarPage() {
       .map(([name, count]) => ({
         name,
         count,
-        fill: getWorkGroupColor(name).fill,
+        fill: getWorkGroupColor(name, workGroupColorMap).fill,
       }))
       .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, 'th'));
 
@@ -639,7 +662,7 @@ export function StrategyCalendarPage() {
       bestMonth,
       topWorkGroup,
     };
-  }, [canFilterDashboard, dashboardChartYear, dashboardFilterMode, dashboardMonth, dashboardSourceEvents, dashboardYear, todayKey]);
+  }, [canFilterDashboard, dashboardChartYear, dashboardFilterMode, dashboardMonth, dashboardSourceEvents, dashboardYear, todayKey, workGroupColorMap]);
 
   const statusDistributionData = useMemo(
     () => [
@@ -818,7 +841,7 @@ export function StrategyCalendarPage() {
         endDate: form.endDate || selectedDate,
         startTime: form.startTime,
         endTime: form.endTime,
-        color: getWorkGroupColor(profile?.work_group || profile?.department).key,
+        color: getWorkGroupColor(profile?.work_group || profile?.department, workGroupColorMap).key,
         location: form.location,
         ownerWorkGroup: profile?.work_group || profile?.department || null,
       };
@@ -1197,8 +1220,8 @@ export function StrategyCalendarPage() {
                               <span className="inline-flex items-center gap-1"><Clock className="h-3 w-3" aria-hidden="true" />{formatTime(item)}</span>
                               <span className="inline-flex items-center gap-1"><MapPin className="h-3 w-3" aria-hidden="true" />{item.location || '-'}</span>
                             </div>
-                            <span className={cn('mt-2 inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-semibold', getWorkGroupColor(item.owner_work_group).badgeClassName)}>
-                              <span className={cn('h-2 w-2 rounded-full', getWorkGroupColor(item.owner_work_group).dotClassName)} />
+                            <span className={cn('mt-2 inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-semibold', getWorkGroupColor(item.owner_work_group, workGroupColorMap).badgeClassName)}>
+                              <span className={cn('h-2 w-2 rounded-full', getWorkGroupColor(item.owner_work_group, workGroupColorMap).dotClassName)} />
                               {getWorkGroupName(item.owner_work_group)}
                             </span>
                           </div>
@@ -1272,7 +1295,7 @@ export function StrategyCalendarPage() {
                       )}
                     >
                       <span className="inline-flex min-w-0 items-center gap-2">
-                        <span className={cn('h-2.5 w-2.5 shrink-0 rounded-full', getWorkGroupColor(item.name).dotClassName)} />
+                        <span className={cn('h-2.5 w-2.5 shrink-0 rounded-full', getWorkGroupColor(item.name, workGroupColorMap).dotClassName)} />
                         <span className="truncate font-semibold">{item.name}</span>
                       </span>
                       <span className="shrink-0 font-bold">{item.count}</span>
@@ -1312,7 +1335,7 @@ export function StrategyCalendarPage() {
                   <div>
                     <h3 className="text-sm font-bold text-slate-950">รายการกิจกรรมของกลุ่มงาน</h3>
                     <p className="mt-1 inline-flex items-center gap-2 text-xs font-semibold text-slate-600">
-                      <span className={cn('h-2.5 w-2.5 rounded-full', getWorkGroupColor(selectedWorkGroup).dotClassName)} />
+                      <span className={cn('h-2.5 w-2.5 rounded-full', getWorkGroupColor(selectedWorkGroup, workGroupColorMap).dotClassName)} />
                       {selectedWorkGroup} · {selectedWorkGroupEvents.length} รายการ
                     </p>
                   </div>
@@ -1338,7 +1361,7 @@ export function StrategyCalendarPage() {
                       >
                         <div className="min-w-0">
                           <div className="flex items-center gap-2">
-                            <span className={cn('h-2.5 w-2.5 shrink-0 rounded-full', getWorkGroupColor(item.owner_work_group).dotClassName)} />
+                            <span className={cn('h-2.5 w-2.5 shrink-0 rounded-full', getWorkGroupColor(item.owner_work_group, workGroupColorMap).dotClassName)} />
                             <p className="truncate text-sm font-semibold text-slate-950">{item.title}</p>
                           </div>
                           <p className="mt-1 line-clamp-1 text-xs text-slate-500">{item.description || item.location || 'ไม่มีรายละเอียดเพิ่มเติม'}</p>
@@ -1493,7 +1516,7 @@ export function StrategyCalendarPage() {
                           <td className="whitespace-nowrap px-4 py-3 text-slate-600">{formatTime(item)}</td>
                           <td className="min-w-64 px-4 py-3">
                             <div className="flex items-center gap-2">
-                              <span className={cn('inline-block h-2.5 w-2.5 shrink-0 rounded-full', getWorkGroupColor(item.owner_work_group).dotClassName)}></span>
+                              <span className={cn('inline-block h-2.5 w-2.5 shrink-0 rounded-full', getWorkGroupColor(item.owner_work_group, workGroupColorMap).dotClassName)}></span>
                               <div>
                                 <div className={cn('font-semibold text-slate-950', item.status === 'cancelled' && 'text-slate-400 line-through')}>
                                   {item.title}
@@ -1578,7 +1601,7 @@ export function StrategyCalendarPage() {
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
                           <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-700">
-                            <span className={cn('inline-block h-2 w-2 rounded-full', getWorkGroupColor(item.owner_work_group).dotClassName)}></span>
+                            <span className={cn('inline-block h-2 w-2 rounded-full', getWorkGroupColor(item.owner_work_group, workGroupColorMap).dotClassName)}></span>
                             {item.end_date && item.end_date !== item.event_date
                               ? `${formatThaiDate(item.event_date)} - ${formatThaiDate(item.end_date)}`
                               : formatThaiDate(item.event_date)}
@@ -1786,7 +1809,7 @@ export function StrategyCalendarPage() {
                             barClasses,
                             isCancelled
                               ? 'bg-slate-100 text-slate-400 line-through'
-                              : getWorkGroupColor(item.owner_work_group).eventClassName,
+                              : getWorkGroupColor(item.owner_work_group, workGroupColorMap).eventClassName,
                           )}
                         >
                           {showTitle ? item.title : '\u00A0'}
@@ -1839,7 +1862,7 @@ export function StrategyCalendarPage() {
                         <p className="text-xs text-slate-400">ยังไม่มีกิจกรรม</p>
                       ) : (
                         dayEvents.slice(0, 3).map((item) => {
-                          const color = getWorkGroupColor(item.owner_work_group);
+                          const color = getWorkGroupColor(item.owner_work_group, workGroupColorMap);
                           return (
                             <div key={item.id} className="rounded-md border border-slate-100 bg-white px-2 py-2 shadow-sm">
                               <div className="flex items-start gap-2">
@@ -1883,7 +1906,7 @@ export function StrategyCalendarPage() {
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
-                          <span className={cn('inline-block h-2.5 w-2.5 rounded-full', getWorkGroupColor(item.owner_work_group).dotClassName)}></span>
+                          <span className={cn('inline-block h-2.5 w-2.5 rounded-full', getWorkGroupColor(item.owner_work_group, workGroupColorMap).dotClassName)}></span>
                           <h3 className={cn('text-sm font-semibold text-slate-950', item.status === 'cancelled' && 'text-slate-400 line-through')}>
                             {item.title}
                           </h3>
@@ -2012,8 +2035,8 @@ export function StrategyCalendarPage() {
                   <span className="min-w-0 truncate text-sm font-semibold text-slate-900">
                     {getWorkGroupName(profile?.work_group || profile?.department)}
                   </span>
-                  <span className={cn('inline-flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-semibold', getWorkGroupColor(profile?.work_group || profile?.department).badgeClassName)}>
-                    <span className={cn('h-2 w-2 rounded-full', getWorkGroupColor(profile?.work_group || profile?.department).dotClassName)} />
+                  <span className={cn('inline-flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-semibold', getWorkGroupColor(profile?.work_group || profile?.department, workGroupColorMap).badgeClassName)}>
+                    <span className={cn('h-2 w-2 rounded-full', getWorkGroupColor(profile?.work_group || profile?.department, workGroupColorMap).dotClassName)} />
                     อัตโนมัติ
                   </span>
                 </div>
@@ -2056,7 +2079,7 @@ export function StrategyCalendarPage() {
         </aside>
       </div>
 
-      <StrategyEventDetailModal event={selectedUpcomingEvent} onClose={() => setSelectedUpcomingEvent(null)} />
+      <StrategyEventDetailModal event={selectedUpcomingEvent} onClose={() => setSelectedUpcomingEvent(null)} workGroupColorMap={workGroupColorMap} />
     </div>
   );
 }
