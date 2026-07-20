@@ -4,8 +4,7 @@ const navLinks = [
   { label: 'หน้าแรก', targetId: 'home-hero' },
   { label: 'แผนงาน', targetId: 'plan-levels' },
   { label: 'งานวิจัยจากงานประจำ', targetId: 'r2r-research' },
-  { label: 'ข่าวประชาสัมพันธ์', targetId: 'public-news' },
-  { label: 'คำถามที่พบบ่อย', targetId: 'public-faq' },
+  { label: 'Dashboard', href: 'https://strategy-and-planning-dept-bw9o.vercel.app' },
 ];
 
 type PublicHomeHeaderProps = {
@@ -31,16 +30,28 @@ export function PublicHomeHeader({ logoUrl, siteName }: PublicHomeHeaderProps) {
         </button>
 
         <nav className="hidden items-center gap-1 md:flex">
-          {navLinks.map((link) => (
-            <button
-              key={link.targetId}
-              type="button"
-              onClick={() => scrollToHomeSection(link.targetId)}
-              className="rounded-md px-3 py-2 text-sm font-medium text-white/80 transition hover:bg-white/10 hover:text-white"
-            >
-              {link.label}
-            </button>
-          ))}
+          {navLinks.map((link) =>
+            'href' in link ? (
+              <a
+                key={link.href}
+                href={link.href}
+                target="_blank"
+                rel="noreferrer"
+                className="rounded-md px-3 py-2 text-sm font-medium text-white/80 transition hover:bg-white/10 hover:text-white"
+              >
+                {link.label}
+              </a>
+            ) : (
+              <button
+                key={link.targetId}
+                type="button"
+                onClick={() => scrollToHomeSection(link.targetId)}
+                className="rounded-md px-3 py-2 text-sm font-medium text-white/80 transition hover:bg-white/10 hover:text-white"
+              >
+                {link.label}
+              </button>
+            ),
+          )}
         </nav>
 
         <a

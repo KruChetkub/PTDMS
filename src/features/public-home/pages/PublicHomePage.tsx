@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { Activity, FileText, HeartPulse, Landmark, Puzzle, ShieldCheck, Target, TrendingUp, UsersRound } from 'lucide-react';
 import { CookieConsentBanner } from '../components/CookieConsentBanner';
 import { HomeFaqSection } from '../components/HomeFaqSection';
@@ -57,6 +58,10 @@ function mapVisiblePlanCards(cards: SiteContentPlanCard[]) {
 }
 
 export function PublicHomePage() {
+  useEffect(() => {
+    document.title = 'Strategic Information Repository';
+  }, []);
+
   usePublicPageAnalytics();
   const siteContent = usePublishedSiteContent();
   const heroBanner = {

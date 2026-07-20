@@ -1,6 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Eye, EyeOff, Lock, LogIn, Mail } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { ConfiguredNotice } from '../../../components/auth/ConfiguredNotice';
@@ -12,6 +12,10 @@ import { reportClientError } from '../../../utils/errorHandling';
 
 
 export function LoginPage() {
+  useEffect(() => {
+    document.title = 'SmartDSP';
+  }, []);
+
   const navigate = useNavigate();
   const location = useLocation();
   const [showPassword, setShowPassword] = useState(false);
