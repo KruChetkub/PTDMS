@@ -1335,11 +1335,9 @@ export function MeetingRoomBookingPage() {
           role="dialog"
           aria-modal="true"
           aria-labelledby="meeting-room-booking-title"
-          onClick={closeBookingModal}
         >
           <div
             className="max-h-[92vh] w-full max-w-xl overflow-y-auto rounded-md bg-white shadow-2xl shadow-slate-950/20"
-            onClick={(event) => event.stopPropagation()}
           >
             <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-blue-100 bg-white px-4 py-3">
               <div className="flex min-w-0 items-center gap-3">
