@@ -24,6 +24,8 @@ const categorySections: Array<Pick<HomePlanSection, 'id' | 'number' | 'title' | 
   { id: 'other', category: 'other', number: '5', title: 'อื่นๆ', tone: 'rose' },
 ];
 
+const heroSectionClassName = 'relative isolate overflow-hidden bg-[#073B74] px-3 py-1.5 text-white sm:px-4 sm:py-2 lg:px-5';
+
 type PublicOfficialPlansViewProps = {
   logoUrl: string;
 };
@@ -83,19 +85,54 @@ export function PublicOfficialPlansView({ logoUrl }: PublicOfficialPlansViewProp
         .filter((section) => section.cards.length > 0),
     [publishedPlans],
   );
+  const visibleCategoryCount = sections.length;
+  const pdfCount = publishedPlans.filter((plan) => Boolean(plan.card.pdfUrl)).length;
 
   return (
     <>
-      <section className="bg-slate-50 px-4 py-6 sm:px-6 lg:px-8">
-        <div className="mx-auto max-w-7xl">
-          <h1 className="text-2xl font-bold tracking-normal text-slate-950 sm:text-3xl">
-            ยุทธศาสตร์/แผนปฏิบัติราชการ กรมควบคุมโรค
-          </h1>
+      <section className={heroSectionClassName}>
+        <div className="absolute inset-0 bg-[linear-gradient(120deg,#053B80_0%,#0878D8_45%,#12B8B1_100%)]" aria-hidden="true" />
+        <div className="absolute inset-x-0 bottom-0 h-8 bg-[radial-gradient(110%_90%_at_10%_100%,rgba(13,220,196,0.46)_0%,rgba(13,220,196,0)_55%),radial-gradient(120%_90%_at_90%_0%,rgba(255,255,255,0.24)_0%,rgba(255,255,255,0)_58%)]" aria-hidden="true" />
+        <div className="absolute inset-x-0 bottom-0 h-7 overflow-hidden" aria-hidden="true">
+          <div className="absolute -bottom-9 left-[-6%] h-12 w-[112%] rounded-[50%] border-t-2 border-white/70" />
+          <div className="absolute -bottom-2 left-[-8%] h-10 w-[116%] rounded-[50%] border-t-2 border-cyan-200/80" />
+          <div className="absolute bottom-[-3rem] left-[-5%] h-12 w-[110%] rounded-[50%] bg-white/10" />
+        </div>
+
+        <div className="relative grid gap-2 lg:grid-cols-[minmax(0,1fr)_32rem] lg:items-center">
+          <div>
+
+            <h1 className="max-w-2xl text-sm font-bold leading-tight tracking-normal text-white sm:text-lg lg:text-xl">
+              ยุทธศาสตร์/แผนปฏิบัติราชการ
+            </h1>
+            <h1 className="max-w-2xl text-sm font-bold leading-tight tracking-normal text-white sm:text-lg lg:text-xl">
+             กองยุทธศาสตร์และแผนงาน
+            </h1>
+            <h1 className="max-w-2xl text-sm font-bold leading-tight tracking-normal text-white sm:text-lg lg:text-xl">
+            กรมควบคุมโรค
+            </h1>
+
+          </div>
+
+          <div className="grid grid-cols-3 gap-1.5 rounded-md border border-white/25 bg-white/15 p-1.5 shadow-2xl backdrop-blur-md">
+            <div className="rounded-md bg-white/95 px-2.5 py-1 text-slate-900">
+              <div className="text-base font-bold text-[#075DA8]">{publishedPlans.length}</div>
+              <div className="text-[10px] font-semibold text-slate-600">เอกสารเผยแพร่</div>
+            </div>
+            <div className="rounded-md bg-white/95 px-2.5 py-1 text-slate-900">
+              <div className="text-base font-bold text-[#008B8B]">{visibleCategoryCount}</div>
+              <div className="text-[10px] font-semibold text-slate-600">หมวดแผน</div>
+            </div>
+            <div className="rounded-md bg-white/95 px-2.5 py-1 text-slate-900">
+              <div className="text-base font-bold text-[#14A37F]">{pdfCount}</div>
+              <div className="text-[10px] font-semibold text-slate-600">ลิงก์เอกสาร</div>
+            </div>
+          </div>
         </div>
       </section>
 
       {sections.length > 0 ? (
-        <HomePlanSections sections={sections} logoUrl={logoUrl} displayMode="shelf" />
+        <HomePlanSections sections={sections} logoUrl={logoUrl} displayMode="shelf" showPlanBanner={false} />
       ) : (
         <section className="min-h-[360px] bg-white py-12 sm:py-16">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
