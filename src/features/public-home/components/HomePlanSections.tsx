@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { ArrowRight, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { HomePlanLevelsBanner } from './HomePlanLevelsBanner';
 import { RevealOnScroll } from './RevealOnScroll';
-import type { HomePlanSection } from '../types/publicHome.types';
+import type { HomePlanCard, HomePlanSection } from '../types/publicHome.types';
 
 const sectionToneClass: Record<string, { border: string; body: string; badge: string; card: string; action: string; shadow: string }> = {
   emerald: {
@@ -55,6 +55,7 @@ type HomePlanSectionsProps = {
   heading?: string;
   description?: string;
   showSectionNumbers?: boolean;
+  displayMode?: 'grouped' | 'shelf';
 };
 
 type CoverPreviewState = {
@@ -62,10 +63,32 @@ type CoverPreviewState = {
   imageUrl: string;
 };
 
+type ShelfCard = {
+  section: HomePlanSection;
+  card: HomePlanCard;
+  cardIndex: number;
+};
+
+type PlanCardOptions = {
+  hideActionButton?: boolean;
+  linkMediaToPdf?: boolean;
+  prominentTitle?: boolean;
+  hideSupportingText?: boolean;
+};
+
 function getCardsPerPage(width: number) {
   if (width >= 1024) return 4;
   if (width >= 640) return 2;
   return 1;
+}
+function getShelfTitleClassName(title: string) {
+  const compactClass = 'mt-4 flex min-h-[5rem] max-h-[7.5rem] items-center justify-center overflow-hidden text-center font-bold leading-5 tracking-normal text-slate-950';
+
+  if (title.length > 90) return `${compactClass} text-[11px] sm:text-xs`;
+  if (title.length > 60) return `${compactClass} text-xs sm:text-sm`;
+  if (title.length > 34) return `${compactClass} text-sm sm:text-base`;
+
+  return `${compactClass} text-base sm:text-lg`;
 }
 
 export function HomePlanSections({
@@ -76,6 +99,7 @@ export function HomePlanSections({
   heading,
   description,
   showSectionNumbers = true,
+  displayMode = 'grouped',
 }: HomePlanSectionsProps) {
   const [cardsPerPage, setCardsPerPage] = useState(() =>
     typeof window === 'undefined' ? 4 : getCardsPerPage(window.innerWidth),
@@ -84,6 +108,10 @@ export function HomePlanSections({
   const [coverPreview, setCoverPreview] = useState<CoverPreviewState | null>(null);
   const sectionCardCounts = useMemo(
     () => sections.map((section) => `${section.id}:${section.cards.length}`).join('|'),
+    [sections],
+  );
+  const shelfCards = useMemo<ShelfCard[]>(
+    () => sections.flatMap((section) => section.cards.map((card, cardIndex) => ({ section, card, cardIndex }))),
     [sections],
   );
 
@@ -109,6 +137,8 @@ export function HomePlanSections({
   }, [coverPreview]);
 
   useEffect(() => {
+    if (displayMode === 'shelf') return;
+
     setSectionPages((currentPages) => {
       let changed = false;
       const nextPages = { ...currentPages };
@@ -125,17 +155,97 @@ export function HomePlanSections({
 
       return changed ? nextPages : currentPages;
     });
-  }, [cardsPerPage, sectionCardCounts, sections]);
+  }, [cardsPerPage, displayMode, sectionCardCounts, sections]);
 
-  const goToSectionPage = (sectionId: string, totalPages: number, direction: 'previous' | 'next') => {
+  const goToSectionPage = (targetSectionId: string, totalPages: number, direction: 'previous' | 'next') => {
     setSectionPages((currentPages) => {
-      const currentPage = currentPages[sectionId] || 0;
+      const currentPage = currentPages[targetSectionId] || 0;
       const nextPage = direction === 'next'
         ? Math.min(currentPage + 1, totalPages - 1)
         : Math.max(currentPage - 1, 0);
 
-      return { ...currentPages, [sectionId]: nextPage };
+      return { ...currentPages, [targetSectionId]: nextPage };
     });
+  };
+
+  const renderPlanCard = (section: HomePlanSection, card: HomePlanCard, cardIndex: number, keyPrefix: string, options?: PlanCardOptions) => {
+    const tone = sectionToneClass[section.tone] || sectionToneClass.emerald;
+    const Icon = card.icon;
+    const coverImageLayout = card.coverImageLayout === 'landscape' ? 'landscape' : 'portrait';
+    const coverAspectClass = coverImageLayout === 'landscape' ? 'aspect-[19/12]' : 'aspect-[13/20]';
+    const ActionElement = card.pdfUrl ? 'a' : 'button';
+    const shouldLinkMediaToPdf = Boolean(options?.linkMediaToPdf && card.pdfUrl);
+    const titleClassName = options?.prominentTitle
+      ? getShelfTitleClassName(card.title)
+      : 'mt-4 text-sm font-semibold leading-6 tracking-normal';
+
+    return (
+      <div
+        key={`${keyPrefix}-${section.id}-${card.title}-${card.subtitle}-${cardIndex}`}
+        className={`flex min-w-0 flex-col overflow-hidden rounded-md bg-white p-4 text-center text-slate-900 shadow-sm ${options?.prominentTitle ? `h-[420px] border-4 ${tone.card}` : `min-h-64 border ${tone.card}`}`}
+      >
+        {card.coverImageUrl ? (
+          shouldLinkMediaToPdf ? (
+            <a
+              href={card.pdfUrl}
+              target="_blank"
+              rel="noreferrer"
+              className={`group mx-auto ${coverAspectClass} w-full max-w-[200px] shrink-0 overflow-hidden rounded-md border border-slate-200 bg-slate-100 transition hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-400`}
+              aria-label={`เปิดไฟล์ PDF ${card.title}`}
+            >
+              <span className="relative block h-full w-full">
+                <img src={card.coverImageUrl} alt={`ภาพหน้าปก ${card.title}`} className="h-full w-full object-cover" />
+                <span className="absolute inset-0 flex items-center justify-center bg-slate-950/0 text-xs font-semibold text-white opacity-0 transition group-hover:bg-slate-950/35 group-hover:opacity-100">
+                  เปิด PDF
+                </span>
+              </span>
+            </a>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setCoverPreview({ title: card.title, imageUrl: card.coverImageUrl || '' })}
+              className={`group mx-auto ${coverAspectClass} w-full max-w-[200px] shrink-0 overflow-hidden rounded-md border border-slate-200 bg-slate-100 transition hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-400`}
+              aria-label={`ดูภาพหน้าปก ${card.title} ขนาดใหญ่`}
+            >
+              <span className="relative block h-full w-full">
+                <img src={card.coverImageUrl} alt={`ภาพหน้าปก ${card.title}`} className="h-full w-full object-cover" />
+                <span className="absolute inset-0 flex items-center justify-center bg-slate-950/0 text-xs font-semibold text-white opacity-0 transition group-hover:bg-slate-950/35 group-hover:opacity-100">
+                  ดูภาพ
+                </span>
+              </span>
+            </button>
+          )
+        ) : shouldLinkMediaToPdf ? (
+          <a
+            href={card.pdfUrl}
+            target="_blank"
+            rel="noreferrer"
+            className={`mx-auto flex h-14 w-14 shrink-0 items-center justify-center rounded-full ${card.color} text-white transition hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-slate-400`}
+            aria-label={`เปิดไฟล์ PDF ${card.title}`}
+          >
+            <Icon className="h-7 w-7" aria-hidden="true" />
+          </a>
+        ) : (
+          <div className={`mx-auto flex h-14 w-14 shrink-0 items-center justify-center rounded-full ${card.color} text-white`}>
+            <Icon className="h-7 w-7" aria-hidden="true" />
+          </div>
+        )}
+        <h4 className={titleClassName} style={{ overflowWrap: 'anywhere', wordBreak: 'break-word' }}>{card.title}</h4>
+        {!options?.hideSupportingText ? <p className="mt-2 max-h-10 overflow-hidden text-sm text-slate-600" style={{ overflowWrap: 'anywhere', wordBreak: 'break-word' }}>{card.subtitle}</p> : null}
+        {!options?.hideSupportingText && card.description ? <p className="mt-1 max-h-12 overflow-hidden text-xs text-slate-500" style={{ overflowWrap: 'anywhere', wordBreak: 'break-word' }}>{card.description}</p> : null}
+        {!options?.hideActionButton ? (
+          <ActionElement
+            {...(card.pdfUrl
+              ? { href: card.pdfUrl, target: '_blank', rel: 'noreferrer' }
+              : { type: 'button' })}
+            className={`mt-auto inline-flex items-center justify-center gap-2 rounded-md border px-3 py-2 text-sm font-semibold transition ${tone.action}`}
+          >
+            {card.actionLabel}
+            <ArrowRight className="h-4 w-4" aria-hidden="true" />
+          </ActionElement>
+        ) : null}
+      </div>
+    );
   };
 
   return (
@@ -152,117 +262,88 @@ export function HomePlanSections({
           </div>
         ) : null}
 
-        <div className={`${showPlanBanner ? 'mt-8' : 'mt-0'} grid gap-5`}>
-          {sections.map((section, sectionIndex) => {
-            const tone = sectionToneClass[section.tone] || sectionToneClass.emerald;
-            const currentPage = sectionPages[section.id] || 0;
-            const totalPages = Math.max(1, Math.ceil(section.cards.length / cardsPerPage));
-            const visibleCards = section.cards.slice(currentPage * cardsPerPage, currentPage * cardsPerPage + cardsPerPage);
-            const canGoPrevious = currentPage > 0;
-            const canGoNext = currentPage < totalPages - 1;
-            const visibleColumnCount = Math.max(1, Math.min(cardsPerPage, visibleCards.length));
-            const cardGridStyle = {
-              gridTemplateColumns: `repeat(${visibleColumnCount}, minmax(0, 1fr))`,
-            };
+        {displayMode === 'shelf' ? (
+          <div className={`${showPlanBanner ? 'mt-8' : 'mt-0'}`}>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              {shelfCards.map(({ section, card, cardIndex }, shelfIndex) => (
+                <RevealOnScroll key={`${section.id}-${card.title}-${card.subtitle}-${cardIndex}`} delayMs={Math.min(shelfIndex * 45, 240)}>
+                  {renderPlanCard(section, card, cardIndex, 'shelf', { hideActionButton: true, linkMediaToPdf: true, prominentTitle: true, hideSupportingText: true })}
+                </RevealOnScroll>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div className={`${showPlanBanner ? 'mt-8' : 'mt-0'} grid gap-5`}>
+            {sections.map((section, sectionIndex) => {
+              const tone = sectionToneClass[section.tone] || sectionToneClass.emerald;
+              const currentPage = sectionPages[section.id] || 0;
+              const totalPages = Math.max(1, Math.ceil(section.cards.length / cardsPerPage));
+              const visibleCards = section.cards.slice(currentPage * cardsPerPage, currentPage * cardsPerPage + cardsPerPage);
+              const canGoPrevious = currentPage > 0;
+              const canGoNext = currentPage < totalPages - 1;
+              const visibleColumnCount = Math.max(1, Math.min(cardsPerPage, visibleCards.length));
+              const cardGridStyle = {
+                gridTemplateColumns: `repeat(${visibleColumnCount}, minmax(0, 1fr))`,
+              };
 
-            return (
-              <RevealOnScroll key={section.id} delayMs={sectionIndex * 140}>
-                <article
-                  id={sectionId === section.id || section.id === 'plan-levels' ? undefined : section.id}
-                  className={`scroll-mt-24 rounded-md p-[2px] ${tone.border} ${tone.shadow}`}
-                >
-                  <div className={`rounded-md p-4 sm:p-5 ${tone.body}`}>
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <div className="flex min-w-0 items-center gap-3">
-                        {showSectionNumbers ? (
-                          <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-lg font-bold shadow-sm ring-1 ${tone.badge}`}>
-                            {section.number}
-                          </span>
+              return (
+                <RevealOnScroll key={section.id} delayMs={sectionIndex * 140}>
+                  <article
+                    id={sectionId === section.id || section.id === 'plan-levels' ? undefined : section.id}
+                    className={`scroll-mt-24 rounded-md p-[2px] ${tone.border} ${tone.shadow}`}
+                  >
+                    <div className={`rounded-md p-4 sm:p-5 ${tone.body}`}>
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div className="flex min-w-0 items-center gap-3">
+                          {showSectionNumbers ? (
+                            <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-lg font-bold shadow-sm ring-1 ${tone.badge}`}>
+                              {section.number}
+                            </span>
+                          ) : null}
+                          <h3 className="text-xl font-semibold tracking-normal">{section.title}</h3>
+                        </div>
+
+                        {totalPages > 1 ? (
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-semibold text-current/70">
+                              {currentPage + 1}/{totalPages}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => goToSectionPage(section.id, totalPages, 'previous')}
+                              disabled={!canGoPrevious}
+                              className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-white/70 bg-white text-current shadow-sm transition hover:bg-white/80 disabled:cursor-not-allowed disabled:opacity-40"
+                              aria-label={`ย้อนกลับ ${section.title}`}
+                            >
+                              <ChevronLeft className="h-5 w-5" aria-hidden="true" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => goToSectionPage(section.id, totalPages, 'next')}
+                              disabled={!canGoNext}
+                              className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-white/70 bg-white text-current shadow-sm transition hover:bg-white/80 disabled:cursor-not-allowed disabled:opacity-40"
+                              aria-label={`ถัดไป ${section.title}`}
+                            >
+                              <ChevronRight className="h-5 w-5" aria-hidden="true" />
+                            </button>
+                          </div>
                         ) : null}
-                        <h3 className="text-xl font-semibold tracking-normal">{section.title}</h3>
                       </div>
 
-                      {totalPages > 1 ? (
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-semibold text-current/70">
-                            {currentPage + 1}/{totalPages}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => goToSectionPage(section.id, totalPages, 'previous')}
-                            disabled={!canGoPrevious}
-                            className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-white/70 bg-white text-current shadow-sm transition hover:bg-white/80 disabled:cursor-not-allowed disabled:opacity-40"
-                            aria-label={`ย้อนกลับ ${section.title}`}
-                          >
-                            <ChevronLeft className="h-5 w-5" aria-hidden="true" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => goToSectionPage(section.id, totalPages, 'next')}
-                            disabled={!canGoNext}
-                            className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-white/70 bg-white text-current shadow-sm transition hover:bg-white/80 disabled:cursor-not-allowed disabled:opacity-40"
-                            aria-label={`ถัดไป ${section.title}`}
-                          >
-                            <ChevronRight className="h-5 w-5" aria-hidden="true" />
-                          </button>
-                        </div>
-                      ) : null}
-                    </div>
+                      <div className="mt-5 grid gap-4" style={cardGridStyle}>
+                        {visibleCards.map((card, cardIndex) => {
+                          const absoluteCardIndex = currentPage * cardsPerPage + cardIndex;
 
-                    <div className="mt-5 grid gap-4" style={cardGridStyle}>
-                      {visibleCards.map((card, cardIndex) => {
-                        const Icon = card.icon;
-                        const coverImageLayout = card.coverImageLayout === 'landscape' ? 'landscape' : 'portrait';
-                        const coverAspectClass = coverImageLayout === 'landscape' ? 'aspect-[19/12]' : 'aspect-[13/20]';
-                        const ActionElement = card.pdfUrl ? 'a' : 'button';
-                        const absoluteCardIndex = currentPage * cardsPerPage + cardIndex;
-
-                        return (
-                          <div
-                            key={`${section.id}-${card.title}-${card.subtitle}-${absoluteCardIndex}`}
-                            className={`flex min-h-64 flex-col rounded-md border bg-white p-4 text-center text-slate-900 shadow-sm ${tone.card}`}
-                          >
-                            {card.coverImageUrl ? (
-                              <button
-                                type="button"
-                                onClick={() => setCoverPreview({ title: card.title, imageUrl: card.coverImageUrl || '' })}
-                                className={`group mx-auto ${coverAspectClass} w-full max-w-[200px] overflow-hidden rounded-md border border-slate-200 bg-slate-100 transition hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-400`}
-                                aria-label={`ดูภาพหน้าปก ${card.title} ขนาดใหญ่`}
-                              >
-                                <span className="relative block h-full w-full">
-                                  <img src={card.coverImageUrl} alt={`ภาพหน้าปก ${card.title}`} className="h-full w-full object-cover" />
-                                  <span className="absolute inset-0 flex items-center justify-center bg-slate-950/0 text-xs font-semibold text-white opacity-0 transition group-hover:bg-slate-950/35 group-hover:opacity-100">
-                                    ดูภาพ
-                                  </span>
-                                </span>
-                              </button>
-                            ) : (
-                              <div className={`mx-auto flex h-14 w-14 items-center justify-center rounded-full ${card.color} text-white`}>
-                                <Icon className="h-7 w-7" aria-hidden="true" />
-                              </div>
-                            )}
-                            <h4 className="mt-4 text-sm font-semibold leading-6 tracking-normal">{card.title}</h4>
-                            <p className="mt-2 text-sm text-slate-600">{card.subtitle}</p>
-                            {card.description ? <p className="mt-1 text-xs text-slate-500">{card.description}</p> : null}
-                            <ActionElement
-                              {...(card.pdfUrl
-                                ? { href: card.pdfUrl, target: '_blank', rel: 'noreferrer' }
-                                : { type: 'button' })}
-                              className={`mt-auto inline-flex items-center justify-center gap-2 rounded-md border px-3 py-2 text-sm font-semibold transition ${tone.action}`}
-                            >
-                              {card.actionLabel}
-                              <ArrowRight className="h-4 w-4" aria-hidden="true" />
-                            </ActionElement>
-                          </div>
-                        );
-                      })}
+                          return renderPlanCard(section, card, absoluteCardIndex, 'grouped');
+                        })}
+                      </div>
                     </div>
-                  </div>
-                </article>
-              </RevealOnScroll>
-            );
-          })}
-        </div>
+                  </article>
+                </RevealOnScroll>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {coverPreview ? (

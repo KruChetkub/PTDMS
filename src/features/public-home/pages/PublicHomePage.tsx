@@ -1,20 +1,20 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Activity, FileText, HeartPulse, Landmark, Puzzle, ShieldCheck, Target, TrendingUp, UsersRound } from 'lucide-react';
 import { CookieConsentBanner } from '../components/CookieConsentBanner';
-import { HomeFaqSection } from '../components/HomeFaqSection';
 import { HomeFooter } from '../components/HomeFooter';
-import { HomeMobileSectionLauncher } from '../components/HomeMobileSectionLauncher';
-import { HomePlanLevelsBanner } from '../components/HomePlanLevelsBanner';
-import { HomeNewsSection } from '../components/HomeNewsSection';
-import { HomePlanSections } from '../components/HomePlanSections';
-import { PublicHomeHeader } from '../components/PublicHomeHeader';
+import { PublicHomeSidebar } from '../components/PublicHomeSidebar';
+import { PublicUserPlansSection } from '../components/PublicUserPlansSection';
+import { PublicOfficialPlansView } from '../views/PublicOfficialPlansView';
+import { PublicPerformanceResultsView } from '../views/PublicPerformanceResultsView';
+import { PublicResearchView } from '../views/PublicResearchView';
 import { usePublishedSiteContent } from '../../site-content/hooks/useSiteContent';
 import { usePublicPageAnalytics } from '../hooks/usePublicPageAnalytics';
+import { useAuthStore } from '../../../stores/auth.store';
 import { homePlanSections } from '../data/publicHome.mock';
+import type { PublicHomeView } from '../types/publicHomeView.types';
 import type {
   SiteContentPlanCard,
   SiteContentPlanIconKey,
-  SiteContentState,
 } from '../../site-content/types/siteContent.types';
 
 const planIconMap = {
@@ -27,15 +27,6 @@ const planIconMap = {
   'shield-users': ShieldCheck,
   file: FileText,
 } satisfies Record<SiteContentPlanIconKey, typeof Landmark>;
-
-const planSectionCardSelectors: Record<string, (content: SiteContentState) => SiteContentPlanCard[]> = {
-  'plan-levels': (content) => content.planLevelCards,
-  'disease-control-plan': (content) => content.diseaseControlPlanCards,
-  'annual-guidelines': (content) => content.annualGuidelineCards,
-  'risk-management': (content) => content.riskManagementPlanCards,
-  'executive-policy': (content) => content.executivePolicyCards,
-  'r2r-research': (content) => content.r2rResearchCards,
-};
 
 function mapVisiblePlanCards(cards: SiteContentPlanCard[]) {
   return cards
@@ -54,6 +45,10 @@ function mapVisiblePlanCards(cards: SiteContentPlanCard[]) {
 }
 
 export function PublicHomePage() {
+  const [activeView, setActiveView] = useState<PublicHomeView>('plans');
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const user = useAuthStore((state) => state.user);
+
   useEffect(() => {
     document.title = 'Strategic Information Repository';
 
@@ -62,49 +57,39 @@ export function PublicHomePage() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!user && activeView === 'my-plans') {
+      setActiveView('plans');
+    }
+  }, [activeView, user]);
+
   usePublicPageAnalytics();
   const siteContent = usePublishedSiteContent();
-  const visibleNews = siteContent.newsItems.filter((item) => item.status === 'published');
-  const visibleFaqs = siteContent.faqItems
-    .filter((item) => item.status === 'published')
-    .map((item) => ({ question: item.question, answer: item.answer }));
-  const allPlanSections = homePlanSections.map((section) => {
-    const selectCards = planSectionCardSelectors[section.id];
-    if (!selectCards) return section;
-
-    return {
+  const r2rSections = homePlanSections
+    .filter((section) => section.id === 'r2r-research')
+    .map((section) => ({
       ...section,
-      cards: mapVisiblePlanCards(selectCards(siteContent)),
-    };
-  });
-  const r2rSections = allPlanSections.filter((section) => section.id === 'r2r-research');
-  const planSections = allPlanSections.filter((section) => section.id !== 'r2r-research');
+      cards: mapVisiblePlanCards(siteContent.r2rResearchCards),
+    }));
 
   return (
     <div className="min-h-screen bg-white text-slate-900">
-      <PublicHomeHeader logoUrl={siteContent.brandSettings.logoUrl} siteName={siteContent.brandSettings.siteName} />
-      <main className="pt-14 sm:pt-16">
-        <div className="bg-slate-50 px-4 pt-6 lg:hidden">
-          <HomePlanLevelsBanner logoUrl={siteContent.brandSettings.logoUrl} />
-        </div>
-        <HomeMobileSectionLauncher planSections={allPlanSections} news={visibleNews} faqs={visibleFaqs} />
-        <div className="hidden lg:block">
-          <HomePlanSections sections={planSections} logoUrl={siteContent.brandSettings.logoUrl} />
-        </div>
-        <div className="hidden lg:block">
-          <HomePlanSections
-            sections={r2rSections}
+      <main>
+        <div className="lg:flex">
+          <PublicHomeSidebar
+            activeView={activeView}
+            isCollapsed={isSidebarCollapsed}
             logoUrl={siteContent.brandSettings.logoUrl}
-            sectionId="r2r-research"
-            showPlanBanner={false}
-            showSectionNumbers={false}
-            heading="งานวิจัยจากงานประจำกองยุทธศาสตร์และแผนงาน (R2R)"
-            description="รวบรวมผลงานวิจัยจากงานประจำ แยกจากหมวดแผนเพื่อให้เข้าถึงได้ชัดเจน"
+            siteName={siteContent.brandSettings.siteName}
+            onToggleCollapsed={() => setIsSidebarCollapsed((currentValue) => !currentValue)}
+            onViewChange={setActiveView}
           />
-        </div>
-        <div className="hidden lg:block">
-          <HomeNewsSection news={visibleNews} />
-          <HomeFaqSection faqs={visibleFaqs} />
+          <div className="min-w-0 flex-1 bg-slate-50">
+            {activeView === 'plans' ? <PublicOfficialPlansView logoUrl={siteContent.brandSettings.logoUrl} /> : null}
+            {activeView === 'my-plans' ? <PublicUserPlansSection /> : null}
+            {activeView === 'performance' ? <PublicPerformanceResultsView /> : null}
+            {activeView === 'research' ? <PublicResearchView sections={r2rSections} logoUrl={siteContent.brandSettings.logoUrl} /> : null}
+          </div>
         </div>
       </main>
       <HomeFooter />

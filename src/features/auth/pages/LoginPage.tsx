@@ -1,15 +1,15 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Eye, EyeOff, Lock, LogIn, Mail } from 'lucide-react';
+import { Eye, EyeOff, FileText, Lock, LogIn, Mail, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { ConfiguredNotice } from '../../../components/auth/ConfiguredNotice';
-import { LegalFooter } from '../../legal/LegalFooter';
 import { useAuthStore } from '../../../stores/auth.store';
+import { reportClientError } from '../../../utils/errorHandling';
+import { LegalFooter } from '../../legal/LegalFooter';
+import { PrivacyNoticeIntro, PrivacyNoticeSummary } from '../../legal/PrivacyNoticeContent';
 import { usePublishedSiteContent } from '../../site-content/hooks/useSiteContent';
 import { loginSchema, type LoginFormValues } from '../auth.schemas';
-import { reportClientError } from '../../../utils/errorHandling';
-
 
 export function LoginPage() {
   useEffect(() => {
@@ -19,6 +19,7 @@ export function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const [showPassword, setShowPassword] = useState(false);
+  const [isPrivacyNoticeOpen, setIsPrivacyNoticeOpen] = useState(true);
   const from = (location.state as { from?: Location } | null)?.from?.pathname || '/portal';
   const { signIn, loading, error, clearError } = useAuthStore();
   const siteContent = usePublishedSiteContent();
@@ -43,6 +44,8 @@ export function LoginPage() {
       password: '',
     },
   });
+
+  const closePrivacyNotice = () => setIsPrivacyNoticeOpen(false);
 
   const onSubmit = async (values: LoginFormValues) => {
     clearError();
@@ -172,6 +175,67 @@ export function LoginPage() {
           </div>
         </section>
       </main>
+
+      {isPrivacyNoticeOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 text-slate-900">
+          <div className="absolute inset-0 bg-slate-950/70 backdrop-blur-sm" aria-hidden="true" />
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="privacy-notice-title"
+            className="relative flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-md border border-white/20 bg-slate-50 shadow-2xl"
+          >
+            <div className="flex items-start justify-between gap-4 border-b border-slate-200 bg-white px-5 py-4">
+              <div className="flex items-start gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-pink-50 text-pink-700">
+                  <FileText className="h-5 w-5" aria-hidden="true" />
+                </div>
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-normal text-pink-700">Privacy Notice</p>
+                  <h2 id="privacy-notice-title" className="text-lg font-bold leading-7 text-slate-950">
+                    ประกาศความเป็นส่วนตัวสำหรับผู้ใช้งาน SmartDSP
+                  </h2>
+                  <p className="mt-1 text-sm leading-6 text-slate-600">กรุณาอ่านและรับทราบก่อนเข้าใช้งานระบบ</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={closePrivacyNotice}
+                className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-slate-500 transition hover:bg-slate-100 hover:text-slate-800 focus:outline-none focus:ring-2 focus:ring-pink-200"
+                aria-label="ปิด Privacy Notice"
+              >
+                <X className="h-5 w-5" aria-hidden="true" />
+              </button>
+            </div>
+
+            <div className="overflow-y-auto px-5 py-4">
+              <div className="space-y-4">
+                <PrivacyNoticeIntro />
+                <section className="rounded-lg border border-pink-100 bg-pink-50 px-5 py-4 text-sm leading-6 text-pink-950">
+                  <p className="font-semibold">
+                    การเข้าสู่ระบบ SmartDSP ถือว่าผู้ใช้งานได้รับทราบประกาศความเป็นส่วนตัวฉบับนี้แล้ว
+                    และยินยอมให้ระบบประมวลผลข้อมูลเท่าที่จำเป็นต่อการให้บริการและการปฏิบัติงานของหน่วยงาน
+                  </p>
+                </section>
+                <PrivacyNoticeSummary compact />
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-3 border-t border-slate-200 bg-white px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+              <Link className="text-sm font-semibold text-pink-700 transition hover:text-pink-600" to="/privacy-notice">
+                อ่าน Privacy Notice ฉบับเต็ม
+              </Link>
+              <button
+                type="button"
+                onClick={closePrivacyNotice}
+                className="inline-flex items-center justify-center rounded-md bg-pink-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-pink-700 focus:outline-none focus:ring-2 focus:ring-pink-200 focus:ring-offset-2"
+              >
+                รับทราบและเข้าสู่ระบบ
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
     </div>
   );
 }
