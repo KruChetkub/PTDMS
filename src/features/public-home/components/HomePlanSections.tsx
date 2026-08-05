@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowRight, ChevronLeft, ChevronRight, ExternalLink, FileText, Search, X } from 'lucide-react';
 import { HomePlanLevelsBanner } from './HomePlanLevelsBanner';
+import { PdfFirstPageCover } from './PdfFirstPageCover';
 import { RevealOnScroll } from './RevealOnScroll';
 import type { HomePlanCard, HomePlanSection } from '../types/publicHome.types';
 
@@ -213,6 +214,7 @@ export function HomePlanSections({
 
   const handleShelfPointerDown = (sectionKey: string, event: React.PointerEvent<HTMLDivElement>) => {
     if (event.button !== 0) return;
+    if ((event.target as HTMLElement).closest('a, button')) return;
 
     event.preventDefault();
     document.body.style.userSelect = 'none';
@@ -281,7 +283,7 @@ export function HomePlanSections({
             <a
               href={card.pdfUrl}
               target="_blank"
-              rel="noreferrer"
+              rel="noopener noreferrer"
               className={`group/media mx-auto ${coverAspectClass} w-full max-w-[175px] shrink-0 overflow-hidden rounded-md border border-slate-200 bg-slate-100 shadow-sm transition hover:border-cyan-300 focus:outline-none focus:ring-2 focus:ring-cyan-300`}
               aria-label={`เปิดไฟล์ PDF ${card.title}`}
             >
@@ -307,15 +309,15 @@ export function HomePlanSections({
               </span>
             </button>
           )
-        ) : shouldLinkMediaToPdf ? (
+        ) : card.pdfUrl ? (
           <a
             href={card.pdfUrl}
             target="_blank"
-            rel="noreferrer"
-            className="mx-auto flex h-20 w-20 shrink-0 items-center justify-center rounded-md bg-[linear-gradient(135deg,#0878D8,#12B8B1)] text-white shadow-sm transition hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-cyan-300"
+            rel="noopener noreferrer"
+            className={`mx-auto ${coverAspectClass} w-full max-w-[175px] shrink-0 overflow-hidden rounded-md border border-slate-200 bg-slate-100 shadow-sm transition hover:border-cyan-300 focus:outline-none focus:ring-2 focus:ring-cyan-300`}
             aria-label={`เปิดไฟล์ PDF ${card.title}`}
           >
-            <Icon className="h-9 w-9" aria-hidden="true" />
+            <PdfFirstPageCover pdfUrl={card.pdfUrl} title={card.title} />
           </a>
         ) : (
           <div className="mx-auto flex h-20 w-20 shrink-0 items-center justify-center rounded-md bg-[linear-gradient(135deg,#0878D8,#12B8B1)] text-white shadow-sm">
@@ -330,7 +332,7 @@ export function HomePlanSections({
         {options?.hideActionButton ? null : (
           <ActionElement
             {...(card.pdfUrl
-              ? { href: card.pdfUrl, target: '_blank', rel: 'noreferrer' }
+              ? { href: card.pdfUrl, target: '_blank', rel: 'noopener noreferrer' }
               : { type: 'button' })}
             className="mt-auto inline-flex items-center justify-center gap-2 rounded-md border border-cyan-200 bg-cyan-50 px-3 py-2 text-sm font-semibold text-cyan-800 transition hover:border-cyan-300 hover:bg-cyan-100"
           >
@@ -353,7 +355,7 @@ export function HomePlanSections({
       ? 'group/media relative h-36 w-56 shrink-0 overflow-hidden rounded-md border border-slate-200 bg-slate-100 shadow-sm focus:outline-none focus:ring-2 focus:ring-cyan-300'
       : 'group/media relative h-44 w-28 shrink-0 overflow-hidden rounded-md border border-slate-200 bg-slate-100 shadow-sm focus:outline-none focus:ring-2 focus:ring-cyan-300';
     const actionProps = card.pdfUrl
-      ? { href: card.pdfUrl, target: '_blank', rel: 'noreferrer' }
+      ? { href: card.pdfUrl, target: '_blank', rel: 'noopener noreferrer' }
       : { type: 'button' as const };
 
     return (
@@ -365,6 +367,8 @@ export function HomePlanSections({
         >
           {card.coverImageUrl ? (
             <img src={card.coverImageUrl} alt={`ภาพหน้าปก ${card.title}`} className="h-full w-full object-cover" draggable={false} />
+          ) : card.pdfUrl ? (
+            <PdfFirstPageCover pdfUrl={card.pdfUrl} title={card.title} />
           ) : (
             <span className="flex h-full w-full items-center justify-center bg-[linear-gradient(135deg,#0878D8,#12B8B1)] text-white">
               <Icon className="h-8 w-8" aria-hidden="true" />
@@ -381,7 +385,7 @@ export function HomePlanSections({
               {card.title}
             </h3>
             {card.pdfUrl ? (
-              <a href={card.pdfUrl} target="_blank" rel="noreferrer" className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-slate-400 transition hover:bg-cyan-50 hover:text-cyan-700" aria-label={`เปิดไฟล์ PDF ${card.title}`}>
+              <a href={card.pdfUrl} target="_blank" rel="noopener noreferrer" className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-slate-400 transition hover:bg-cyan-50 hover:text-cyan-700" aria-label={`เปิดไฟล์ PDF ${card.title}`}>
                 <ExternalLink className="h-4 w-4" aria-hidden="true" />
               </a>
             ) : null}

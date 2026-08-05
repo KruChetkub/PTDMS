@@ -5,7 +5,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Edit3,
-  FilePlus,
+  Save,
   FileText,
   Landmark,
   Target,
@@ -17,7 +17,11 @@ import {
   X,
 } from 'lucide-react';
 import { useAuthStore } from '../../../stores/auth.store';
+import { ConfirmModal } from '../../../components/ui/ConfirmModal';
 import type { SiteContentPlanCard, SiteContentPlanIconKey, SiteContentStatus } from '../../site-content/types/siteContent.types';
+import { AdminCoverImageUpload } from './AdminCoverImageUpload';
+import { AdminPublicPdfUpload } from './AdminPublicPdfUpload';
+import { CoverImagePreview } from './CoverImagePreview';
 import {
   comparePublicUserPlans,
   createPublicUserPlan,
@@ -137,9 +141,12 @@ export function PublicUserPlansSection() {
   const [editingPlanId, setEditingPlanId] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(0);
   const [isSaving, setIsSaving] = useState(false);
+  const [isUploadingPdf, setIsUploadingPdf] = useState(false);
+  const [isUploadingCover, setIsUploadingCover] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const isSignedIn = Boolean(user);
+  const canUploadPdf = profile?.role === 'admin' || profile?.role === 'super_admin';
   const myPlans = useMemo(
     () => plans.filter((plan) => plan.ownerUserId === user?.id).sort(comparePublicUserPlans),
     [plans, user?.id],
@@ -323,15 +330,11 @@ export function PublicUserPlansSection() {
   }
 
   return (
-    <section id="my-plan-submission" className="min-h-[calc(100vh-4rem)] bg-white py-12 sm:py-16">
+    <section id="my-plan-submission" className="min-h-[calc(100vh-4rem)] bg-white py-8 sm:py-10">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <p className="text-sm font-semibold text-brand-700">My Plan Publishing</p>
             <h1 className="mt-2 text-2xl font-bold tracking-normal text-slate-950 sm:text-3xl">เพิ่มแผนของฉัน</h1>
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
-              พื้นที่สำหรับผู้ใช้ที่เข้าสู่ระบบ เพิ่มแผนแยกจากข้อมูลหลักของ site-manager และเผยแพร่ให้แสดงบนหน้าแรกได้
-            </p>
           </div>
         </div>
 
@@ -339,23 +342,22 @@ export function PublicUserPlansSection() {
           <div className="flex flex-col gap-2 border-b border-slate-200 pb-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h2 className="text-lg font-semibold tracking-normal text-slate-950">
-                {editingPlan ? 'แก้ไขแผนของฉัน' : 'นำเข้าแผนของฉัน'}
+                {editingPlan ? 'แก้ไขแผนของฉัน' : 'ข้อมูลแผนของฉัน'}
               </h2>
-              <p className="mt-1 text-sm text-slate-500">ข้อมูลส่วนนี้บันทึกแยกจากแผนหลักของ site-manager</p>
             </div>
             {editingPlan ? (
               <button
                 type="button"
                 onClick={resetForm}
-                className="inline-flex items-center justify-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50"
               >
+                title="ยกเลิกแก้ไข"
                 <X className="h-4 w-4" aria-hidden="true" />
-                ยกเลิกแก้ไข
               </button>
             ) : null}
           </div>
 
-          <div className="mt-4 grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
+          <div className="mt-4 grid gap-4 lg:grid-cols-2">
             <div className="grid gap-3">
               <div className="grid gap-3 sm:grid-cols-2">
                 <label className="block">
@@ -399,17 +401,49 @@ export function PublicUserPlansSection() {
                 <input className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm" value={form.title} onChange={(event) => updateForm('title', event.target.value)} />
               </label>
 
-              <label className="block">
-                <span className="text-sm font-medium text-slate-700">ลิงก์ PDF</span>
-                <input className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm" value={form.pdfUrl} onChange={(event) => updateForm('pdfUrl', event.target.value)} placeholder="https://.../document.pdf" />
-              </label>
+              <label className="block"><span className="text-sm font-medium text-slate-700">หัวข้อรอง</span><input className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm" value={form.subtitle} onChange={(event) => updateForm('subtitle', event.target.value)} /></label>
+              <label className="block"><span className="text-sm font-medium text-slate-700">รายละเอียด</span><textarea rows={4} className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm" value={form.description} onChange={(event) => updateForm('description', event.target.value)} /></label>
             </div>
 
             <div className="grid gap-3">
               <label className="block">
-                <span className="text-sm font-medium text-slate-700">ภาพหน้าปก</span>
-                <input className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm" value={form.coverImageUrl} onChange={(event) => updateForm('coverImageUrl', event.target.value)} placeholder="https://.../cover.jpg" />
+                <span className="text-sm font-medium text-slate-700">ลิงก์เอกสาร PDF</span>
+                <input className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm" value={form.pdfUrl} onChange={(event) => updateForm('pdfUrl', event.target.value)} placeholder="https://.../document.pdf" />
               </label>
+              {canUploadPdf && user ? (
+                <AdminPublicPdfUpload
+                  userId={user.id}
+                  folder="plans"
+                  disabled={isSaving || isUploadingCover}
+                  onUploadingChange={(uploading) => {
+                    setIsUploadingPdf(uploading);
+                    if (uploading) setError(null);
+                  }}
+                  onError={setError}
+                  onUploaded={(upload) => {
+                    setForm((current) => ({ ...current, pdfUrl: upload.pdfUrl, coverImageUrl: current.coverImageUrl.trim() && !current.coverImageUrl.includes('/public-home-documents/') ? current.coverImageUrl : upload.coverImageUrl }));
+                    setError(null);
+                  }}
+                />
+              ) : null}
+              <label className="block">
+                <span className="text-sm font-medium text-slate-700">ลิงก์ภาพหน้าปก</span>
+                <input type="url" className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm" value={form.coverImageUrl} onChange={(event) => updateForm('coverImageUrl', event.target.value)} placeholder="https://.../cover.jpg" />
+              </label>
+              {canUploadPdf ? (
+                <AdminCoverImageUpload
+                  disabled={isSaving || isUploadingPdf}
+                  onUploadingChange={(uploading) => {
+                    setIsUploadingCover(uploading);
+                    if (uploading) setError(null);
+                  }}
+                  onError={setError}
+                  onUploaded={(imageUrl) => {
+                    setForm((current) => ({ ...current, coverImageUrl: imageUrl }));
+                    setError(null);
+                  }}
+                />
+              ) : null}
               <div className="grid gap-3 sm:grid-cols-2">
                 <label className="block">
                   <span className="text-sm font-medium text-slate-700">ไอคอน</span>
@@ -432,19 +466,22 @@ export function PublicUserPlansSection() {
                 <button type="button" onClick={() => updateForm('coverImageLayout', 'landscape')} className={`rounded-md border px-3 py-2 text-xs font-semibold transition ${form.coverImageLayout === 'landscape' ? 'border-brand-500 bg-brand-50 text-brand-700' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}><span className="block text-sm font-semibold">640 x 360 px</span><span className="mt-1 block text-xs font-medium text-current/70">ภาพแนวนอน</span></button>
               </div>
 
+              <CoverImagePreview
+                imageUrl={form.coverImageUrl}
+                pdfUrl={form.pdfUrl}
+                layout={form.coverImageLayout}
+                title={form.title}
+              />
+
+              <button type="button" onClick={() => void handleSave()} disabled={isSaving || isUploadingPdf || isUploadingCover} className="mt-2 inline-flex h-10 items-center justify-center gap-2 rounded-md bg-brand-600 px-4 text-sm font-semibold text-white transition hover:bg-brand-700 disabled:opacity-60">
+                <Save className="h-4 w-4" aria-hidden="true" />
+                {isSaving ? 'กำลังบันทึก...' : editingPlan ? 'บันทึกการแก้ไข' : 'บันทึกแผนของฉัน'}
+              </button>
             </div>
           </div>
 
           {error ? <p className="mt-4 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p> : null}
-          {message ? <p className="mt-4 rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{message}</p> : null}
 
-          <div className="mt-4 flex flex-wrap items-center gap-3">
-            <button type="button" onClick={() => void handleSave()} disabled={isSaving} className="inline-flex items-center justify-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-700 disabled:opacity-60">
-              <FilePlus className="h-4 w-4" aria-hidden="true" />
-              {isSaving ? 'กำลังบันทึก...' : editingPlan ? 'บันทึกการแก้ไข' : 'บันทึกแผนของฉัน'}
-            </button>
-            <span className="text-xs text-slate-500">หน้าแผนจะเรียงตามหัวข้อแผนก่อน แล้วเรียงตามเลขลำดับการแสดงผล</span>
-          </div>
         </div>
 
         <div className="mt-6 rounded-md border border-slate-200 bg-white p-4">
@@ -544,6 +581,16 @@ export function PublicUserPlansSection() {
           )}
         </div>
       </div>
+      <ConfirmModal
+        isOpen={Boolean(message)}
+        onClose={() => setMessage(null)}
+        onConfirm={() => setMessage(null)}
+        title="ดำเนินการสำเร็จ"
+        message={message || ''}
+        confirmLabel="ตกลง"
+        variant="success"
+        showCancelButton={false}
+      />
     </section>
   );
 }

@@ -86,7 +86,6 @@ export function PublicOfficialPlansView({ logoUrl }: PublicOfficialPlansViewProp
     [publishedPlans],
   );
   const visibleCategoryCount = sections.length;
-  const pdfCount = publishedPlans.filter((plan) => Boolean(plan.card.pdfUrl)).length;
 
   return (
     <>
@@ -114,7 +113,7 @@ export function PublicOfficialPlansView({ logoUrl }: PublicOfficialPlansViewProp
 
           </div>
 
-          <div className="grid grid-cols-3 gap-1.5 rounded-md border border-white/25 bg-white/15 p-1.5 shadow-2xl backdrop-blur-md">
+          <div className="grid grid-cols-2 gap-1.5 rounded-md border border-white/25 bg-white/15 p-1.5 shadow-2xl backdrop-blur-md">
             <div className="rounded-md bg-white/95 px-2.5 py-1 text-slate-900">
               <div className="text-base font-bold text-[#075DA8]">{publishedPlans.length}</div>
               <div className="text-[10px] font-semibold text-slate-600">เอกสารเผยแพร่</div>
@@ -122,10 +121,6 @@ export function PublicOfficialPlansView({ logoUrl }: PublicOfficialPlansViewProp
             <div className="rounded-md bg-white/95 px-2.5 py-1 text-slate-900">
               <div className="text-base font-bold text-[#008B8B]">{visibleCategoryCount}</div>
               <div className="text-[10px] font-semibold text-slate-600">หมวดแผน</div>
-            </div>
-            <div className="rounded-md bg-white/95 px-2.5 py-1 text-slate-900">
-              <div className="text-base font-bold text-[#14A37F]">{pdfCount}</div>
-              <div className="text-[10px] font-semibold text-slate-600">ลิงก์เอกสาร</div>
             </div>
           </div>
         </div>

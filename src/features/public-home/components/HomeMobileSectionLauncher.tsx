@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ChevronDown, ChevronLeft, ChevronRight, CircleHelp, Newspaper, X } from 'lucide-react';
+import { PdfFirstPageCover } from './PdfFirstPageCover';
 import type { HomeFaqItem, HomeNewsItem, HomePlanSection } from '../types/publicHome.types';
 
 type MobileSectionId = string;
@@ -276,6 +277,16 @@ export function HomeMobileSectionLauncher({ planSections, news, faqs }: HomeMobi
                             >
                               <img src={card.coverImageUrl} alt={`ภาพหน้าปก ${card.title}`} className="h-full w-full object-cover" />
                             </button>
+                          ) : card.pdfUrl ? (
+                            <a
+                              href={card.pdfUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className={`${coverAspectClass} w-full max-w-[74px] overflow-hidden rounded-md border border-slate-200 bg-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-400`}
+                              aria-label={`เปิดไฟล์ PDF ${card.title}`}
+                            >
+                              <PdfFirstPageCover pdfUrl={card.pdfUrl} title={card.title} />
+                            </a>
                           ) : (
                             <span className={`flex h-11 w-11 items-center justify-center rounded-2xl ${card.color} text-white`}>
                               <Icon className="h-5 w-5" aria-hidden="true" />
@@ -283,7 +294,7 @@ export function HomeMobileSectionLauncher({ planSections, news, faqs }: HomeMobi
                           )}
                           <ActionElement
                             {...(card.pdfUrl
-                              ? { href: card.pdfUrl, target: '_blank', rel: 'noreferrer' }
+                              ? { href: card.pdfUrl, target: '_blank', rel: 'noopener noreferrer' }
                               : { type: 'button' })}
                             className="mt-3 grid w-full justify-items-center gap-1 rounded-md px-2 py-1 text-center transition hover:bg-slate-50"
                           >

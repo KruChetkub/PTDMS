@@ -1,4 +1,4 @@
-import { AlertTriangle, X } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, X } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { cn } from '../../utils/cn';
 
@@ -11,7 +11,8 @@ type ConfirmModalProps = {
   confirmLabel?: string;
   cancelLabel?: string;
   isLoading?: boolean;
-  variant?: 'danger' | 'warning' | 'info';
+  variant?: 'danger' | 'warning' | 'info' | 'success';
+  showCancelButton?: boolean;
 };
 
 export function ConfirmModal({
@@ -23,7 +24,8 @@ export function ConfirmModal({
   confirmLabel = 'ยืนยัน',
   cancelLabel = 'ยกเลิก',
   isLoading = false,
-  variant = 'danger'
+  variant = 'danger',
+  showCancelButton = true,
 }: ConfirmModalProps) {
   if (!isOpen) return null;
 
@@ -42,6 +44,11 @@ export function ConfirmModal({
       icon: <AlertTriangle className="h-6 w-6 text-blue-600" />,
       bg: 'bg-blue-50',
       button: 'bg-blue-600 hover:bg-blue-700 focus:ring-blue-500'
+    },
+    success: {
+      icon: <CheckCircle2 className="h-6 w-6 text-emerald-600" />,
+      bg: 'bg-emerald-50',
+      button: 'bg-emerald-600 hover:bg-emerald-700 focus:ring-emerald-500'
     }
   };
 
@@ -77,13 +84,15 @@ export function ConfirmModal({
           )}
 
           <div className="flex w-full gap-3">
-            <button
-              disabled={isLoading}
-              onClick={onClose}
-              className="flex-1 rounded-xl border border-slate-200 bg-white py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
-            >
-              {cancelLabel}
-            </button>
+            {showCancelButton ? (
+              <button
+                disabled={isLoading}
+                onClick={onClose}
+                className="flex-1 rounded-xl border border-slate-200 bg-white py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+              >
+                {cancelLabel}
+              </button>
+            ) : null}
             <button
               disabled={isLoading}
               onClick={onConfirm}

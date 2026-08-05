@@ -126,9 +126,19 @@ export function PublicHomeSidebar({ activeView, isCollapsed, logoUrl, siteName, 
             <button type="button" onClick={() => onViewChange('performance')} className={getCollapsedItemClass(activeView === 'performance')} title="ผลการดำเนินงานสำคัญ" aria-label="ผลการดำเนินงานสำคัญ">
               <TrendingUp className="h-5 w-5" aria-hidden="true" />
             </button>
+            {isSignedIn ? (
+              <button type="button" onClick={() => onViewChange('my-performance')} className={getCollapsedItemClass(activeView === 'my-performance')} title="เพิ่มผลการดำเนินงาน" aria-label="เพิ่มผลการดำเนินงาน">
+                <FilePlus className="h-5 w-5" aria-hidden="true" />
+              </button>
+            ) : null}
             <button type="button" onClick={() => onViewChange('research')} className={getCollapsedItemClass(activeView === 'research')} title="งานวิจัยจากงานประจำ" aria-label="งานวิจัยจากงานประจำ">
               <Microscope className="h-5 w-5" aria-hidden="true" />
             </button>
+            {isSignedIn ? (
+              <button type="button" onClick={() => onViewChange('my-research')} className={getCollapsedItemClass(activeView === 'my-research')} title="เพิ่มงานวิจัย" aria-label="เพิ่มงานวิจัย">
+                <FilePlus className="h-5 w-5" aria-hidden="true" />
+              </button>
+            ) : null}
             <a href={dashboardUrl} target="_blank" rel="noreferrer" className={getCollapsedItemClass(false)} title="Dashboard" aria-label="Dashboard">
               <BarChart3 className="h-5 w-5" aria-hidden="true" />
             </a>
@@ -238,7 +248,7 @@ export function PublicHomeSidebar({ activeView, isCollapsed, logoUrl, siteName, 
               <BookOpenText className="mt-0.5 h-5 w-5 shrink-0" aria-hidden="true" />
               <span>ยุทธศาสตร์/แผนปฏิบัติราชการ</span>
             </button>
-            <div className="mt-2 space-y-1 pl-8">
+            <div className={`mt-2 space-y-1 pl-8 ${isSignedIn ? '' : 'hidden'}`}>
               {isSignedIn ? (
                 <button type="button" onClick={() => onViewChange('my-plans')} className={getSubItemClass(activeView === 'my-plans')}>
                   <FilePlus className="h-4 w-4 shrink-0" aria-hidden="true" />
@@ -252,17 +262,30 @@ export function PublicHomeSidebar({ activeView, isCollapsed, logoUrl, siteName, 
             </div>
           </div>
 
-          <button type="button" onClick={() => onViewChange('performance')} className={getMainItemClass(activeView === 'performance', 'bg-white text-sky-950 shadow-sm ring-1 ring-white/70 hover:bg-sky-50')}>
-            <TrendingUp className="mt-0.5 h-5 w-5 shrink-0" aria-hidden="true" />
-            <span>ผลการดำเนินงานสำคัญ กรมควบคุมโรค</span>
-          </button>
+          <div>
+            <button type="button" onClick={() => onViewChange('performance')} className={getMainItemClass(activeView === 'performance', 'bg-white text-sky-950 shadow-sm ring-1 ring-white/70 hover:bg-sky-50')}>
+              <TrendingUp className="mt-0.5 h-5 w-5 shrink-0" aria-hidden="true" />
+              <span>ผลการดำเนินงานสำคัญ กรมควบคุมโรค</span>
+            </button>
+            {isSignedIn ? (
+              <div className="mt-2 space-y-1 pl-8">
+                <button type="button" onClick={() => onViewChange('my-performance')} className={getSubItemClass(activeView === 'my-performance')}>
+                  <FilePlus className="h-4 w-4 shrink-0" aria-hidden="true" />
+                  <span>เพิ่มผลการดำเนินงานของฉัน</span>
+                </button>
+              </div>
+            ) : null}
+          </div>
 
           <div>
             <button type="button" onClick={() => onViewChange('research')} className={getMainItemClass(activeView === 'research', 'bg-white text-teal-950 shadow-sm ring-1 ring-white/70 hover:bg-teal-50')}>
               <Microscope className="mt-0.5 h-5 w-5 shrink-0" aria-hidden="true" />
               <span>งานวิจัยจากงานประจำ</span>
             </button>
-            <div className="mt-2 space-y-1 pl-8">
+            <div className={`mt-2 space-y-1 pl-8 ${isSignedIn ? '' : 'hidden'}`}>
+              {isSignedIn ? (
+                <button type="button" onClick={() => onViewChange('my-research')} className={getSubItemClass(activeView === 'my-research')}><FilePlus className="h-4 w-4 shrink-0" aria-hidden="true" /><span>เพิ่มงานวิจัยของฉัน</span></button>
+              ) : null}
               <button type="button" onClick={() => onViewChange('research')} className={getSubItemClass(activeView === 'research')}>
                 <FileText className="h-4 w-4 shrink-0" aria-hidden="true" />
                 <span>การวิจัยเพื่อพัฒนาคุณภาพงาน</span>

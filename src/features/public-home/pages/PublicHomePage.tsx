@@ -3,10 +3,12 @@ import { Activity, FileText, HeartPulse, Landmark, Puzzle, ShieldCheck, Target, 
 import { CookieConsentBanner } from '../components/CookieConsentBanner';
 import { HomeFooter } from '../components/HomeFooter';
 import { PublicHomeSidebar } from '../components/PublicHomeSidebar';
+import { PublicPerformanceResultsManager } from '../components/PublicPerformanceResultsManager';
+import { PublicResearchItemsManager } from '../components/PublicResearchItemsManager';
 import { PublicUserPlansSection } from '../components/PublicUserPlansSection';
 import { PublicOfficialPlansView } from '../views/PublicOfficialPlansView';
-import { PublicPerformanceResultsView } from '../views/PublicPerformanceResultsView';
-import { PublicResearchView } from '../views/PublicResearchView';
+import { PublicPerformanceResultsRepositoryView } from '../views/PublicPerformanceResultsRepositoryView';
+import { PublicResearchRepositoryView } from '../views/PublicResearchRepositoryView';
 import { usePublishedSiteContent } from '../../site-content/hooks/useSiteContent';
 import { usePublicPageAnalytics } from '../hooks/usePublicPageAnalytics';
 import { useAuthStore } from '../../../stores/auth.store';
@@ -58,7 +60,7 @@ export function PublicHomePage() {
   }, []);
 
   useEffect(() => {
-    if (!user && activeView === 'my-plans') {
+    if (!user && (activeView === 'my-plans' || activeView === 'my-performance' || activeView === 'my-research')) {
       setActiveView('plans');
     }
   }, [activeView, user]);
@@ -87,8 +89,10 @@ export function PublicHomePage() {
           <div className="min-w-0 flex-1 bg-slate-50">
             {activeView === 'plans' ? <PublicOfficialPlansView logoUrl={siteContent.brandSettings.logoUrl} /> : null}
             {activeView === 'my-plans' ? <PublicUserPlansSection /> : null}
-            {activeView === 'performance' ? <PublicPerformanceResultsView /> : null}
-            {activeView === 'research' ? <PublicResearchView sections={r2rSections} logoUrl={siteContent.brandSettings.logoUrl} /> : null}
+            {activeView === 'performance' ? <PublicPerformanceResultsRepositoryView logoUrl={siteContent.brandSettings.logoUrl} /> : null}
+            {activeView === 'my-performance' ? <PublicPerformanceResultsManager /> : null}
+            {activeView === 'research' ? <PublicResearchRepositoryView legacySections={r2rSections} logoUrl={siteContent.brandSettings.logoUrl} /> : null}
+            {activeView === 'my-research' ? <PublicResearchItemsManager /> : null}
           </div>
         </div>
       </main>

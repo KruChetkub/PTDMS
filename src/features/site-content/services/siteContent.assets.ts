@@ -38,11 +38,11 @@ export async function uploadPlanCoverImage(file: File) {
 
   const extension = file.name.split('.').pop() || 'png';
   const safeName = sanitizeFileName(file.name) || `plan-cover.${extension}`;
-  const filePath = `plan-covers/${Date.now()}-${safeName}`;
+  const filePath = `plan-covers/${Date.now()}-${crypto.randomUUID()}-${safeName}`;
 
   const { error } = await supabase.storage.from(SITE_CONTENT_ASSETS_BUCKET).upload(filePath, file, {
     cacheControl: '3600',
-    upsert: true,
+    upsert: false,
   });
 
   if (error) {
