@@ -55,16 +55,6 @@ const categoryOptions: Array<{ value: PublicUserPlanCategory; label: string; col
   { value: 'other', label: 'อื่นๆ', colorLabel: 'ชมพู' },
 ];
 
-const iconOptions: Array<{ value: SiteContentPlanIconKey; label: string }> = [
-  { value: 'landmark', label: 'อาคาร/ยุทธศาสตร์' },
-  { value: 'goal', label: 'เป้าหมาย' },
-  { value: 'puzzle', label: 'แผนบูรณาการ' },
-  { value: 'growth', label: 'การเติบโต' },
-  { value: 'heart', label: 'สุขภาพ' },
-  { value: 'health', label: 'สาธารณสุข' },
-  { value: 'shield-users', label: 'นโยบาย/ผู้บริหาร' },
-  { value: 'file', label: 'เอกสาร' },
-];
 
 type PublicUserPlanFormState = {
   category: PublicUserPlanCategory;
@@ -145,11 +135,11 @@ export function PublicUserPlansSection() {
   const [isUploadingCover, setIsUploadingCover] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const isSignedIn = Boolean(user);
-  const canUploadPdf = profile?.role === 'admin' || profile?.role === 'super_admin';
+  const canManagePublicContent = profile?.role === 'admin' || profile?.role === 'super_admin';
+  const canUploadPdf = canManagePublicContent;
   const myPlans = useMemo(
-    () => plans.filter((plan) => plan.ownerUserId === user?.id).sort(comparePublicUserPlans),
-    [plans, user?.id],
+    () => canManagePublicContent ? [...plans].sort(comparePublicUserPlans) : [],
+    [canManagePublicContent, plans],
   );
   const totalPages = Math.max(1, Math.ceil(myPlans.length / PAGE_SIZE));
   const safeCurrentPage = Math.min(currentPage, totalPages - 1);
@@ -157,6 +147,11 @@ export function PublicUserPlansSection() {
   const editingPlan = editingPlanId ? myPlans.find((plan) => plan.id === editingPlanId) || null : null;
 
   useEffect(() => {
+    if (!canManagePublicContent) {
+      setPlans([]);
+      return;
+    }
+
     let isMounted = true;
 
     const loadPlans = async () => {
@@ -178,7 +173,7 @@ export function PublicUserPlansSection() {
       isMounted = false;
       window.removeEventListener(PUBLIC_USER_PLANS_UPDATED_EVENT, handlePlansUpdated);
     };
-  }, []);
+  }, [canManagePublicContent]);
 
   useEffect(() => {
     if (currentPage > totalPages - 1) {
@@ -218,8 +213,8 @@ export function PublicUserPlansSection() {
   };
 
   const handleSave = async () => {
-    if (!user) {
-      setError('กรุณาเข้าสู่ระบบก่อนเพิ่มแผน');
+    if (!user || !canManagePublicContent) {
+      setError('เฉพาะ Admin และ Super Admin เท่านั้นที่เพิ่มหรือแก้ไขแผนได้');
       return;
     }
 
@@ -236,8 +231,6 @@ export function PublicUserPlansSection() {
       const plan = editingPlan
         ? {
             ...editingPlan,
-            ownerName: profile?.full_name || user.email || editingPlan.ownerName,
-            ownerWorkGroup: profile?.work_group || profile?.department || editingPlan.ownerWorkGroup,
             category: form.category,
             sortOrder: nextSortOrder,
             card: toPlanCard(form),
@@ -267,14 +260,14 @@ export function PublicUserPlansSection() {
   };
 
   const handleToggleMyPlan = async (plan: PublicUserPlan) => {
-    if (!user) return;
+    if (!user || !canManagePublicContent) return;
 
     const nextStatus: SiteContentStatus = plan.card.status === 'published' ? 'draft' : 'published';
-    const result = await updatePublicUserPlanStatus(plan.id, user.id, nextStatus);
+    const result = await updatePublicUserPlanStatus(plan.id, nextStatus);
     setPlans((currentPlans) =>
       currentPlans
         .map((currentPlan) =>
-          currentPlan.id === plan.id && currentPlan.ownerUserId === user.id
+          currentPlan.id === plan.id
             ? result.plan || { ...currentPlan, updatedAt: new Date().toISOString(), card: { ...currentPlan.card, status: nextStatus } }
             : currentPlan,
         )
@@ -283,7 +276,7 @@ export function PublicUserPlansSection() {
   };
 
   const handleMovePlan = async (plan: PublicUserPlan, direction: -1 | 1) => {
-    if (!user) return;
+    if (!user || !canManagePublicContent) return;
 
     const categoryPlans = getPlansInCategory(plan.category);
     const planIndex = categoryPlans.findIndex((currentPlan) => currentPlan.id === plan.id);
@@ -315,14 +308,14 @@ export function PublicUserPlansSection() {
     }
   };
 
-  if (!isSignedIn) {
+  if (!user || !canManagePublicContent) {
     return (
       <section className="min-h-[calc(100vh-4rem)] bg-white py-12 sm:py-16">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <p className="text-sm font-semibold text-brand-700">My Plan Publishing</p>
           <h1 className="mt-2 text-2xl font-bold tracking-normal text-slate-950 sm:text-3xl">เพิ่มแผนของฉัน</h1>
           <div className="mt-6 rounded-md border border-slate-200 bg-slate-50 p-6 text-sm text-slate-600">
-            กรุณาเข้าสู่ระบบก่อนเพิ่มแผนของฉัน
+            เฉพาะ Admin และ Super Admin เท่านั้นที่เข้าถึงหน้าจัดการแผนได้
           </div>
         </div>
       </section>
@@ -350,16 +343,16 @@ export function PublicUserPlansSection() {
                 type="button"
                 onClick={resetForm}
                 className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50"
-              >
                 title="ยกเลิกแก้ไข"
+              >
                 <X className="h-4 w-4" aria-hidden="true" />
               </button>
             ) : null}
           </div>
 
-          <div className="mt-4 grid gap-4 lg:grid-cols-2">
+          <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
             <div className="grid gap-3">
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="block">
                 <label className="block">
                   <span className="text-sm font-medium text-slate-700">หัวข้อแผน</span>
                   <select className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm" value={form.category} onChange={(event) => updateForm('category', event.target.value as PublicUserPlanCategory)}>
@@ -368,19 +361,9 @@ export function PublicUserPlansSection() {
                     ))}
                   </select>
                 </label>
-                <label className="block">
-                  <span className="text-sm font-medium text-slate-700">ลำดับการแสดงผล</span>
-                  <input
-                    type="number"
-                    min={1}
-                    className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"
-                    value={form.sortOrder}
-                    onChange={(event) => updateForm('sortOrder', normalizeSortOrder(Number(event.target.value)))}
-                  />
-                </label>
               </div>
 
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="hidden">
                 <label className="block">
                   <span className="text-sm font-medium text-slate-700">สถานะ</span>
                   <select className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm" value={form.status} onChange={(event) => updateForm('status', event.target.value as SiteContentStatus)}>
@@ -401,11 +384,12 @@ export function PublicUserPlansSection() {
                 <input className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm" value={form.title} onChange={(event) => updateForm('title', event.target.value)} />
               </label>
 
-              <label className="block"><span className="text-sm font-medium text-slate-700">หัวข้อรอง</span><input className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm" value={form.subtitle} onChange={(event) => updateForm('subtitle', event.target.value)} /></label>
+              <label className="hidden"><span className="text-sm font-medium text-slate-700">หัวข้อรอง</span><input className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm" value={form.subtitle} onChange={(event) => updateForm('subtitle', event.target.value)} /></label>
               <label className="block"><span className="text-sm font-medium text-slate-700">รายละเอียด</span><textarea rows={4} className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm" value={form.description} onChange={(event) => updateForm('description', event.target.value)} /></label>
             </div>
 
             <div className="grid gap-3">
+              <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
               <label className="block">
                 <span className="text-sm font-medium text-slate-700">ลิงก์เอกสาร PDF</span>
                 <input className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm" value={form.pdfUrl} onChange={(event) => updateForm('pdfUrl', event.target.value)} placeholder="https://.../document.pdf" />
@@ -426,6 +410,8 @@ export function PublicUserPlansSection() {
                   }}
                 />
               ) : null}
+              </div>
+              <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
               <label className="block">
                 <span className="text-sm font-medium text-slate-700">ลิงก์ภาพหน้าปก</span>
                 <input type="url" className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm" value={form.coverImageUrl} onChange={(event) => updateForm('coverImageUrl', event.target.value)} placeholder="https://.../cover.jpg" />
@@ -444,14 +430,17 @@ export function PublicUserPlansSection() {
                   }}
                 />
               ) : null}
+              </div>
               <div className="grid gap-3 sm:grid-cols-2">
                 <label className="block">
-                  <span className="text-sm font-medium text-slate-700">ไอคอน</span>
-                  <select className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm" value={form.iconKey} onChange={(event) => updateForm('iconKey', event.target.value as SiteContentPlanIconKey)}>
-                    {iconOptions.map((option) => (
-                      <option key={option.value} value={option.value}>{option.label}</option>
-                    ))}
-                  </select>
+                  <span className="text-sm font-medium text-slate-700">ลำดับการแสดงผล</span>
+                  <input
+                    type="number"
+                    min={1}
+                    className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm"
+                    value={form.sortOrder}
+                    onChange={(event) => updateForm('sortOrder', normalizeSortOrder(Number(event.target.value)))}
+                  />
                 </label>
                 <div className="block">
                   <span className="text-sm font-medium text-slate-700">สีการ์ดอัตโนมัติ</span>
@@ -466,19 +455,21 @@ export function PublicUserPlansSection() {
                 <button type="button" onClick={() => updateForm('coverImageLayout', 'landscape')} className={`rounded-md border px-3 py-2 text-xs font-semibold transition ${form.coverImageLayout === 'landscape' ? 'border-brand-500 bg-brand-50 text-brand-700' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}><span className="block text-sm font-semibold">640 x 360 px</span><span className="mt-1 block text-xs font-medium text-current/70">ภาพแนวนอน</span></button>
               </div>
 
+            </div>
+          </div>
+          <div className="mt-4">
               <CoverImagePreview
                 imageUrl={form.coverImageUrl}
                 pdfUrl={form.pdfUrl}
                 layout={form.coverImageLayout}
                 title={form.title}
               />
+          </div>
 
-              <button type="button" onClick={() => void handleSave()} disabled={isSaving || isUploadingPdf || isUploadingCover} className="mt-2 inline-flex h-10 items-center justify-center gap-2 rounded-md bg-brand-600 px-4 text-sm font-semibold text-white transition hover:bg-brand-700 disabled:opacity-60">
+          <button type="button" onClick={() => void handleSave()} disabled={isSaving || isUploadingPdf || isUploadingCover} className="mt-4 inline-flex h-10 w-full items-center justify-center gap-2 rounded-md bg-brand-600 px-4 text-sm font-semibold text-white transition hover:bg-brand-700 disabled:opacity-60">
                 <Save className="h-4 w-4" aria-hidden="true" />
                 {isSaving ? 'กำลังบันทึก...' : editingPlan ? 'บันทึกการแก้ไข' : 'บันทึกแผนของฉัน'}
               </button>
-            </div>
-          </div>
 
           {error ? <p className="mt-4 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p> : null}
 

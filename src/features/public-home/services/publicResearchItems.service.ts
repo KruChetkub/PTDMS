@@ -151,9 +151,9 @@ export async function savePublicResearchItem(item: PublicResearchItem) {
   return mapRow(data as ResearchRow);
 }
 
-export async function updatePublicResearchItemStatus(id: string, ownerUserId: string, status: 'published' | 'draft') {
+export async function updatePublicResearchItemStatus(id: string, status: 'published' | 'draft') {
   const { data } = await runSupabaseQuery<SupabaseDataResult<ResearchRow>>(
-    researchItemsTable().update({ status }).eq('id', id).eq('owner_user_id', ownerUserId).select(selectColumns).single(),
+    researchItemsTable().update({ status }).eq('id', id).select(selectColumns).single(),
     'อัปเดตสถานะงานวิจัย',
   );
   return mapRow(data as ResearchRow);

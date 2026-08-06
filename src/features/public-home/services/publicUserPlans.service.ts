@@ -254,12 +254,11 @@ async function savePublicUserPlanToSupabase(plan: PublicUserPlan) {
   return mapRowToPlan(data as unknown as PublicUserPlanRow);
 }
 
-async function updatePublicUserPlanStatusInSupabase(planId: string, ownerUserId: string, status: 'published' | 'draft') {
+async function updatePublicUserPlanStatusInSupabase(planId: string, status: 'published' | 'draft') {
   const { data } = await runSupabaseQuery<SupabaseDataResult<PublicUserPlanRow>>(
     publicUserPlansTable()
       .update({ status })
       .eq('id', planId)
-      .eq('owner_user_id', ownerUserId)
       .select(selectColumns)
       .single(),
     'อัปเดตสถานะแผนของผู้ใช้ใน Supabase',
@@ -293,9 +292,9 @@ export async function savePublicUserPlan(plan: PublicUserPlan) {
   }
 }
 
-export async function updatePublicUserPlanStatus(planId: string, ownerUserId: string, status: 'published' | 'draft') {
+export async function updatePublicUserPlanStatus(planId: string, status: 'published' | 'draft') {
   try {
-    const savedPlan = await updatePublicUserPlanStatusInSupabase(planId, ownerUserId, status);
+    const savedPlan = await updatePublicUserPlanStatusInSupabase(planId, status);
     const currentDocument = loadPublicUserPlansFromLocal();
     const nextDocument = normalizePlansDocument({
       plans: currentDocument.plans.map((plan) => (plan.id === savedPlan.id ? savedPlan : plan)),
@@ -307,7 +306,7 @@ export async function updatePublicUserPlanStatus(planId: string, ownerUserId: st
     const now = new Date().toISOString();
     const nextDocument = normalizePlansDocument({
       plans: currentDocument.plans.map((plan) =>
-        plan.id === planId && plan.ownerUserId === ownerUserId
+        plan.id === planId
           ? { ...plan, updatedAt: now, card: { ...plan.card, status } }
           : plan,
       ),

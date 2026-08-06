@@ -9,12 +9,9 @@ import {
 } from '../services/publicResearchItems.service';
 import type { HomePlanSection } from '../types/publicHome.types';
 
-type Props = {
-  legacySections: HomePlanSection[];
-  logoUrl: string;
-};
+type Props = { logoUrl: string };
 
-export function PublicResearchRepositoryView({ legacySections, logoUrl }: Props) {
+export function PublicResearchRepositoryView({ logoUrl }: Props) {
   const [researchItems, setResearchItems] = useState<PublicResearchItem[]>([]);
   const [hasLoadError, setHasLoadError] = useState(false);
 
@@ -28,17 +25,14 @@ export function PublicResearchRepositoryView({ legacySections, logoUrl }: Props)
 
   const publishedItems = useMemo(() => researchItems.filter((item) => item.status === 'published'), [researchItems]);
   const sections = useMemo<HomePlanSection[]>(() => {
-    const preservedSections = legacySections
-      .filter((section) => section.cards.length > 0)
-      .map((section) => ({ ...section, id: `legacy-${section.id}`, title: 'งานวิจัยเผยแพร่เดิม' }));
-    const submittedSections = researchCategoryOptions.map((category, index) => ({
+    return researchCategoryOptions.map((category, index) => ({
       id: `research-${category.value}`,
       number: String(index + 1),
       title: category.label,
       tone: category.tone,
       cards: publishedItems.filter((item) => item.category === category.value).map((item) => ({
         title: item.title,
-        subtitle: [item.researcherNames, `พ.ศ. ${item.publicationYear}`].filter(Boolean).join(' · '),
+        subtitle: item.researcherNames,
         description: [item.organization, item.abstract].filter(Boolean).join(' — '),
         icon: FileText,
         color: getResearchCategory(item.category).color,
@@ -48,10 +42,9 @@ export function PublicResearchRepositoryView({ legacySections, logoUrl }: Props)
         coverImageLayout: item.coverImageLayout,
       })),
     })).filter((section) => section.cards.length > 0);
-    return [...preservedSections, ...submittedSections];
-  }, [legacySections, publishedItems]);
+  }, [publishedItems]);
 
-  const publishedCount = legacySections.reduce((count, section) => count + section.cards.length, 0) + publishedItems.length;
+  const publishedCount = publishedItems.length;
   const yearCount = new Set(publishedItems.map((item) => item.publicationYear)).size;
 
   return (

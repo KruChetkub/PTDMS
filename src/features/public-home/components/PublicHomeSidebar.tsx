@@ -44,6 +44,7 @@ export function PublicHomeSidebar({ activeView, isCollapsed, logoUrl, siteName, 
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const { initialize, initialized, user, profile, signOut } = useAuthStore();
   const isSignedIn = Boolean(user);
+  const canManagePublicContent = profile?.role === 'admin' || profile?.role === 'super_admin';
   const accountLabel = profile?.full_name || user?.email || 'เข้าสู่ระบบแล้ว';
   const accountDetail = profile?.work_group || 'เมนูส่วนตัว';
   const roleLabel = profile?.role ? roleLabels[profile.role] : '-';
@@ -115,7 +116,7 @@ export function PublicHomeSidebar({ activeView, isCollapsed, logoUrl, siteName, 
                 <ShieldCheck className="h-5 w-5" aria-hidden="true" />
               </button>
             )}
-            {isSignedIn ? (
+            {canManagePublicContent ? (
               <button type="button" onClick={() => onViewChange('my-plans')} className={getCollapsedItemClass(activeView === 'my-plans')} title="เพิ่มแผนของฉัน" aria-label="เพิ่มแผนของฉัน">
                 <FilePlus className="h-5 w-5" aria-hidden="true" />
               </button>
@@ -126,7 +127,7 @@ export function PublicHomeSidebar({ activeView, isCollapsed, logoUrl, siteName, 
             <button type="button" onClick={() => onViewChange('performance')} className={getCollapsedItemClass(activeView === 'performance')} title="ผลการดำเนินงานสำคัญ" aria-label="ผลการดำเนินงานสำคัญ">
               <TrendingUp className="h-5 w-5" aria-hidden="true" />
             </button>
-            {isSignedIn ? (
+            {canManagePublicContent ? (
               <button type="button" onClick={() => onViewChange('my-performance')} className={getCollapsedItemClass(activeView === 'my-performance')} title="เพิ่มผลการดำเนินงาน" aria-label="เพิ่มผลการดำเนินงาน">
                 <FilePlus className="h-5 w-5" aria-hidden="true" />
               </button>
@@ -134,7 +135,7 @@ export function PublicHomeSidebar({ activeView, isCollapsed, logoUrl, siteName, 
             <button type="button" onClick={() => onViewChange('research')} className={getCollapsedItemClass(activeView === 'research')} title="งานวิจัยจากงานประจำ" aria-label="งานวิจัยจากงานประจำ">
               <Microscope className="h-5 w-5" aria-hidden="true" />
             </button>
-            {isSignedIn ? (
+            {canManagePublicContent ? (
               <button type="button" onClick={() => onViewChange('my-research')} className={getCollapsedItemClass(activeView === 'my-research')} title="เพิ่มงานวิจัย" aria-label="เพิ่มงานวิจัย">
                 <FilePlus className="h-5 w-5" aria-hidden="true" />
               </button>
@@ -248,8 +249,8 @@ export function PublicHomeSidebar({ activeView, isCollapsed, logoUrl, siteName, 
               <BookOpenText className="mt-0.5 h-5 w-5 shrink-0" aria-hidden="true" />
               <span>ยุทธศาสตร์/แผนปฏิบัติราชการ</span>
             </button>
-            <div className={`mt-2 space-y-1 pl-8 ${isSignedIn ? '' : 'hidden'}`}>
-              {isSignedIn ? (
+            <div className={`mt-2 space-y-1 pl-8 ${canManagePublicContent ? '' : 'hidden'}`}>
+              {canManagePublicContent ? (
                 <button type="button" onClick={() => onViewChange('my-plans')} className={getSubItemClass(activeView === 'my-plans')}>
                   <FilePlus className="h-4 w-4 shrink-0" aria-hidden="true" />
                   <span>เพิ่มแผนของฉัน</span>
@@ -267,7 +268,7 @@ export function PublicHomeSidebar({ activeView, isCollapsed, logoUrl, siteName, 
               <TrendingUp className="mt-0.5 h-5 w-5 shrink-0" aria-hidden="true" />
               <span>ผลการดำเนินงานสำคัญ กรมควบคุมโรค</span>
             </button>
-            {isSignedIn ? (
+            {canManagePublicContent ? (
               <div className="mt-2 space-y-1 pl-8">
                 <button type="button" onClick={() => onViewChange('my-performance')} className={getSubItemClass(activeView === 'my-performance')}>
                   <FilePlus className="h-4 w-4 shrink-0" aria-hidden="true" />
@@ -282,8 +283,8 @@ export function PublicHomeSidebar({ activeView, isCollapsed, logoUrl, siteName, 
               <Microscope className="mt-0.5 h-5 w-5 shrink-0" aria-hidden="true" />
               <span>งานวิจัยจากงานประจำ</span>
             </button>
-            <div className={`mt-2 space-y-1 pl-8 ${isSignedIn ? '' : 'hidden'}`}>
-              {isSignedIn ? (
+            <div className={`mt-2 space-y-1 pl-8 ${canManagePublicContent ? '' : 'hidden'}`}>
+              {canManagePublicContent ? (
                 <button type="button" onClick={() => onViewChange('my-research')} className={getSubItemClass(activeView === 'my-research')}><FilePlus className="h-4 w-4 shrink-0" aria-hidden="true" /><span>เพิ่มงานวิจัยของฉัน</span></button>
               ) : null}
               <button type="button" onClick={() => onViewChange('research')} className={getSubItemClass(activeView === 'research')}>

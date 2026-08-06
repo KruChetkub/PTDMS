@@ -82,17 +82,23 @@ export function PublicResearchItemsManager() {
   const [isUploadingCover, setIsUploadingCover] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const canUploadPdf = profile?.role === 'admin' || profile?.role === 'super_admin';
-  const myItems = useMemo(() => items.filter((item) => item.ownerUserId === user?.id), [items, user?.id]);
+  const canManagePublicContent = profile?.role === 'admin' || profile?.role === 'super_admin';
+  const canUploadPdf = canManagePublicContent;
+  const myItems = useMemo(() => canManagePublicContent ? items : [], [canManagePublicContent, items]);
   const editingItem = myItems.find((item) => item.id === editingId) || null;
 
   useEffect(() => {
+    if (!canManagePublicContent) {
+      setItems([]);
+      return;
+    }
+
     let mounted = true;
     loadPublicResearchItems()
       .then((loadedItems) => { if (mounted) setItems(loadedItems); })
       .catch(() => { if (mounted) setError('ไม่สามารถโหลดข้อมูลงานวิจัยจาก Supabase ได้ กรุณาตรวจสอบ migration และการเชื่อมต่อ'); });
     return () => { mounted = false; };
-  }, []);
+  }, [canManagePublicContent]);
 
   const updateForm = <Key extends keyof FormState>(key: Key, value: FormState[Key]) => {
     setForm((current) => ({ ...current, [key]: value }));
@@ -116,7 +122,7 @@ export function PublicResearchItemsManager() {
   };
 
   const handleSave = async () => {
-    if (!user) return;
+    if (!user || !canManagePublicContent) return;
     if (!form.title.trim()) {
       setError('กรุณาระบุชื่องานวิจัย');
       return;
@@ -135,8 +141,6 @@ export function PublicResearchItemsManager() {
       ? {
           ...editingItem,
           ...form,
-          ownerName: profile?.full_name || user.email || editingItem.ownerName,
-          ownerWorkGroup: profile?.work_group || profile?.department || null,
           color: category.color,
           actionLabel: 'เปิดเอกสารงานวิจัย',
         }
@@ -165,10 +169,10 @@ export function PublicResearchItemsManager() {
   };
 
   const toggleStatus = async (item: PublicResearchItem) => {
-    if (!user) return;
+    if (!user || !canManagePublicContent) return;
     const nextStatus = item.status === 'published' ? 'draft' : 'published';
     try {
-      const saved = await updatePublicResearchItemStatus(item.id, user.id, nextStatus);
+      const saved = await updatePublicResearchItemStatus(item.id, nextStatus);
       setItems((current) => current.map((currentItem) => currentItem.id === saved.id ? saved : currentItem));
       setMessage(nextStatus === 'published' ? 'เผยแพร่งานวิจัยเรียบร้อย' : 'เปลี่ยนงานวิจัยเป็นฉบับร่างแล้ว');
     } catch {
@@ -176,8 +180,8 @@ export function PublicResearchItemsManager() {
     }
   };
 
-  if (!user) {
-    return <section className="min-h-[calc(100vh-4rem)] bg-white p-8 text-sm text-slate-600">กรุณาเข้าสู่ระบบก่อนเพิ่มงานวิจัย</section>;
+  if (!user || !canManagePublicContent) {
+    return <section className="min-h-[calc(100vh-4rem)] bg-white p-8 text-sm text-slate-600">เฉพาะ Admin และ Super Admin เท่านั้นที่เข้าถึงหน้าจัดการงานวิจัยได้</section>;
   }
 
   return (
@@ -192,12 +196,11 @@ export function PublicResearchItemsManager() {
             {editingItem ? <button type="button" onClick={resetForm} className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600" title="ยกเลิกแก้ไข"><X className="h-4 w-4" /></button> : null}
           </div>
 
-          <div className="mt-4 grid gap-4 lg:grid-cols-2">
+          <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
             <div className="grid content-start gap-3">
-              <div className="grid gap-3 sm:grid-cols-3">
+              <div className="grid gap-3 sm:grid-cols-2">
                 <label className="block"><span className="text-sm font-medium text-slate-700">ประเภทงานวิจัย</span><select value={form.category} onChange={(event) => updateForm('category', event.target.value as ResearchCategory)} className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm">{researchCategoryOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
                 <label className="block"><span className="text-sm font-medium text-slate-700">ปีที่เผยแพร่</span><input type="number" min={2400} max={2700} value={form.publicationYear} onChange={(event) => updateForm('publicationYear', Number(event.target.value))} className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm" /></label>
-                <label className="block"><span className="text-sm font-medium text-slate-700">ลำดับ</span><input type="number" min={1} value={form.sortOrder} onChange={(event) => updateForm('sortOrder', Math.max(1, Number(event.target.value)))} className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm" /></label>
               </div>
               <label className="block"><span className="text-sm font-medium text-slate-700">ชื่องานวิจัย</span><input value={form.title} onChange={(event) => updateForm('title', event.target.value)} className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm" /></label>
               <label className="block"><span className="text-sm font-medium text-slate-700">ผู้วิจัย/ผู้จัดทำ</span><input value={form.researcherNames} onChange={(event) => updateForm('researcherNames', event.target.value)} className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm" /></label>
@@ -206,6 +209,7 @@ export function PublicResearchItemsManager() {
             </div>
 
             <div className="grid content-start gap-3">
+              <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
               <label className="block"><span className="text-sm font-medium text-slate-700">ลิงก์เอกสาร PDF</span><input type="url" value={form.pdfUrl} onChange={(event) => updateForm('pdfUrl', event.target.value)} placeholder="https://..." className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm" /></label>
               {canUploadPdf ? (
                 <AdminPublicPdfUpload
@@ -223,6 +227,8 @@ export function PublicResearchItemsManager() {
                   }}
                 />
               ) : null}
+              </div>
+              <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
               <label className="block"><span className="text-sm font-medium text-slate-700">ลิงก์ภาพหน้าปก</span><input type="url" value={form.coverImageUrl} onChange={(event) => updateForm('coverImageUrl', event.target.value)} placeholder="https://..." className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm" /></label>
               {canUploadPdf ? (
                 <AdminCoverImageUpload
@@ -238,20 +244,34 @@ export function PublicResearchItemsManager() {
                   }}
                 />
               ) : null}
-              <div className="grid grid-cols-2 gap-3">
-                <label className="block"><span className="text-sm font-medium text-slate-700">รูปแบบภาพ</span><select value={form.coverImageLayout} onChange={(event) => updateForm('coverImageLayout', event.target.value as SiteContentPlanCoverLayout)} className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm"><option value="portrait">แนวตั้ง</option><option value="landscape">แนวนอน</option></select></label>
-                <label className="block"><span className="text-sm font-medium text-slate-700">สถานะ</span><select value={form.status} onChange={(event) => updateForm('status', event.target.value as SiteContentStatus)} className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm"><option value="draft">ฉบับร่าง</option><option value="published">เผยแพร่</option></select></label>
               </div>
-              <CoverImagePreview imageUrl={form.coverImageUrl} pdfUrl={form.pdfUrl} layout={form.coverImageLayout} title={form.title} />
-              <button type="button" onClick={() => void handleSave()} disabled={isSaving || isUploadingPdf || isUploadingCover} className="mt-2 inline-flex h-10 items-center justify-center gap-2 rounded-md bg-emerald-700 px-4 text-sm font-semibold text-white transition hover:bg-emerald-800 disabled:opacity-60"><Save className="h-4 w-4" />{isSaving ? 'กำลังบันทึก...' : editingItem ? 'บันทึกการแก้ไข' : 'เพิ่มงานวิจัย'}</button>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="block"><span className="text-sm font-medium text-slate-700">ลำดับการแสดงผล</span><input type="number" min={1} value={form.sortOrder} onChange={(event) => updateForm('sortOrder', Math.max(1, Number(event.target.value)))} className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm" /></label>
+                <div className="block"><span className="text-sm font-medium text-slate-700">สีการ์ดอัตโนมัติ</span><div className="mt-1 flex h-10 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-700"><span className={`h-4 w-4 rounded-full ${getResearchCategory(form.category).color}`} aria-hidden="true" />{getResearchCategory(form.category).label}</div></div>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <button type="button" onClick={() => updateForm('coverImageLayout', 'portrait')} className={`rounded-md border px-3 py-2 text-xs font-semibold transition ${form.coverImageLayout === 'portrait' ? 'border-emerald-600 bg-emerald-50 text-emerald-800' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}><span className="block text-sm font-semibold">360 x 640 px</span><span className="mt-1 block text-xs font-medium text-current/70">ภาพแนวตั้ง</span></button>
+                <button type="button" onClick={() => updateForm('coverImageLayout', 'landscape')} className={`rounded-md border px-3 py-2 text-xs font-semibold transition ${form.coverImageLayout === 'landscape' ? 'border-emerald-600 bg-emerald-50 text-emerald-800' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}><span className="block text-sm font-semibold">640 x 360 px</span><span className="mt-1 block text-xs font-medium text-current/70">ภาพแนวนอน</span></button>
+              </div>
+              <label className="hidden">
+                <span>สถานะ</span>
+                <select value={form.status} onChange={(event) => updateForm('status', event.target.value as SiteContentStatus)}>
+                  <option value="draft">ฉบับร่าง</option>
+                  <option value="published">เผยแพร่</option>
+                </select>
+              </label>
             </div>
           </div>
+          <div className="mt-4">
+            <CoverImagePreview imageUrl={form.coverImageUrl} pdfUrl={form.pdfUrl} layout={form.coverImageLayout} title={form.title} />
+          </div>
+          <button type="button" onClick={() => void handleSave()} disabled={isSaving || isUploadingPdf || isUploadingCover} className="mt-4 inline-flex h-10 w-full items-center justify-center gap-2 rounded-md bg-emerald-700 px-4 text-sm font-semibold text-white transition hover:bg-emerald-800 disabled:opacity-60"><Save className="h-4 w-4" />{isSaving ? 'กำลังบันทึก...' : editingItem ? 'บันทึกการแก้ไข' : 'เพิ่มงานวิจัย'}</button>
           {error ? <p className="mt-4 rounded-md bg-red-50 px-3 py-2 text-sm font-medium text-red-700">{error}</p> : null}
         </div>
 
         <div className="mt-6 overflow-hidden rounded-md border border-slate-200">
-          <div className="border-b border-slate-200 bg-slate-50 px-4 py-3"><h2 className="font-semibold text-slate-950">งานวิจัยของฉัน ({myItems.length})</h2></div>
-          {myItems.length ? <div className="divide-y divide-slate-200">{myItems.map((item) => <div key={item.id} className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between"><div className="flex min-w-0 gap-3"><span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-md text-white ${getResearchCategory(item.category).color}`}><FileText className="h-5 w-5" /></span><div className="min-w-0"><p className="font-semibold text-slate-900">{item.title}</p><p className="mt-1 text-xs text-slate-500">พ.ศ. {item.publicationYear} · {getResearchCategory(item.category).label} · {item.status === 'published' ? 'เผยแพร่' : 'ฉบับร่าง'}</p></div></div><div className="flex gap-2"><button type="button" onClick={() => startEdit(item)} className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-200 text-slate-600" title="แก้ไข"><Edit3 className="h-4 w-4" /></button><button type="button" onClick={() => void toggleStatus(item)} className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800">{item.status === 'published' ? 'เก็บเป็นร่าง' : 'เผยแพร่'}</button></div></div>)}</div> : <p className="p-6 text-sm text-slate-500">ยังไม่มีงานวิจัยที่คุณเพิ่ม</p>}
+          <div className="border-b border-slate-200 bg-slate-50 px-4 py-3"><h2 className="font-semibold text-slate-950">รายการที่นำเข้าแล้ว ({myItems.length})</h2></div>
+          {myItems.length ? <div className="divide-y divide-slate-200">{myItems.map((item) => <div key={item.id} className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between"><div className="flex min-w-0 gap-3"><span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-md text-white ${getResearchCategory(item.category).color}`}><FileText className="h-5 w-5" /></span><div className="min-w-0"><p className="font-semibold text-slate-900">{item.title}</p><p className="mt-1 text-xs text-slate-500">พ.ศ. {item.publicationYear} · {getResearchCategory(item.category).label} · {item.status === 'published' ? 'เผยแพร่' : 'ฉบับร่าง'}</p></div></div><div className="flex gap-2"><button type="button" onClick={() => startEdit(item)} className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-200 text-slate-600" title="แก้ไข"><Edit3 className="h-4 w-4" /></button><button type="button" onClick={() => void toggleStatus(item)} className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800">{item.status === 'published' ? 'เก็บเป็นร่าง' : 'เผยแพร่'}</button></div></div>)}</div> : <p className="p-6 text-sm text-slate-500">ยังไม่มีงานวิจัยที่นำเข้า</p>}
         </div>
       </div>
       <ConfirmModal

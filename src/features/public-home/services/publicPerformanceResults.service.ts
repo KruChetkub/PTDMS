@@ -153,9 +153,9 @@ export async function savePublicPerformanceResult(result: PublicPerformanceResul
   return mapRow(data as PerformanceResultRow);
 }
 
-export async function updatePublicPerformanceResultStatus(id: string, ownerUserId: string, status: 'published' | 'draft') {
+export async function updatePublicPerformanceResultStatus(id: string, status: 'published' | 'draft') {
   const { data } = await runSupabaseQuery<SupabaseDataResult<PerformanceResultRow>>(
-    performanceResultsTable().update({ status }).eq('id', id).eq('owner_user_id', ownerUserId).select(selectColumns).single(),
+    performanceResultsTable().update({ status }).eq('id', id).select(selectColumns).single(),
     'อัปเดตสถานะผลการดำเนินงานสำคัญ',
   );
   return mapRow(data as PerformanceResultRow);
