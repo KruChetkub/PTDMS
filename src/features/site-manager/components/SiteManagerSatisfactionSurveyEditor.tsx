@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { BarChart3, ChevronLeft, ChevronRight, ClipboardCheck, CopyPlus, Download, Gauge, Save, Settings2, Trash2 } from 'lucide-react';
-import { Bar, BarChart, CartesianGrid, Cell, Legend, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { Bar, BarChart, CartesianGrid, Cell, LabelList, Legend, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { ConfirmModal } from '../../../components/ui/ConfirmModal';
 import { useAuthStore } from '../../../stores/auth.store';
 import type { SmartDspSurveyQuestion, SmartDspSurveyRatingOption, SmartDspSurveyStatus } from '../../../types/database.types';
+import { cn } from '../../../utils/cn';
 import { getSafeUserErrorMessage, reportClientError } from '../../../utils/errorHandling';
 import {
   cloneSurveyRound,
@@ -20,9 +21,21 @@ import {
 import { getSurveyOptionLabel, SURVEY_RESPONDENT_ROLE_OPTIONS, SURVEY_SERVICE_OPTIONS, SURVEY_USAGE_FREQUENCY_OPTIONS } from '../../surveys/satisfactionSurvey.constants';
 
 type View = 'settings' | 'questions' | 'results' | 'dashboard';
+type LikertView = 'question_order' | 'improvement_priority' | 'strength';
 
 const RESPONSES_PER_PAGE = 10;
 const SCORE_COLORS = ['#dc2626', '#ea580c', '#d97706', '#0d9488', '#047857'];
+const LIKERT_COLORS = ['#dc2626', '#f97316', '#eab308', '#14b8a6', '#047857'];
+
+type LikertChartDatum = {
+  name: string;
+  fullName: string;
+  position: number;
+  total: number;
+  average: number;
+  averageDisplay: string;
+  [key: string]: string | number;
+};
 
 const statusLabels: Record<SmartDspSurveyStatus, string> = {
   draft: 'ฉบับร่าง',
@@ -47,6 +60,95 @@ function safeExcelText(value: string | null | undefined) {
   return /^[=+\-@]/.test(text) ? `'${text}` : text;
 }
 
+function countLabels(values: string[], labelOrder: string[]) {
+  const counts = new Map<string, number>();
+  for (const value of values) counts.set(value, (counts.get(value) || 0) + 1);
+  const ordered = labelOrder.map((name) => ({ name, total: counts.get(name) || 0 }));
+  const additional = [...counts.entries()]
+    .filter(([name]) => !labelOrder.includes(name))
+    .map(([name, total]) => ({ name, total }));
+  return [...ordered, ...additional];
+}
+
+function addDistributionPercentage(items: Array<{ name: string; total: number }>, respondentCount: number) {
+  return items.map((item) => {
+    const percentage = respondentCount > 0 ? item.total / respondentCount * 100 : 0;
+    const percentageLabel = Number.isInteger(percentage) ? percentage.toFixed(0) : percentage.toFixed(1);
+    return { ...item, percentage, display: `${item.total} คน (${percentageLabel}%)` };
+  });
+}
+
+function formatDistributionValue(value: unknown, respondentCount: number) {
+  const total = Number(value);
+  const percentage = respondentCount > 0 ? total / respondentCount * 100 : 0;
+  const percentageLabel = Number.isInteger(percentage) ? percentage.toFixed(0) : percentage.toFixed(1);
+  return `${total} คน (${percentageLabel}%)`;
+}
+
+function ServiceAxisTick({ y = 0, payload }: { y?: number; payload?: { value?: string } }) {
+  const label = payload?.value || '';
+  const displayLabel = label.length > 48 ? `${label.slice(0, 47)}…` : label;
+
+  return (
+    <text x={8} y={y} dy={5} textAnchor="start" fill="#334155" fontSize={13} fontWeight={500}>
+      <title>{label}</title>
+      {displayLabel}
+    </text>
+  );
+}
+
+function LikertAxisTick({ y = 0, payload }: { y?: number; payload?: { value?: string } }) {
+  const label = payload?.value || '';
+
+  return (
+    <foreignObject x={8} y={y - 19} width={405} height={40}>
+      <div
+        title={label}
+        style={{
+          color: '#334155',
+          display: '-webkit-box',
+          fontSize: '12px',
+          fontWeight: 500,
+          lineHeight: '17px',
+          overflow: 'hidden',
+          overflowWrap: 'break-word',
+          WebkitBoxOrient: 'vertical',
+          WebkitLineClamp: 2,
+        }}
+      >
+        {label}
+      </div>
+    </foreignObject>
+  );
+}
+
+function LikertTooltip({ active, payload }: {
+  active?: boolean;
+  payload?: Array<{
+    name?: string | number;
+    value?: string | number;
+    dataKey?: string | number;
+    payload?: LikertChartDatum;
+  }>;
+}) {
+  const data = payload?.[0]?.payload;
+  if (!active || !data) return null;
+
+  return (
+    <div className="max-w-sm rounded-md border border-slate-200 bg-white p-3 text-xs shadow-lg">
+      <p className="font-semibold leading-5 text-slate-900">{data.fullName}</p>
+      <div className="mt-2 space-y-1">
+        {(payload || []).filter((item) => Number(item.value) > 0).map((item) => {
+          const dataKey = String(item.dataKey || '');
+          const count = Number(data[`${dataKey}Count`] || 0);
+          return <p key={dataKey} className="text-slate-600">{item.name}: {count} คน ({Number(item.value).toFixed(1)}%)</p>;
+        })}
+      </div>
+      <p className="mt-2 border-t border-slate-100 pt-2 font-semibold text-slate-800">{data.averageDisplay} จากผู้ตอบ {data.total} คน</p>
+    </div>
+  );
+}
+
 export function SiteManagerSatisfactionSurveyEditor() {
   const profile = useAuthStore((state) => state.profile);
   const [surveys, setSurveys] = useState<Awaited<ReturnType<typeof listSurveysForAdmin>>>([]);
@@ -59,6 +161,7 @@ export function SiteManagerSatisfactionSurveyEditor() {
   const [responsePage, setResponsePage] = useState(0);
   const [dashboardStartDate, setDashboardStartDate] = useState('');
   const [dashboardEndDate, setDashboardEndDate] = useState('');
+  const [likertView, setLikertView] = useState<LikertView>('question_order');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -115,6 +218,7 @@ export function SiteManagerSatisfactionSurveyEditor() {
     return true;
   });
   const filteredResponseIds = new Set(filteredDashboardResponses.map((response) => response.id));
+  const filteredContexts = (bundle?.respondentContexts || []).filter((context) => filteredResponseIds.has(context.response_id));
   const filteredRatingAnswers = dashboardData.answers.filter((answer) => filteredResponseIds.has(answer.response_id) && answer.rating_value !== null);
   const dashboardAverage = filteredRatingAnswers.length
     ? filteredRatingAnswers.reduce((sum, answer) => sum + (answer.rating_value || 0), 0) / filteredRatingAnswers.length
@@ -124,7 +228,10 @@ export function SiteManagerSatisfactionSurveyEditor() {
     : 0;
   const scoreDistribution = Array.from({ length: 5 }, (_, index) => {
     const score = index + 1;
-    return { name: `${score} คะแนน`, score, total: filteredRatingAnswers.filter((answer) => answer.rating_value === score).length };
+    const total = filteredRatingAnswers.filter((answer) => answer.rating_value === score).length;
+    const percentage = filteredRatingAnswers.length > 0 ? total / filteredRatingAnswers.length * 100 : 0;
+    const percentageLabel = Number.isInteger(percentage) ? percentage.toFixed(0) : percentage.toFixed(1);
+    return { name: `${score} คะแนน`, score, total, display: total > 0 ? `${percentageLabel}%` : '' };
   });
   const questionChartData = questions.filter((question) => question.question_type === 'rating_5').map((question) => {
     const values = filteredRatingAnswers.filter((answer) => answer.question_id === question.id);
@@ -132,9 +239,50 @@ export function SiteManagerSatisfactionSurveyEditor() {
       name: `ข้อ ${question.position}`,
       fullName: question.prompt,
       average: values.length ? Number((values.reduce((sum, answer) => sum + (answer.rating_value || 0), 0) / values.length).toFixed(2)) : 0,
+      averageLabel: values.length ? (values.reduce((sum, answer) => sum + (answer.rating_value || 0), 0) / values.length).toFixed(2) : '',
       total: values.length,
     };
   });
+  const likertChartData: LikertChartDatum[] = questions.filter((question) => question.question_type === 'rating_5').map((question) => {
+    const values = filteredRatingAnswers.filter((answer) => answer.question_id === question.id);
+    const total = values.length;
+    const averageValue = total ? values.reduce((sum, answer) => sum + (answer.rating_value || 0), 0) / total : 0;
+    const datum: LikertChartDatum = {
+      name: `ข้อ ${question.position}: ${question.prompt}`,
+      fullName: `ข้อ ${question.position}: ${question.prompt}`,
+      position: question.position,
+      total,
+      average: averageValue,
+      averageDisplay: total ? `เฉลี่ย ${averageValue.toFixed(2)}` : 'ยังไม่มีคำตอบ',
+    };
+
+    for (let score = 1; score <= 5; score += 1) {
+      const count = values.filter((answer) => answer.rating_value === score).length;
+      const percentage = total > 0 ? count / total * 100 : 0;
+      datum[`score${score}`] = percentage;
+      datum[`score${score}Count`] = count;
+      datum[`score${score}Label`] = percentage >= 8 ? `${Number.isInteger(percentage) ? percentage.toFixed(0) : percentage.toFixed(1)}%` : '';
+    }
+
+    return datum;
+  });
+  const displayedLikertChartData = likertChartData
+    .slice()
+    .sort((left, right) => {
+      if (likertView === 'improvement_priority') {
+        const negativeDifference = Number(right.score1) + Number(right.score2) - Number(left.score1) - Number(left.score2);
+        return negativeDifference || left.average - right.average || left.position - right.position;
+      }
+      if (likertView === 'strength') {
+        const positiveDifference = Number(right.score4) + Number(right.score5) - Number(left.score4) - Number(left.score5);
+        return positiveDifference || right.average - left.average || left.position - right.position;
+      }
+      return left.position - right.position;
+    })
+    .map((item, index) => ({
+      ...item,
+      name: likertView === 'question_order' ? item.name : `อันดับ ${index + 1} · ${item.name}`,
+    }));
   const dimensionGroups = new Map<string, number[]>();
   for (const answer of filteredRatingAnswers) {
     const dimension = answer.dimension || 'ไม่ระบุมิติ';
@@ -143,6 +291,7 @@ export function SiteManagerSatisfactionSurveyEditor() {
   const dimensionChartData = [...dimensionGroups.entries()].map(([name, values]) => ({
     name,
     average: Number((values.reduce((sum, value) => sum + value, 0) / values.length).toFixed(2)),
+    averageLabel: (values.reduce((sum, value) => sum + value, 0) / values.length).toFixed(2),
   }));
   const trendData = dashboardData.surveys.slice().sort((left, right) => left.version - right.version).map((survey) => {
     const responseIds = new Set(dashboardData.responses.filter((response) => response.survey_id === survey.id).map((response) => response.id));
@@ -153,12 +302,31 @@ export function SiteManagerSatisfactionSurveyEditor() {
       respondents: responseIds.size,
     };
   });
-  const rankedQuestions = questionChartData.filter((item) => item.total > 0).sort((left, right) => right.average - left.average);
-  const dashboardComments = dashboardData.answers
-    .filter((answer) => filteredResponseIds.has(answer.response_id) && answer.question_type === 'open_text' && answer.text_value)
-    .sort((left, right) => new Date(left.created_at).getTime() - new Date(right.created_at).getTime())
-    .slice(-5)
-    .reverse();
+  const roleLabelOrder = SURVEY_RESPONDENT_ROLE_OPTIONS.map((option) => option.label);
+  const frequencyLabelOrder = SURVEY_USAGE_FREQUENCY_OPTIONS.map((option) => option.label);
+  const serviceLabelOrder = SURVEY_SERVICE_OPTIONS.map((option) => option.label);
+  const resultRoleDistribution = countLabels((bundle?.respondentContexts || []).map((context) => getSurveyOptionLabel(SURVEY_RESPONDENT_ROLE_OPTIONS, context.respondent_role)), roleLabelOrder);
+  const resultFrequencyDistribution = countLabels((bundle?.respondentContexts || []).map((context) => getSurveyOptionLabel(SURVEY_USAGE_FREQUENCY_OPTIONS, context.usage_frequency)), frequencyLabelOrder);
+  const resultServiceDistribution = countLabels((bundle?.respondentContexts || []).flatMap((context) => context.used_services.map((service) => getSurveyOptionLabel(SURVEY_SERVICE_OPTIONS, service))), serviceLabelOrder);
+  const contextMissingCount = Math.max(0, (bundle?.responses.length || 0) - (bundle?.respondentContexts.length || 0));
+  const roleDistribution = addDistributionPercentage(countLabels(filteredContexts.map((context) => getSurveyOptionLabel(SURVEY_RESPONDENT_ROLE_OPTIONS, context.respondent_role)), roleLabelOrder), filteredContexts.length);
+  const frequencyDistribution = addDistributionPercentage(countLabels(filteredContexts.map((context) => getSurveyOptionLabel(SURVEY_USAGE_FREQUENCY_OPTIONS, context.usage_frequency)), frequencyLabelOrder), filteredContexts.length);
+  const serviceDistribution = addDistributionPercentage(countLabels(filteredContexts.flatMap((context) => context.used_services.map((service) => getSurveyOptionLabel(SURVEY_SERVICE_OPTIONS, service))), serviceLabelOrder), filteredContexts.length);
+  const openTextQuestions = questions
+    .filter((question) => question.question_type === 'open_text')
+    .sort((left, right) => left.position - right.position);
+  const latestCommentRows = filteredDashboardResponses
+    .map((response) => {
+      const answers = new Map(
+        dashboardData.answers
+          .filter((answer) => answer.response_id === response.id && answer.question_type === 'open_text' && answer.text_value)
+          .map((answer) => [answer.question_id, answer.text_value || '']),
+      );
+      return { response, answers };
+    })
+    .filter((row) => row.answers.size > 0)
+    .sort((left, right) => new Date(right.response.submitted_at).getTime() - new Date(left.response.submitted_at).getTime())
+    .slice(0, 5);
   const deleteResponse = bundle?.responses.find((response) => response.id === deleteResponseId) || null;
   const deleteRespondent = deleteResponse ? profileById.get(deleteResponse.respondent_id) : null;
 
@@ -423,6 +591,19 @@ export function SiteManagerSatisfactionSurveyEditor() {
       {view === 'results' ? (
         <div className="space-y-5">
           <div className="grid gap-3 sm:grid-cols-3"><div className="rounded-md border border-slate-200 bg-white p-4"><p className="text-xs text-slate-500">ผู้ตอบทั้งหมด</p><p className="mt-1 text-2xl font-bold text-slate-950">{bundle.responses.length}</p></div><div className="rounded-md border border-slate-200 bg-white p-4"><p className="text-xs text-slate-500">คะแนนเฉลี่ย</p><p className="mt-1 text-2xl font-bold text-brand-700">{average.toFixed(2)} / 5</p></div><div className="rounded-md border border-slate-200 bg-white p-4"><p className="text-xs text-slate-500">พึงพอใจระดับ 4–5</p><p className="mt-1 text-2xl font-bold text-emerald-700">{satisfactionRate.toFixed(1)}%</p></div></div>
+          <section className="rounded-md border border-slate-200 bg-white p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div><h3 className="text-sm font-semibold text-slate-900">ข้อมูลเกี่ยวกับการใช้งานระบบ</h3><p className="mt-1 text-xs text-slate-500">สรุปจากข้อมูลที่ผู้ตอบเลือกในรอบนี้</p></div>
+              <span className={`rounded-md px-3 py-1.5 text-xs font-semibold ${contextMissingCount > 0 ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'}`}>มีข้อมูล {bundle.respondentContexts.length}/{bundle.responses.length}{contextMissingCount > 0 ? ` · ยังไม่มีข้อมูล ${contextMissingCount}` : ''}</span>
+            </div>
+            <div className="mt-4 grid gap-5 lg:grid-cols-3">
+              {[
+                { title: 'บทบาทของผู้ตอบ', data: resultRoleDistribution },
+                { title: 'ความถี่ในการใช้งาน', data: resultFrequencyDistribution },
+                { title: 'ส่วนงานหรือบริการที่เคยใช้', data: resultServiceDistribution },
+              ].map((group) => <div key={group.title}><h4 className="text-xs font-semibold text-slate-600">{group.title}</h4><div className="mt-2 divide-y divide-slate-100 border-y border-slate-100">{group.data.length > 0 ? group.data.map((item) => <div key={item.name} className="flex items-start justify-between gap-3 py-2 text-sm"><span className="text-slate-700">{item.name}</span><strong className="shrink-0 text-slate-900">{item.total}</strong></div>) : <p className="py-3 text-sm text-slate-400">ยังไม่มีข้อมูล</p>}</div></div>)}
+            </div>
+          </section>
           <div className="overflow-x-auto rounded-md border border-slate-200 bg-white"><table className="min-w-full text-left text-sm"><thead className="bg-slate-50 text-slate-600"><tr><th className="px-4 py-3">ข้อ</th><th className="px-4 py-3">มิติที่วัด</th><th className="px-4 py-3">คะแนนเฉลี่ย</th><th className="px-4 py-3">จำนวนคำตอบ</th></tr></thead><tbody className="divide-y divide-slate-100">{questions.filter((question) => question.question_type === 'rating_5').map((question) => { const values = bundle.answers.filter((answer) => answer.question_id === question.id && answer.rating_value !== null); const avg = values.length ? values.reduce((sum, answer) => sum + (answer.rating_value || 0), 0) / values.length : 0; return <tr key={question.id}><td className="px-4 py-3 font-semibold">{question.position}</td><td className="px-4 py-3">{question.dimension || question.prompt}</td><td className="px-4 py-3">{avg.toFixed(2)}</td><td className="px-4 py-3">{values.length}</td></tr>; })}</tbody></table></div>
           <div className="space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-3">
@@ -481,7 +662,7 @@ export function SiteManagerSatisfactionSurveyEditor() {
             <div className="rounded-md border border-slate-200 bg-white p-4"><p className="text-xs text-slate-500">ผู้ตอบในช่วงที่เลือก</p><p className="mt-1 text-2xl font-bold text-slate-950">{filteredDashboardResponses.length}</p></div>
             <div className="rounded-md border border-slate-200 bg-white p-4"><p className="text-xs text-slate-500">คะแนนเฉลี่ยรวม</p><p className="mt-1 text-2xl font-bold text-blue-700">{dashboardAverage.toFixed(2)} / 5</p></div>
             <div className="rounded-md border border-slate-200 bg-white p-4"><p className="text-xs text-slate-500">ความพึงพอใจระดับ 4–5</p><p className="mt-1 text-2xl font-bold text-emerald-700">{dashboardSatisfactionRate.toFixed(1)}%</p></div>
-            <div className="rounded-md border border-slate-200 bg-white p-4"><p className="text-xs text-slate-500">ข้อที่มีคะแนน</p><p className="mt-1 text-2xl font-bold text-amber-700">{rankedQuestions.length} / {questionChartData.length}</p></div>
+            <div className="rounded-md border border-slate-200 bg-white p-4"><p className="text-xs text-slate-500">ข้อที่มีคะแนน</p><p className="mt-1 text-2xl font-bold text-amber-700">{questionChartData.filter((item) => item.total > 0).length} / {questionChartData.length}</p></div>
           </div>
 
           {filteredDashboardResponses.length === 0 ? (
@@ -492,22 +673,36 @@ export function SiteManagerSatisfactionSurveyEditor() {
                 <section className="rounded-md border border-slate-200 bg-white p-4">
                   <h4 className="text-sm font-semibold text-slate-900">คะแนนเฉลี่ยรายข้อ</h4>
                   <div className="mt-4 h-80">
-                    <ResponsiveContainer width="100%" height="100%"><BarChart data={questionChartData} margin={{ top: 8, right: 12, left: -18, bottom: 4 }}><CartesianGrid strokeDasharray="3 3" vertical={false} /><XAxis dataKey="name" fontSize={12} /><YAxis domain={[0, 5]} fontSize={12} /><Tooltip formatter={(value) => [`${Number(value).toFixed(2)} คะแนน`, 'คะแนนเฉลี่ย']} /><Bar dataKey="average" fill="#0369a1" radius={[4, 4, 0, 0]} /></BarChart></ResponsiveContainer>
+                    <ResponsiveContainer width="100%" height="100%"><BarChart data={questionChartData} margin={{ top: 28, right: 12, left: -18, bottom: 4 }}><CartesianGrid strokeDasharray="3 3" vertical={false} /><XAxis dataKey="name" fontSize={12} /><YAxis domain={[0, 5]} fontSize={12} /><Tooltip formatter={(value) => [`${Number(value).toFixed(2)} คะแนน`, 'คะแนนเฉลี่ย']} /><Bar dataKey="average" fill="#0369a1" radius={[4, 4, 0, 0]}><LabelList dataKey="averageLabel" position="top" fill="#334155" fontSize={12} fontWeight={600} /></Bar></BarChart></ResponsiveContainer>
                   </div>
                 </section>
                 <section className="rounded-md border border-slate-200 bg-white p-4">
                   <h4 className="text-sm font-semibold text-slate-900">สัดส่วนคะแนน 1–5</h4>
                   <div className="mt-4 h-80">
-                    <ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={scoreDistribution} dataKey="total" nameKey="name" innerRadius={55} outerRadius={90} paddingAngle={2}>{scoreDistribution.map((entry, index) => <Cell key={entry.score} fill={SCORE_COLORS[index]} />)}</Pie><Tooltip formatter={(value) => [`${value} คำตอบ`, 'จำนวน']} /><Legend /></PieChart></ResponsiveContainer>
+                    <ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={scoreDistribution} dataKey="total" nameKey="name" innerRadius={55} outerRadius={82} paddingAngle={2} label={({ payload }) => payload?.display || ''}>{scoreDistribution.map((entry, index) => <Cell key={entry.score} fill={SCORE_COLORS[index]} />)}</Pie><Tooltip formatter={(value) => [`${value} คำตอบ`, 'จำนวน']} /><Legend /></PieChart></ResponsiveContainer>
                   </div>
                 </section>
               </div>
+
+              <section className="rounded-md border border-slate-200 bg-white p-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div><h4 className="text-sm font-semibold text-slate-900">ลักษณะการใช้งานของผู้ตอบ</h4><p className="mt-1 text-xs text-slate-500">จำนวนผู้ตอบจำแนกตามบทบาท ความถี่ และบริการที่เคยใช้งาน</p></div>
+                  {filteredContexts.length < filteredDashboardResponses.length ? <span className="rounded-md bg-amber-100 px-3 py-1.5 text-xs font-semibold text-amber-800">ไม่มีข้อมูล {filteredDashboardResponses.length - filteredContexts.length} รายการ</span> : null}
+                </div>
+                {filteredContexts.length > 0 ? (
+                  <div className="mt-4 grid gap-5 xl:grid-cols-2">
+                    <div><h5 className="text-center text-xs font-semibold text-slate-600">บทบาทของผู้ตอบ</h5><div className="h-72"><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={roleDistribution} dataKey="total" nameKey="name" innerRadius={52} outerRadius={86} paddingAngle={2} labelLine={false} label={({ payload }) => payload?.total ? payload.display : ''}>{roleDistribution.map((item, index) => <Cell key={item.name} fill={SCORE_COLORS[index % SCORE_COLORS.length]} />)}</Pie><Tooltip formatter={(value) => [formatDistributionValue(value, filteredContexts.length), 'จำนวนและร้อยละ']} /><Legend /></PieChart></ResponsiveContainer></div></div>
+                    <div><h5 className="text-center text-xs font-semibold text-slate-600">ความถี่ในการเข้าใช้งาน</h5><div className="h-72"><ResponsiveContainer width="100%" height="100%"><BarChart data={frequencyDistribution} margin={{ top: 30, right: 10, left: -18, bottom: 42 }}><CartesianGrid strokeDasharray="3 3" vertical={false} /><XAxis dataKey="name" interval={0} angle={-24} textAnchor="end" fontSize={10} /><YAxis allowDecimals={false} fontSize={11} /><Tooltip formatter={(value) => [formatDistributionValue(value, filteredContexts.length), 'จำนวนและร้อยละ']} /><Bar dataKey="total" fill="#0d9488" radius={[4, 4, 0, 0]}><LabelList dataKey="display" position="top" fill="#334155" fontSize={12} fontWeight={600} /></Bar></BarChart></ResponsiveContainer></div></div>
+                    <div className="xl:col-span-2"><h5 className="text-center text-xs font-semibold text-slate-600">ส่วนงานหรือบริการที่เคยใช้งาน</h5><div className="mt-3 divide-y divide-slate-100 md:hidden">{serviceDistribution.map((item) => <div key={item.name} className="flex items-start justify-between gap-3 py-2 text-sm"><span className="text-slate-700">{item.name}</span><strong className="shrink-0 text-blue-700">{item.display}</strong></div>)}</div><div className="hidden md:block" style={{ height: Math.max(340, serviceDistribution.length * 46) }}><ResponsiveContainer width="100%" height="100%"><BarChart data={serviceDistribution} layout="vertical" margin={{ top: 10, right: 130, left: 0, bottom: 4 }}><CartesianGrid strokeDasharray="3 3" horizontal={false} /><XAxis type="number" allowDecimals={false} fontSize={12} /><YAxis type="category" dataKey="name" width={280} tick={<ServiceAxisTick />} /><Tooltip formatter={(value) => [formatDistributionValue(value, filteredContexts.length), 'จำนวนและร้อยละ']} /><Bar dataKey="total" fill="#0369a1" radius={[0, 4, 4, 0]}><LabelList dataKey="display" position="right" fill="#334155" fontSize={12} fontWeight={600} /></Bar></BarChart></ResponsiveContainer></div></div>
+                  </div>
+                ) : <p className="py-8 text-center text-sm text-slate-500">ยังไม่มีข้อมูลบทบาท ความถี่ และบริการในช่วงที่เลือก</p>}
+              </section>
 
               <div className="grid gap-5 xl:grid-cols-2">
                 <section className="rounded-md border border-slate-200 bg-white p-4">
                   <h4 className="text-sm font-semibold text-slate-900">คะแนนตามมิติ KPI</h4>
                   <div className="mt-4 h-72">
-                    <ResponsiveContainer width="100%" height="100%"><BarChart data={dimensionChartData} layout="vertical" margin={{ top: 4, right: 20, left: 38, bottom: 4 }}><CartesianGrid strokeDasharray="3 3" horizontal={false} /><XAxis type="number" domain={[0, 5]} fontSize={12} /><YAxis type="category" dataKey="name" width={110} fontSize={11} /><Tooltip formatter={(value) => [`${Number(value).toFixed(2)} คะแนน`, 'คะแนนเฉลี่ย']} /><Bar dataKey="average" fill="#0d9488" radius={[0, 4, 4, 0]} /></BarChart></ResponsiveContainer>
+                    <ResponsiveContainer width="100%" height="100%"><BarChart data={dimensionChartData} layout="vertical" margin={{ top: 4, right: 20, left: 38, bottom: 4 }}><CartesianGrid strokeDasharray="3 3" horizontal={false} /><XAxis type="number" domain={[0, 5]} fontSize={12} /><YAxis type="category" dataKey="name" width={110} fontSize={11} /><Tooltip formatter={(value) => [`${Number(value).toFixed(2)} คะแนน`, 'คะแนนเฉลี่ย']} /><Bar dataKey="average" fill="#0d9488" radius={[0, 4, 4, 0]}><LabelList dataKey="averageLabel" position="insideRight" fill="#ffffff" fontSize={12} fontWeight={700} /></Bar></BarChart></ResponsiveContainer>
                   </div>
                 </section>
                 <section className="rounded-md border border-slate-200 bg-white p-4">
@@ -518,14 +713,78 @@ export function SiteManagerSatisfactionSurveyEditor() {
                 </section>
               </div>
 
-              <div className="grid gap-5 xl:grid-cols-2">
-                <section className="rounded-md border border-emerald-200 bg-emerald-50/40 p-4"><h4 className="text-sm font-semibold text-emerald-900">จุดเด่น</h4><div className="mt-3 space-y-2">{rankedQuestions.slice(0, 3).map((item) => <div key={item.name} className="flex items-start justify-between gap-3 border-b border-emerald-100 pb-2 text-sm last:border-0"><span className="text-slate-700">{item.name}: {item.fullName}</span><strong className="shrink-0 text-emerald-800">{item.average.toFixed(2)}</strong></div>)}</div></section>
-                <section className="rounded-md border border-amber-200 bg-amber-50/40 p-4"><h4 className="text-sm font-semibold text-amber-900">ประเด็นที่ควรปรับปรุง</h4><div className="mt-3 space-y-2">{rankedQuestions.slice(-3).reverse().map((item) => <div key={item.name} className="flex items-start justify-between gap-3 border-b border-amber-100 pb-2 text-sm last:border-0"><span className="text-slate-700">{item.name}: {item.fullName}</span><strong className="shrink-0 text-amber-800">{item.average.toFixed(2)}</strong></div>)}</div></section>
-              </div>
+              <section className="rounded-md border border-slate-200 bg-white p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h4 className="text-sm font-semibold text-slate-900">การกระจายคะแนนรายข้อ</h4>
+                    <p className="mt-1 text-xs text-slate-500">สัดส่วนร้อยละของคะแนน 1–5 สำหรับคำถามทั้ง 10 ข้อ พร้อมคะแนนเฉลี่ยและจำนวนผู้ตอบ</p>
+                  </div>
+                  <div className="inline-flex overflow-hidden rounded-md border border-slate-300 bg-white" aria-label="มุมมองการเรียงลำดับกราฟ">
+                    {[
+                      { value: 'question_order' as const, label: 'ตามลำดับข้อ' },
+                      { value: 'improvement_priority' as const, label: 'ควรพัฒนาก่อน' },
+                      { value: 'strength' as const, label: 'จุดเด่น' },
+                    ].map((option) => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => setLikertView(option.value)}
+                        className={cn(
+                          'border-l border-slate-300 px-3 py-2 text-xs font-semibold transition first:border-l-0',
+                          likertView === option.value ? 'bg-brand-700 text-white' : 'text-slate-600 hover:bg-slate-50',
+                        )}
+                        aria-pressed={likertView === option.value}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="mt-4 overflow-x-auto">
+                  <div className="h-[560px] min-w-[900px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={displayedLikertChartData} layout="vertical" margin={{ top: 8, right: 115, left: 0, bottom: 4 }}>
+                        <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                        <XAxis type="number" domain={[0, 100]} tickFormatter={(value) => `${value}%`} fontSize={11} />
+                        <YAxis type="category" dataKey="name" width={430} tick={<LikertAxisTick />} />
+                        <Tooltip content={<LikertTooltip />} />
+                        <Legend />
+                        {Array.from({ length: 5 }, (_, index) => {
+                          const score = index + 1;
+                          return (
+                            <Bar key={score} dataKey={`score${score}`} name={`${score} คะแนน`} stackId="likert" fill={LIKERT_COLORS[index]} isAnimationActive={false}>
+                              <LabelList dataKey={`score${score}Label`} position="center" fill={score === 3 ? '#422006' : '#ffffff'} fontSize={11} fontWeight={700} />
+                              {score === 5 ? <LabelList dataKey="averageDisplay" position="right" fill="#334155" fontSize={12} fontWeight={700} /> : null}
+                            </Bar>
+                          );
+                        })}
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              </section>
 
               <section className="rounded-md border border-slate-200 bg-white p-4">
                 <h4 className="text-sm font-semibold text-slate-900">ข้อเสนอแนะล่าสุด</h4>
-                <div className="mt-3 divide-y divide-slate-100">{dashboardComments.length > 0 ? dashboardComments.map((answer) => <div key={answer.id} className="py-3"><p className="text-xs font-semibold text-slate-500">ข้อ {answer.question_position}: {answer.question_prompt}</p><p className="mt-1 whitespace-pre-line text-sm leading-6 text-slate-700">{answer.text_value}</p></div>) : <p className="py-5 text-center text-sm text-slate-500">ยังไม่มีข้อเสนอแนะในช่วงที่เลือก</p>}</div>
+                <p className="mt-1 text-xs text-slate-500">จัดกลุ่มคำตอบตามผู้ตอบ โดยผู้ที่ส่งแบบสำรวจล่าสุดจะแสดงอยู่ด้านบน</p>
+                {latestCommentRows.length > 0 ? (
+                  <div className="mt-4 overflow-x-auto rounded-md border border-slate-200">
+                    <table className="w-full min-w-[720px] border-collapse text-left text-sm">
+                      <thead className="bg-slate-50 text-xs text-slate-600">
+                        <tr>
+                          {openTextQuestions.map((question, index) => <th key={question.id} className={cn('border-b border-slate-200 px-4 py-3 font-semibold', index > 0 && 'border-l')}><span className="block text-slate-900">ข้อ {question.position}</span><span className="mt-1 block font-normal leading-5">{question.prompt}</span></th>)}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {latestCommentRows.map((row) => (
+                          <tr key={row.response.id} className="align-top even:bg-slate-50/50">
+                            {openTextQuestions.map((question, index) => <td key={question.id} className={cn('border-b border-slate-100 px-4 py-4 whitespace-pre-line leading-6 text-slate-700', index > 0 && 'border-l')}>{row.answers.get(question.id) || <span className="text-slate-400">ไม่ได้ระบุ</span>}</td>)}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : <p className="py-5 text-center text-sm text-slate-500">ยังไม่มีข้อเสนอแนะในช่วงที่เลือก</p>}
               </section>
             </>
           )}

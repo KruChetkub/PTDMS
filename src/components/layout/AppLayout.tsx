@@ -10,6 +10,8 @@ import {
   LockKeyhole,
   LogOut,
   Megaphone,
+  PanelLeftClose,
+  PanelLeftOpen,
   Shield,
   UserCog,
   UserCircle,
@@ -110,6 +112,7 @@ export function AppLayout() {
   const navigate = useNavigate();
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const { profile, signOut } = useAuthStore();
   const role = profile?.role;
   const visibleItems = navItems.filter((item) => canAccess(role, item.roles));
@@ -132,17 +135,41 @@ export function AppLayout() {
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
       <div className="flex min-h-screen">
-        <aside className="hidden w-72 shrink-0 border-r border-slate-200 bg-white px-4 py-5 lg:block">
-          <div className="mb-8">
-            <button
-              type="button"
-              onClick={() => navigate('/portal')}
-              className="mb-5 inline-flex items-center rounded-md border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-50"
-            >
-              กลับ Portal
-            </button>
-            <div className="text-xl font-bold text-brand-700">PTDMS</div>
-            <div className="mt-1 text-sm text-slate-500">Training & Development</div>
+        <aside
+          className={cn(
+            'hidden shrink-0 overflow-hidden border-r border-slate-200 bg-white py-5 transition-[width,padding] duration-200 lg:block',
+            isSidebarCollapsed ? 'w-16 px-2' : 'w-72 px-4',
+          )}
+        >
+          <div className={cn('mb-8', isSidebarCollapsed && 'flex flex-col items-center gap-2')}>
+            <div className={cn('flex items-center', isSidebarCollapsed ? 'flex-col gap-2' : 'mb-5 justify-between gap-3')}>
+              <button
+                type="button"
+                onClick={() => navigate('/portal')}
+                className={cn(
+                  'inline-flex h-9 items-center justify-center rounded-md border border-slate-200 text-xs font-semibold text-slate-600 transition hover:bg-slate-50',
+                  isSidebarCollapsed ? 'w-9' : 'px-3',
+                )}
+                title="กลับ Portal"
+                aria-label="กลับ Portal"
+              >
+                {isSidebarCollapsed ? <ArrowLeft className="h-4 w-4" aria-hidden="true" /> : 'กลับ Portal'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsSidebarCollapsed((current) => !current)}
+                className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-slate-200 text-slate-600 transition hover:bg-slate-50 hover:text-slate-900"
+                title={isSidebarCollapsed ? 'ขยายแถบเมนู' : 'ย่อแถบเมนู'}
+                aria-label={isSidebarCollapsed ? 'ขยายแถบเมนู' : 'ย่อแถบเมนู'}
+                aria-pressed={isSidebarCollapsed}
+              >
+                {isSidebarCollapsed ? <PanelLeftOpen className="h-4 w-4" aria-hidden="true" /> : <PanelLeftClose className="h-4 w-4" aria-hidden="true" />}
+              </button>
+            </div>
+            <div className={cn(isSidebarCollapsed && 'sr-only')}>
+              <div className="text-xl font-bold text-brand-700">PTDMS</div>
+              <div className="mt-1 text-sm text-slate-500">Training & Development</div>
+            </div>
           </div>
 
           <nav className="space-y-1">
@@ -154,15 +181,18 @@ export function AppLayout() {
                   to={item.to}
                   className={({ isActive }) =>
                     cn(
-                      'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition',
+                      'flex h-10 items-center rounded-md text-sm font-medium transition',
+                      isSidebarCollapsed ? 'justify-center px-0' : 'gap-3 px-3',
                       isActive
                         ? 'bg-brand-50 text-brand-700'
                         : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900',
                     )
                   }
+                  title={isSidebarCollapsed ? item.label : undefined}
+                  aria-label={item.label}
                 >
-                  <Icon className="h-4 w-4" aria-hidden="true" />
-                  {item.label}
+                  <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
+                  <span className={cn(isSidebarCollapsed && 'sr-only')}>{item.label}</span>
                 </NavLink>
               );
             })}
