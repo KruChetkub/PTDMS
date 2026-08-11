@@ -3,6 +3,8 @@ import { FileText, LoaderCircle } from 'lucide-react';
 import type { PDFDocumentLoadingTask, RenderTask } from 'pdfjs-dist';
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 
+const PDF_WORKER_URL = `${pdfWorkerUrl}?v=20260810-1`;
+
 type PdfFirstPageCoverProps = {
   pdfUrl: string;
   title: string;
@@ -49,7 +51,7 @@ export function PdfFirstPageCover({ pdfUrl, title, className = '', fallback }: P
 
       try {
         const { GlobalWorkerOptions, getDocument } = await import('pdfjs-dist');
-        GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
+        GlobalWorkerOptions.workerSrc = PDF_WORKER_URL;
         if (!active) return;
 
         loadingTask = getDocument({ url: normalizedPdfUrl });

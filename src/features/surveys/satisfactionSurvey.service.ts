@@ -1,0 +1,283 @@
+import { supabase } from '../../lib/supabase';
+import type {
+  Profile,
+  SmartDspSurvey,
+  SmartDspSurveyAnswer,
+  SmartDspSurveyQuestion,
+  SmartDspSurveyRatingOption,
+  SmartDspSurveyResponse,
+} from '../../types/database.types';
+import { optionalPlainTextInput, sanitizePlainTextInput } from '../../utils/inputSecurity';
+
+export const SMARTDSP_SURVEY_CODE = 'smartdsp-satisfaction';
+
+export type SurveySubmissionAnswer = {
+  question_id: string;
+  rating_value?: number;
+  text_value?: string;
+};
+
+export type SatisfactionSurveyBundle = {
+  survey: SmartDspSurvey;
+  questions: SmartDspSurveyQuestion[];
+  ratingOptions: SmartDspSurveyRatingOption[];
+  ownResponse: SmartDspSurveyResponse | null;
+  ownAnswers: SmartDspSurveyAnswer[];
+};
+
+export type SatisfactionSurveyAdminBundle = SatisfactionSurveyBundle & {
+  responses: SmartDspSurveyResponse[];
+  answers: SmartDspSurveyAnswer[];
+  respondents: Profile[];
+};
+
+export type SatisfactionSurveyDashboardData = {
+  surveys: SmartDspSurvey[];
+  responses: SmartDspSurveyResponse[];
+  answers: SmartDspSurveyAnswer[];
+};
+
+export type SatisfactionSurveyDraft = Pick<
+  SmartDspSurvey,
+  'id' | 'title' | 'description' | 'instructions' | 'status' | 'is_enabled' | 'starts_at' | 'ends_at'
+>;
+
+function isOpenNow(survey: SmartDspSurvey) {
+  const now = Date.now();
+  const startsAt = survey.starts_at ? new Date(survey.starts_at).getTime() : null;
+  const endsAt = survey.ends_at ? new Date(survey.ends_at).getTime() : null;
+
+  return survey.status === 'active'
+    && survey.is_enabled
+    && (startsAt === null || startsAt <= now)
+    && (endsAt === null || endsAt > now);
+}
+
+async function listVisibleSurveys() {
+  const { data, error } = await supabase
+    .from('smartdsp_surveys')
+    .select('*')
+    .eq('code', SMARTDSP_SURVEY_CODE)
+    .order('version', { ascending: false });
+
+  if (error) throw new Error(`โหลดแบบสำรวจไม่สำเร็จ: ${error.message}`);
+  return (data || []) as SmartDspSurvey[];
+}
+
+async function listOwnResponses(userId: string, surveyIds: string[]) {
+  if (surveyIds.length === 0) return [];
+
+  const { data, error } = await supabase
+    .from('smartdsp_survey_responses')
+    .select('*')
+    .eq('respondent_id', userId)
+    .in('survey_id', surveyIds)
+    .order('submitted_at', { ascending: false });
+
+  if (error) throw new Error(`ตรวจสอบสถานะการตอบแบบสำรวจไม่สำเร็จ: ${error.message}`);
+  return (data || []) as SmartDspSurveyResponse[];
+}
+
+async function loadSurveyContent(survey: SmartDspSurvey, ownResponse: SmartDspSurveyResponse | null): Promise<SatisfactionSurveyBundle> {
+  const [questionsResult, ratingOptionsResult, answersResult] = await Promise.all([
+    supabase
+      .from('smartdsp_survey_questions')
+      .select('*')
+      .eq('survey_id', survey.id)
+      .eq('is_active', true)
+      .order('position', { ascending: true }),
+    supabase
+      .from('smartdsp_survey_rating_options')
+      .select('*')
+      .eq('survey_id', survey.id)
+      .order('rating_value', { ascending: true }),
+    ownResponse
+      ? supabase
+          .from('smartdsp_survey_answers')
+          .select('*')
+          .eq('response_id', ownResponse.id)
+          .order('question_position', { ascending: true })
+      : Promise.resolve({ data: [], error: null }),
+  ]);
+
+  if (questionsResult.error) throw new Error(`โหลดคำถามไม่สำเร็จ: ${questionsResult.error.message}`);
+  if (ratingOptionsResult.error) throw new Error(`โหลดระดับคะแนนไม่สำเร็จ: ${ratingOptionsResult.error.message}`);
+  if (answersResult.error) throw new Error(`โหลดคำตอบของท่านไม่สำเร็จ: ${answersResult.error.message}`);
+
+  return {
+    survey,
+    questions: (questionsResult.data || []) as SmartDspSurveyQuestion[],
+    ratingOptions: (ratingOptionsResult.data || []) as SmartDspSurveyRatingOption[],
+    ownResponse,
+    ownAnswers: (answersResult.data || []) as SmartDspSurveyAnswer[],
+  };
+}
+
+export async function getPortalSurveyState(userId: string) {
+  const surveys = await listVisibleSurveys();
+  const ownResponses = await listOwnResponses(userId, surveys.map((survey) => survey.id));
+  const ownResponseBySurvey = new Map(ownResponses.map((response) => [response.survey_id, response]));
+  const survey = surveys.find(isOpenNow) || surveys.find((item) => ownResponseBySurvey.has(item.id)) || null;
+
+  if (!survey) return null;
+
+  return {
+    survey,
+    ownResponse: ownResponseBySurvey.get(survey.id) || null,
+    isOpen: isOpenNow(survey),
+  };
+}
+
+export async function loadSatisfactionSurvey(userId: string) {
+  const state = await getPortalSurveyState(userId);
+  if (!state) return null;
+  return loadSurveyContent(state.survey, state.ownResponse);
+}
+
+export async function submitSatisfactionSurvey(surveyId: string, answers: SurveySubmissionAnswer[]) {
+  const { data, error } = await supabase.rpc('submit_smartdsp_survey', {
+    target_survey_id: surveyId,
+    submitted_answers: answers,
+  });
+
+  if (error) throw new Error(`ส่งแบบสำรวจไม่สำเร็จ: ${error.message}`);
+  return data as string;
+}
+
+export async function listSurveysForAdmin() {
+  return listVisibleSurveys();
+}
+
+export async function loadSurveyForAdmin(surveyId?: string): Promise<SatisfactionSurveyAdminBundle | null> {
+  const surveys = await listSurveysForAdmin();
+  const survey = (surveyId ? surveys.find((item) => item.id === surveyId) : surveys[0]) || null;
+  if (!survey) return null;
+
+  const [questionsResult, ratingOptionsResult, responsesResult] = await Promise.all([
+    supabase.from('smartdsp_survey_questions').select('*').eq('survey_id', survey.id).order('position', { ascending: true }),
+    supabase.from('smartdsp_survey_rating_options').select('*').eq('survey_id', survey.id).order('rating_value', { ascending: true }),
+    supabase.from('smartdsp_survey_responses').select('*').eq('survey_id', survey.id).order('submitted_at', { ascending: false }),
+  ]);
+
+  if (questionsResult.error) throw new Error(`โหลดคำถามสำหรับผู้ดูแลไม่สำเร็จ: ${questionsResult.error.message}`);
+  if (ratingOptionsResult.error) throw new Error(`โหลดระดับคะแนนสำหรับผู้ดูแลไม่สำเร็จ: ${ratingOptionsResult.error.message}`);
+  if (responsesResult.error) throw new Error(`โหลดผลตอบแบบสำรวจไม่สำเร็จ: ${responsesResult.error.message}`);
+
+  const responses = (responsesResult.data || []) as SmartDspSurveyResponse[];
+  const responseIds = responses.map((response) => response.id);
+  const respondentIds = [...new Set(responses.map((response) => response.respondent_id))];
+  const [answersResult, profilesResult] = await Promise.all([
+    responseIds.length > 0
+      ? supabase.from('smartdsp_survey_answers').select('*').in('response_id', responseIds).order('question_position', { ascending: true })
+      : Promise.resolve({ data: [], error: null }),
+    respondentIds.length > 0
+      ? supabase.from('profiles').select('*').in('user_id', respondentIds)
+      : Promise.resolve({ data: [], error: null }),
+  ]);
+
+  if (answersResult.error) throw new Error(`โหลดรายละเอียดคำตอบไม่สำเร็จ: ${answersResult.error.message}`);
+  if (profilesResult.error) throw new Error(`โหลดข้อมูลผู้ตอบไม่สำเร็จ: ${profilesResult.error.message}`);
+
+  return {
+    survey,
+    questions: (questionsResult.data || []) as SmartDspSurveyQuestion[],
+    ratingOptions: (ratingOptionsResult.data || []) as SmartDspSurveyRatingOption[],
+    ownResponse: null,
+    ownAnswers: [],
+    responses,
+    answers: (answersResult.data || []) as SmartDspSurveyAnswer[],
+    respondents: (profilesResult.data || []) as Profile[],
+  };
+}
+
+export async function loadSurveyDashboard(): Promise<SatisfactionSurveyDashboardData> {
+  const surveys = await listSurveysForAdmin();
+  const surveyIds = surveys.map((survey) => survey.id);
+  if (surveyIds.length === 0) return { surveys, responses: [], answers: [] };
+
+  const { data: responseData, error: responseError } = await supabase
+    .from('smartdsp_survey_responses')
+    .select('*')
+    .in('survey_id', surveyIds)
+    .order('submitted_at', { ascending: true });
+
+  if (responseError) throw new Error(`โหลดข้อมูลแดชบอร์ดไม่สำเร็จ: ${responseError.message}`);
+  const responses = (responseData || []) as SmartDspSurveyResponse[];
+  const responseIds = responses.map((response) => response.id);
+  if (responseIds.length === 0) return { surveys, responses, answers: [] };
+
+  const { data: answerData, error: answerError } = await supabase
+    .from('smartdsp_survey_answers')
+    .select('*')
+    .in('response_id', responseIds)
+    .order('question_position', { ascending: true });
+
+  if (answerError) throw new Error(`โหลดคะแนนสำหรับแดชบอร์ดไม่สำเร็จ: ${answerError.message}`);
+  return { surveys, responses, answers: (answerData || []) as SmartDspSurveyAnswer[] };
+}
+
+export async function saveSurveySettings(draft: SatisfactionSurveyDraft) {
+  const title = sanitizePlainTextInput(draft.title, { fieldName: 'ชื่อแบบสำรวจ', maxLength: 300, allowNewlines: false });
+  const description = optionalPlainTextInput(draft.description, { fieldName: 'รายละเอียดแบบสำรวจ', maxLength: 2000, allowNewlines: true }) || '';
+  const instructions = optionalPlainTextInput(draft.instructions, { fieldName: 'คำชี้แจง', maxLength: 2000, allowNewlines: true }) || '';
+
+  if (!title) throw new Error('กรุณากรอกชื่อแบบสำรวจ');
+  if (draft.starts_at && draft.ends_at && new Date(draft.ends_at) <= new Date(draft.starts_at)) {
+    throw new Error('วันสิ้นสุดต้องอยู่หลังวันเริ่มต้น');
+  }
+
+  const { data, error } = await supabase
+    .from('smartdsp_surveys')
+    .update({
+      title,
+      description,
+      instructions,
+      status: draft.status,
+      is_enabled: draft.is_enabled,
+      starts_at: draft.starts_at,
+      ends_at: draft.ends_at,
+    })
+    .eq('id', draft.id)
+    .select('*')
+    .single();
+
+  if (error) throw new Error(`บันทึกการตั้งค่าแบบสำรวจไม่สำเร็จ: ${error.message}`);
+  return data as SmartDspSurvey;
+}
+
+export async function saveSurveyQuestions(questions: SmartDspSurveyQuestion[]) {
+  for (const question of questions) {
+    const prompt = sanitizePlainTextInput(question.prompt, { fieldName: `คำถามข้อ ${question.position}`, maxLength: 1000, allowNewlines: true });
+    const dimension = optionalPlainTextInput(question.dimension, { fieldName: 'มิติที่วัด', maxLength: 200, allowNewlines: false });
+    const helpText = optionalPlainTextInput(question.help_text, { fieldName: 'คำอธิบายคำถาม', maxLength: 1000, allowNewlines: true });
+    if (!prompt) throw new Error(`กรุณากรอกคำถามข้อ ${question.position}`);
+
+    const { error } = await supabase
+      .from('smartdsp_survey_questions')
+      .update({ prompt, dimension, help_text: helpText, is_required: question.is_required, is_active: question.is_active })
+      .eq('id', question.id);
+
+    if (error) throw new Error(`บันทึกคำถามข้อ ${question.position} ไม่สำเร็จ: ${error.message}`);
+  }
+}
+
+export async function saveSurveyRatingOptions(options: SmartDspSurveyRatingOption[]) {
+  for (const option of options) {
+    const label = sanitizePlainTextInput(option.label, { fieldName: `ชื่อระดับ ${option.rating_value}`, maxLength: 100, allowNewlines: false });
+    const description = sanitizePlainTextInput(option.description, { fieldName: `เหตุผลระดับ ${option.rating_value}`, maxLength: 1000, allowNewlines: true });
+    if (!label || !description) throw new Error(`กรุณากรอกข้อมูลระดับคะแนน ${option.rating_value} ให้ครบถ้วน`);
+
+    const { error } = await supabase
+      .from('smartdsp_survey_rating_options')
+      .update({ label, description })
+      .eq('id', option.id);
+
+    if (error) throw new Error(`บันทึกระดับคะแนน ${option.rating_value} ไม่สำเร็จ: ${error.message}`);
+  }
+}
+
+export async function cloneSurveyRound(sourceSurveyId: string) {
+  const { data, error } = await supabase.rpc('clone_smartdsp_survey', { source_survey_id: sourceSurveyId });
+  if (error) throw new Error(`สร้างรอบแบบสำรวจใหม่ไม่สำเร็จ: ${error.message}`);
+  return data as string;
+}

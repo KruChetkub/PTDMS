@@ -333,6 +333,71 @@ export type SpdServiceNotificationSettings = {
   updated_at: string;
 };
 
+export type SmartDspSurveyStatus = 'draft' | 'active' | 'closed' | 'archived';
+export type SmartDspSurveyQuestionType = 'rating_5' | 'open_text';
+
+export type SmartDspSurvey = {
+  id: string;
+  code: string;
+  version: number;
+  title: string;
+  description: string;
+  instructions: string;
+  status: SmartDspSurveyStatus;
+  is_enabled: boolean;
+  starts_at: string | null;
+  ends_at: string | null;
+  created_by: string | null;
+  updated_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type SmartDspSurveyQuestion = {
+  id: string;
+  survey_id: string;
+  position: number;
+  question_type: SmartDspSurveyQuestionType;
+  prompt: string;
+  dimension: string | null;
+  help_text: string | null;
+  is_required: boolean;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type SmartDspSurveyRatingOption = {
+  id: string;
+  survey_id: string;
+  rating_value: number;
+  label: string;
+  description: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type SmartDspSurveyResponse = {
+  id: string;
+  survey_id: string;
+  respondent_id: string;
+  submitted_at: string;
+  created_at: string;
+};
+
+export type SmartDspSurveyAnswer = {
+  id: string;
+  response_id: string;
+  question_id: string;
+  question_position: number;
+  question_type: SmartDspSurveyQuestionType;
+  question_prompt: string;
+  dimension: string | null;
+  rating_value: number | null;
+  text_value: string | null;
+  created_at: string;
+};
+
 export type Database = {
   public: {
     Tables: {
@@ -537,6 +602,88 @@ export type Database = {
           updated_at?: string;
         };
         Update: Partial<Omit<PortalUserManual, 'id' | 'created_at'>>;
+        Relationships: [];
+      };
+      smartdsp_surveys: {
+        Row: SmartDspSurvey;
+        Insert: {
+          id?: string;
+          code: string;
+          version?: number;
+          title: string;
+          description?: string;
+          instructions?: string;
+          status?: SmartDspSurveyStatus;
+          is_enabled?: boolean;
+          starts_at?: string | null;
+          ends_at?: string | null;
+          created_by?: string | null;
+          updated_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Omit<SmartDspSurvey, 'id' | 'code' | 'version' | 'created_at'>>;
+        Relationships: [];
+      };
+      smartdsp_survey_questions: {
+        Row: SmartDspSurveyQuestion;
+        Insert: {
+          id?: string;
+          survey_id: string;
+          position: number;
+          question_type: SmartDspSurveyQuestionType;
+          prompt: string;
+          dimension?: string | null;
+          help_text?: string | null;
+          is_required?: boolean;
+          is_active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Omit<SmartDspSurveyQuestion, 'id' | 'survey_id' | 'created_at'>>;
+        Relationships: [];
+      };
+      smartdsp_survey_rating_options: {
+        Row: SmartDspSurveyRatingOption;
+        Insert: {
+          id?: string;
+          survey_id: string;
+          rating_value: number;
+          label: string;
+          description: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Omit<SmartDspSurveyRatingOption, 'id' | 'survey_id' | 'rating_value' | 'created_at'>>;
+        Relationships: [];
+      };
+      smartdsp_survey_responses: {
+        Row: SmartDspSurveyResponse;
+        Insert: {
+          id?: string;
+          survey_id: string;
+          respondent_id: string;
+          submitted_at?: string;
+          created_at?: string;
+        };
+        Update: Partial<Omit<SmartDspSurveyResponse, 'id' | 'survey_id' | 'respondent_id' | 'created_at'>>;
+        Relationships: [];
+      };
+      smartdsp_survey_answers: {
+        Row: SmartDspSurveyAnswer;
+        Insert: {
+          id?: string;
+          response_id: string;
+          question_id: string;
+          question_position: number;
+          question_type: SmartDspSurveyQuestionType;
+          question_prompt: string;
+          dimension?: string | null;
+          rating_value?: number | null;
+          text_value?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<Omit<SmartDspSurveyAnswer, 'id' | 'response_id' | 'question_id' | 'created_at'>>;
         Relationships: [];
       };
       strategy_events: {
@@ -804,6 +951,23 @@ export type Database = {
             | null;
         };
         Returns: void;
+      };
+      submit_smartdsp_survey: {
+        Args: {
+          target_survey_id: string;
+          submitted_answers: Array<{
+            question_id: string;
+            rating_value?: number;
+            text_value?: string;
+          }>;
+        };
+        Returns: string;
+      };
+      clone_smartdsp_survey: {
+        Args: {
+          source_survey_id: string;
+        };
+        Returns: string;
       };
     };
     Enums: {

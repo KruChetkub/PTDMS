@@ -1,9 +1,11 @@
 import { supabase } from '../../../lib/supabase';
 import { validateUploadFile } from '../../../utils/inputSecurity';
+import { createUuid } from '../../../utils/uuid';
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 
 const ASSETS_BUCKET = 'site-content-assets';
 const MAX_PDF_SIZE_BYTES = 50 * 1024 * 1024;
+const PDF_WORKER_URL = `${pdfWorkerUrl}?v=20260810-1`;
 
 export type AdminPublicPdfFolder = 'plans' | 'performance-results' | 'research';
 
@@ -23,7 +25,7 @@ function sanitizeFileName(fileName: string) {
 
 async function createFirstPageCover(file: File) {
   const { GlobalWorkerOptions, getDocument } = await import('pdfjs-dist');
-  GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
+  GlobalWorkerOptions.workerSrc = PDF_WORKER_URL;
   const loadingTask = getDocument({ data: new Uint8Array(await file.arrayBuffer()) });
 
   try {
@@ -59,7 +61,7 @@ export async function uploadAdminPublicPdf(file: File, userId: string, folder: A
   });
 
   const safeName = sanitizeFileName(file.name) || 'document.pdf';
-  const uniqueName = `${Date.now()}-${crypto.randomUUID()}`;
+  const uniqueName = `${Date.now()}-${createUuid()}`;
   const basePath = `public-home-documents/${userId}/${folder}/${uniqueName}`;
   const pdfPath = `${basePath}-${safeName}`;
   const coverPath = `${basePath}-cover.jpg`;

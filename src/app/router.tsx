@@ -11,6 +11,7 @@ import { AuthCallbackPage } from '../features/auth/pages/AuthCallbackPage';
 import { PendingApprovalPage } from '../features/auth/pages/PendingApprovalPage';
 import { PublicHomePage } from '../features/public-home/pages/PublicHomePage';
 import { PortalPage } from '../features/portal/PortalPage';
+import { SatisfactionSurveyPage } from '../features/surveys/SatisfactionSurveyPage';
 import { DashboardPage } from '../features/dashboard/DashboardPage';
 import { AnalyticsPage } from '../features/analytics/AnalyticsPage';
 import { RecommendationsPage } from '../features/recommendations/RecommendationsPage';
@@ -83,6 +84,10 @@ export const router = createBrowserRouter([
       {
         path: '/portal',
         element: <PortalPage />,
+      },
+      {
+        path: '/satisfaction-survey',
+        element: <SatisfactionSurveyPage />,
       },
       {
         path: '/pending-approval',

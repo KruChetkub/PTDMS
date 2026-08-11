@@ -1,5 +1,7 @@
 ﻿import { supabase } from '../lib/supabase';
 
+import { createUuid } from '../utils/uuid';
+
 export const cookieConsentStorageKey = 'smartdsp_cookie_consent_v1';
 export const publicVisitSessionStorageKey = 'smartdsp_public_visit_session_id';
 const visitDedupePrefix = 'smartdsp_public_visit_dedupe:';
@@ -19,10 +21,6 @@ export type PublicVisitStats = {
   todayPageViews: number;
   updatedAt: string | null;
 };
-
-function fallbackId() {
-  return `00000000-0000-4000-8000-${Math.random().toString(16).slice(2, 14).padEnd(12, '0')}`;
-}
 
 export function getStoredCookieConsent(): CookieConsentPreferences | null {
   try {
@@ -51,7 +49,7 @@ function getOrCreateVisitSessionId() {
   const existing = window.localStorage.getItem(publicVisitSessionStorageKey);
   if (existing) return existing;
 
-  const nextId = typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : fallbackId();
+  const nextId = createUuid();
   window.localStorage.setItem(publicVisitSessionStorageKey, nextId);
   return nextId;
 }

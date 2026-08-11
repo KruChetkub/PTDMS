@@ -1,5 +1,6 @@
 import { supabase } from '../../../lib/supabase';
 import { runSupabaseQuery } from '../../../lib/supabase-query';
+import { createUuid } from '../../../utils/uuid';
 import type { SiteContentPlanCoverLayout, SiteContentPlanIconKey, SiteContentStatus } from '../../site-content/types/siteContent.types';
 
 export type PerformanceResultCategory = 'key-result' | 'annual-report' | 'indicator-report' | 'other';
@@ -163,5 +164,5 @@ export async function updatePublicPerformanceResultStatus(id: string, status: 'p
 
 export function createPublicPerformanceResult(input: Omit<PublicPerformanceResult, 'id' | 'createdAt' | 'updatedAt'>) {
   const now = new Date().toISOString();
-  return { ...input, id: crypto.randomUUID(), createdAt: now, updatedAt: now } satisfies PublicPerformanceResult;
+  return { ...input, id: createUuid(), createdAt: now, updatedAt: now } satisfies PublicPerformanceResult;
 }

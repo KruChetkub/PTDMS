@@ -1,5 +1,6 @@
 import { supabase } from '../../../lib/supabase';
 import { validateUploadFile } from '../../../utils/inputSecurity';
+import { createUuid } from '../../../utils/uuid';
 
 const SITE_CONTENT_ASSETS_BUCKET = 'site-content-assets';
 const SITE_CONTENT_ALLOWED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml'];
@@ -38,7 +39,7 @@ export async function uploadPlanCoverImage(file: File) {
 
   const extension = file.name.split('.').pop() || 'png';
   const safeName = sanitizeFileName(file.name) || `plan-cover.${extension}`;
-  const filePath = `plan-covers/${Date.now()}-${crypto.randomUUID()}-${safeName}`;
+  const filePath = `plan-covers/${Date.now()}-${createUuid()}-${safeName}`;
 
   const { error } = await supabase.storage.from(SITE_CONTENT_ASSETS_BUCKET).upload(filePath, file, {
     cacheControl: '3600',

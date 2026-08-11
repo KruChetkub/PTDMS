@@ -1,5 +1,5 @@
 ﻿import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowRight, BookOpen, CalendarDays, ChevronDown, ChevronLeft, ChevronRight, Database, ExternalLink, FileText, GraduationCap, Headphones, KeyRound, LogOut, Megaphone, Monitor, ShieldCheck, Sparkles } from 'lucide-react';
+import { ArrowRight, BookOpen, CalendarDays, ChevronDown, ChevronLeft, ChevronRight, ClipboardCheck, Database, ExternalLink, FileText, GraduationCap, Headphones, KeyRound, LogOut, Megaphone, Monitor, ShieldCheck, Sparkles } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ConfirmModal } from '../../components/ui/ConfirmModal';
 import { useAuditPageAccess } from '../../hooks/useAuditPageAccess';
@@ -10,6 +10,7 @@ import type { UserRole } from '../../types/roles';
 import { canAccess, roleLabels } from '../../types/roles';
 import { reportClientError } from '../../utils/errorHandling';
 import { listActivePortalUserManuals } from './portalManuals.service';
+import { getPortalSurveyState } from '../surveys/satisfactionSurvey.service';
 
 const PORTAL_MANUALS_PER_PAGE = 2;
 
@@ -118,7 +119,8 @@ export function PortalPage() {
   const [isUserPanelOpen, setIsUserPanelOpen] = useState(false);
   const [manuals, setManuals] = useState<PortalUserManual[]>([]);
   const [manualPage, setManualPage] = useState(0);
-  const { profile, signOut } = useAuthStore();
+  const [surveyState, setSurveyState] = useState<Awaited<ReturnType<typeof getPortalSurveyState>>>(null);
+  const { user, profile, signOut } = useAuthStore();
   const siteContent = usePublishedSiteContent();
   const portalBackgroundImage = siteContent.portalPage.backgroundImageUrl || '/SmartDSP.png';
   const portalBackgroundImageEnabled = siteContent.portalPage.status === 'published' && siteContent.portalPage.backgroundImageEnabled !== false;
@@ -151,6 +153,23 @@ export function PortalPage() {
       active = false;
     };
   }, []);
+
+  useEffect(() => {
+    let active = true;
+    if (!user) return undefined;
+
+    getPortalSurveyState(user.id)
+      .then((state) => {
+        if (active) setSurveyState(state);
+      })
+      .catch((error) => {
+        void reportClientError('Failed to load portal survey state:', error);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [user?.id]);
 
   const totalManualPages = Math.max(1, Math.ceil(manuals.length / PORTAL_MANUALS_PER_PAGE));
   const visibleManuals = useMemo(
@@ -331,10 +350,28 @@ export function PortalPage() {
               <h1 className="mt-5 max-w-3xl text-3xl font-semibold tracking-normal text-slate-950 sm:text-4xl">
                 เลือกระบบที่ต้องการใช้งาน
               </h1>
-              {manuals.length > 0 ? (
+              {manuals.length > 0 || surveyState ? (
                 <div className="mt-5 grid gap-4 lg:grid-cols-2">
-                  <div className="hidden min-h-[142px] rounded-md border border-dashed border-slate-200 bg-slate-50/70 lg:block" aria-hidden="true" />
-                  <div className="rounded-md border border-slate-200 bg-slate-50/80 p-3 sm:p-4">
+                  {surveyState ? (
+                    <Link to="/satisfaction-survey" className="group flex min-h-[142px] flex-col justify-between rounded-md border border-emerald-200 bg-emerald-50/60 p-4 transition hover:border-emerald-400 hover:bg-emerald-50">
+                      <div className="flex items-start justify-between gap-3">
+                        <span className="flex h-10 w-10 items-center justify-center rounded-md bg-white text-emerald-700 ring-1 ring-emerald-200">
+                          <ClipboardCheck className="h-5 w-5" aria-hidden="true" />
+                        </span>
+                        <span className={`rounded-md px-2.5 py-1 text-xs font-semibold ${surveyState.ownResponse ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
+                          {surveyState.ownResponse ? 'ตอบแล้ว' : 'เปิดรับคำตอบ'}
+                        </span>
+                      </div>
+                      <div className="mt-4">
+                        <h2 className="text-base font-semibold text-slate-950">แบบสำรวจความพึงพอใจ SmartDSP</h2>
+                        <div className="mt-1 flex items-center justify-between gap-3 text-sm text-slate-600">
+                          <span>{surveyState.ownResponse ? 'ดูคำตอบของฉัน' : surveyState.survey.title}</span>
+                          <ArrowRight className="h-4 w-4 shrink-0 text-emerald-700 transition group-hover:translate-x-1" aria-hidden="true" />
+                        </div>
+                      </div>
+                    </Link>
+                  ) : <div className="hidden lg:block" />}
+                  {manuals.length > 0 ? <div className="rounded-md border border-slate-200 bg-slate-50/80 p-3 sm:p-4">
                     <div className="flex items-center justify-between gap-3">
                       <div className="flex min-w-0 items-center gap-2">
                         <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-white text-brand-700 ring-1 ring-slate-200">
@@ -392,7 +429,7 @@ export function PortalPage() {
                         </a>
                       ))}
                     </div>
-                  </div>
+                  </div> : null}
                 </div>
               ) : null}
             </div>

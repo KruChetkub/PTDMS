@@ -1,5 +1,6 @@
 import { supabase } from '../../../lib/supabase';
 import { runSupabaseQuery } from '../../../lib/supabase-query';
+import { createUuid } from '../../../utils/uuid';
 import type { SiteContentPlanCard } from '../../site-content/types/siteContent.types';
 
 export type PublicUserPlanCategory =
@@ -107,11 +108,7 @@ function isBrowserStorageAvailable() {
 }
 
 function createId() {
-  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
-    return crypto.randomUUID();
-  }
-
-  return `plan-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  return createUuid();
 }
 
 function normalizeSortOrder(value: unknown) {

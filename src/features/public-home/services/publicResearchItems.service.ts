@@ -1,5 +1,6 @@
 import { supabase } from '../../../lib/supabase';
 import { runSupabaseQuery } from '../../../lib/supabase-query';
+import { createUuid } from '../../../utils/uuid';
 import type { SiteContentPlanCoverLayout, SiteContentStatus } from '../../site-content/types/siteContent.types';
 
 export type ResearchCategory = 'r2r' | 'innovation' | 'evaluation' | 'other';
@@ -161,5 +162,5 @@ export async function updatePublicResearchItemStatus(id: string, status: 'publis
 
 export function createPublicResearchItem(input: Omit<PublicResearchItem, 'id' | 'createdAt' | 'updatedAt'>) {
   const now = new Date().toISOString();
-  return { ...input, id: crypto.randomUUID(), createdAt: now, updatedAt: now } satisfies PublicResearchItem;
+  return { ...input, id: createUuid(), createdAt: now, updatedAt: now } satisfies PublicResearchItem;
 }

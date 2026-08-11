@@ -11,6 +11,7 @@ import { SiteManagerPlanDocumentsEditor } from '../components/SiteManagerPlanDoc
 import { SiteManagerPlanPreview } from '../components/SiteManagerPlanPreview';
 import { SiteManagerPortalManualsEditor } from '../components/SiteManagerPortalManualsEditor';
 import { SiteManagerSecuritySettings } from '../components/SiteManagerSecuritySettings';
+import { SiteManagerSatisfactionSurveyEditor } from '../components/SiteManagerSatisfactionSurveyEditor';
 
 type PlanFocusTarget = {
   index: number;
@@ -29,20 +30,22 @@ type SiteManagerTab =
   | 'portal-manuals'
   | 'login-page'
   | 'portal-page'
+  | 'satisfaction-survey'
   | 'security';
 
-const siteManagerTabs: Array<{ id: SiteManagerTab; label: string; superAdminOnly?: boolean }> = [
+const siteManagerTabs: Array<{ id: SiteManagerTab; label: string; superAdminOnly?: boolean; hidden?: boolean }> = [
   { id: 'branding', label: 'โลโก้/แบรนด์' },
-  { id: 'home-content', label: 'ป้าย/ข่าวประชาสัมพันธ์' },
-  { id: 'plan-documents', label: 'แผนระดับต่าง ๆ' },
-  { id: 'disease-control-plan', label: 'แผนงานควบคุมโรค' },
-  { id: 'annual-guidelines', label: 'แนวทางประจำปี' },
-  { id: 'risk-management', label: 'แผนบริหารความเสี่ยง' },
-  { id: 'executive-policy', label: 'นโยบายผู้บริหาร' },
-  { id: 'r2r-research', label: 'งานวิจัยจากงานประจำ R2R' },
+  { id: 'home-content', label: 'ป้าย/ข่าวประชาสัมพันธ์', hidden: true },
+  { id: 'plan-documents', label: 'แผนระดับต่าง ๆ', hidden: true },
+  { id: 'disease-control-plan', label: 'แผนงานควบคุมโรค', hidden: true },
+  { id: 'annual-guidelines', label: 'แนวทางประจำปี', hidden: true },
+  { id: 'risk-management', label: 'แผนบริหารความเสี่ยง', hidden: true },
+  { id: 'executive-policy', label: 'นโยบายผู้บริหาร', hidden: true },
+  { id: 'r2r-research', label: 'งานวิจัยจากงานประจำ R2R', hidden: true },
   { id: 'portal-manuals', label: 'ตั้งค่าคู่มือการใช้งาน' },
   { id: 'login-page', label: 'จัดการภาพหน้า login' },
   { id: 'portal-page', label: 'จัดการภาพหน้า Portal' },
+  { id: 'satisfaction-survey', label: 'แบบสำรวจความพึงพอใจ' },
   { id: 'security', label: 'ความปลอดภัย', superAdminOnly: true },
 ];
 
@@ -54,7 +57,7 @@ export function SiteManagerPage() {
   const [activeTab, setActiveTab] = useState<SiteManagerTab>('branding');
   const [planFocusTarget, setPlanFocusTarget] = useState<PlanFocusTarget | null>(null);
   const canManageSecurity = profile?.role === 'super_admin';
-  const visibleTabs = siteManagerTabs.filter((tab) => !tab.superAdminOnly || canManageSecurity);
+  const visibleTabs = siteManagerTabs.filter((tab) => !tab.hidden && (!tab.superAdminOnly || canManageSecurity));
   const activePlanPreview =
     activeTab === 'plan-documents'
       ? { title: 'แผนระดับต่าง ๆ', cards: contentDraft.planLevelCards }
@@ -281,6 +284,8 @@ export function SiteManagerPage() {
             isSaving={isSaving}
             canResetDraft={canManageSecurity}
           />
+        ) : activeTab === 'satisfaction-survey' ? (
+          <SiteManagerSatisfactionSurveyEditor />
         ) : canManageSecurity ? (
           <SiteManagerSecuritySettings />
         ) : (
