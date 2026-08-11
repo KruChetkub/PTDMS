@@ -1,10 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
-import { BarChart3, ChevronLeft, ChevronRight, ClipboardCheck, CopyPlus, Gauge, Save, Settings2 } from 'lucide-react';
+import { BarChart3, ChevronLeft, ChevronRight, ClipboardCheck, CopyPlus, Download, Gauge, Save, Settings2, Trash2 } from 'lucide-react';
 import { Bar, BarChart, CartesianGrid, Cell, Legend, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { ConfirmModal } from '../../../components/ui/ConfirmModal';
+import { useAuthStore } from '../../../stores/auth.store';
 import type { SmartDspSurveyQuestion, SmartDspSurveyRatingOption, SmartDspSurveyStatus } from '../../../types/database.types';
 import { getSafeUserErrorMessage, reportClientError } from '../../../utils/errorHandling';
 import {
   cloneSurveyRound,
+  deleteSurveyResponse,
   listSurveysForAdmin,
   loadSurveyDashboard,
   loadSurveyForAdmin,
@@ -14,6 +17,7 @@ import {
   type SatisfactionSurveyAdminBundle,
   type SatisfactionSurveyDashboardData,
 } from '../../surveys/satisfactionSurvey.service';
+import { getSurveyOptionLabel, SURVEY_RESPONDENT_ROLE_OPTIONS, SURVEY_SERVICE_OPTIONS, SURVEY_USAGE_FREQUENCY_OPTIONS } from '../../surveys/satisfactionSurvey.constants';
 
 type View = 'settings' | 'questions' | 'results' | 'dashboard';
 
@@ -38,7 +42,13 @@ function toIso(value: string) {
   return value ? new Date(value).toISOString() : null;
 }
 
+function safeExcelText(value: string | null | undefined) {
+  const text = value || '';
+  return /^[=+\-@]/.test(text) ? `'${text}` : text;
+}
+
 export function SiteManagerSatisfactionSurveyEditor() {
+  const profile = useAuthStore((state) => state.profile);
   const [surveys, setSurveys] = useState<Awaited<ReturnType<typeof listSurveysForAdmin>>>([]);
   const [selectedId, setSelectedId] = useState('');
   const [bundle, setBundle] = useState<SatisfactionSurveyAdminBundle | null>(null);
@@ -51,6 +61,9 @@ export function SiteManagerSatisfactionSurveyEditor() {
   const [dashboardEndDate, setDashboardEndDate] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteResponseId, setDeleteResponseId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
   const load = async (surveyId?: string) => {
@@ -79,6 +92,7 @@ export function SiteManagerSatisfactionSurveyEditor() {
   }, []);
 
   const profileById = useMemo(() => new Map((bundle?.respondents || []).map((profile) => [profile.user_id, profile])), [bundle?.respondents]);
+  const contextByResponse = useMemo(() => new Map((bundle?.respondentContexts || []).map((context) => [context.response_id, context])), [bundle?.respondentContexts]);
   const answersByResponse = useMemo(() => {
     const grouped = new Map<string, SatisfactionSurveyAdminBundle['answers']>();
     for (const answer of bundle?.answers || []) grouped.set(answer.response_id, [...(grouped.get(answer.response_id) || []), answer]);
@@ -145,6 +159,140 @@ export function SiteManagerSatisfactionSurveyEditor() {
     .sort((left, right) => new Date(left.created_at).getTime() - new Date(right.created_at).getTime())
     .slice(-5)
     .reverse();
+  const deleteResponse = bundle?.responses.find((response) => response.id === deleteResponseId) || null;
+  const deleteRespondent = deleteResponse ? profileById.get(deleteResponse.respondent_id) : null;
+
+  const exportDashboard = async () => {
+    if (!bundle) return;
+    const currentSurvey = bundle.survey;
+    setExporting(true);
+    setMessage(null);
+    try {
+      const XLSX = await import('xlsx');
+      const responseAnswerMap = new Map<string, SatisfactionSurveyDashboardData['answers']>();
+      for (const answer of dashboardData.answers) {
+        if (!filteredResponseIds.has(answer.response_id)) continue;
+        responseAnswerMap.set(answer.response_id, [...(responseAnswerMap.get(answer.response_id) || []), answer]);
+      }
+
+      const summaryRows = [
+        ['รายงาน', 'แบบสำรวจความพึงพอใจ SmartDSP'],
+        ['รอบแบบสำรวจ', currentSurvey.version],
+        ['ชื่อแบบสำรวจ', safeExcelText(currentSurvey.title)],
+        ['ช่วงวันที่เริ่มต้น', dashboardStartDate || 'ทั้งหมด'],
+        ['ช่วงวันที่สิ้นสุด', dashboardEndDate || 'ทั้งหมด'],
+        ['จำนวนผู้ตอบ', filteredDashboardResponses.length],
+        ['คะแนนเฉลี่ยรวม', Number(dashboardAverage.toFixed(2))],
+        ['ร้อยละความพึงพอใจระดับ 4–5', Number(dashboardSatisfactionRate.toFixed(2))],
+        [],
+        ['ข้อ', 'มิติที่วัด', 'คำถาม', 'คะแนนเฉลี่ย', 'จำนวนคำตอบ'],
+        ...questionChartData.map((item) => {
+          const question = questions.find((candidate) => `ข้อ ${candidate.position}` === item.name);
+          return [item.name, safeExcelText(question?.dimension), safeExcelText(item.fullName), item.average, item.total];
+        }),
+      ];
+      const summarySheet = XLSX.utils.aoa_to_sheet(summaryRows);
+      summarySheet['!cols'] = [{ wch: 28 }, { wch: 24 }, { wch: 80 }, { wch: 16 }, { wch: 16 }];
+
+      const responseRows = filteredDashboardResponses.map((response, index) => {
+        const profile = profileById.get(response.respondent_id);
+        const context = contextByResponse.get(response.id);
+        const row: Record<string, string | number> = {
+          ลำดับ: index + 1,
+          'รหัสคำตอบ': response.id,
+          'รอบแบบสำรวจ': currentSurvey.version,
+          'วันเวลาที่ตอบ': new Date(response.submitted_at).toLocaleString('th-TH'),
+          'รหัสบุคลากร': safeExcelText(profile?.employee_code),
+          'ชื่อผู้ตอบ': safeExcelText(profile?.full_name || 'ไม่พบข้อมูลผู้ตอบ'),
+          ตำแหน่ง: safeExcelText(profile?.position),
+          กลุ่มงาน: safeExcelText(profile?.work_group),
+          ฝ่าย: safeExcelText(profile?.department),
+          สิทธิ์ผู้ใช้: profile?.role || '',
+          'บทบาทผู้ตอบแบบสำรวจ': context ? getSurveyOptionLabel(SURVEY_RESPONDENT_ROLE_OPTIONS, context.respondent_role) : '',
+          'บทบาทอื่น ๆ': safeExcelText(context?.respondent_role_other),
+          'ความถี่ในการใช้งาน': context ? getSurveyOptionLabel(SURVEY_USAGE_FREQUENCY_OPTIONS, context.usage_frequency) : '',
+          'ส่วนงานหรือบริการที่เคยใช้': context ? context.used_services.map((service) => getSurveyOptionLabel(SURVEY_SERVICE_OPTIONS, service)).join(', ') : '',
+          'ส่วนงานหรือบริการอื่น ๆ': safeExcelText(context?.used_services_other),
+        };
+        for (const answer of responseAnswerMap.get(response.id) || []) {
+          row[`ข้อ ${answer.question_position}`] = answer.rating_value ?? safeExcelText(answer.text_value);
+        }
+        return row;
+      });
+      const responsesSheet = XLSX.utils.json_to_sheet(responseRows.length > 0 ? responseRows : [{ หมายเหตุ: 'ไม่มีข้อมูลในช่วงวันที่ที่เลือก' }]);
+      responsesSheet['!cols'] = [{ wch: 8 }, { wch: 38 }, { wch: 12 }, { wch: 24 }, { wch: 16 }, { wch: 28 }, { wch: 24 }, { wch: 24 }, { wch: 24 }, { wch: 16 }, { wch: 28 }, { wch: 28 }, { wch: 24 }, { wch: 70 }, { wch: 40 }, ...questions.map(() => ({ wch: 24 }))];
+
+      const answerRows = filteredDashboardResponses.flatMap((response) => {
+        const profile = profileById.get(response.respondent_id);
+        return (responseAnswerMap.get(response.id) || []).map((answer) => ({
+          'รหัสคำตอบ': response.id,
+          'ชื่อผู้ตอบ': safeExcelText(profile?.full_name || 'ไม่พบข้อมูลผู้ตอบ'),
+          'วันเวลาที่ตอบ': new Date(response.submitted_at).toLocaleString('th-TH'),
+          ข้อ: answer.question_position,
+          'มิติที่วัด': safeExcelText(answer.dimension),
+          คำถาม: safeExcelText(answer.question_prompt),
+          ประเภท: answer.question_type === 'rating_5' ? 'คะแนน 1–5' : 'ข้อความ',
+          คะแนน: answer.rating_value ?? '',
+          คำตอบข้อความ: safeExcelText(answer.text_value),
+        }));
+      });
+      const answersSheet = XLSX.utils.json_to_sheet(answerRows.length > 0 ? answerRows : [{ หมายเหตุ: 'ไม่มีข้อมูลในช่วงวันที่ที่เลือก' }]);
+      answersSheet['!cols'] = [{ wch: 38 }, { wch: 28 }, { wch: 24 }, { wch: 8 }, { wch: 24 }, { wch: 80 }, { wch: 14 }, { wch: 10 }, { wch: 80 }];
+
+      const questionRows = questions.map((question) => ({
+        ข้อ: question.position,
+        ประเภท: question.question_type === 'rating_5' ? 'คะแนน 1–5' : 'ข้อความ',
+        'มิติที่วัด': safeExcelText(question.dimension),
+        คำถาม: safeExcelText(question.prompt),
+        คำอธิบาย: safeExcelText(question.help_text),
+        บังคับตอบ: question.is_required ? 'ใช่' : 'ไม่ใช่',
+        เปิดใช้งาน: question.is_active ? 'ใช่' : 'ไม่ใช่',
+      }));
+      const questionSheet = XLSX.utils.json_to_sheet(questionRows);
+      XLSX.utils.sheet_add_aoa(questionSheet, [[], ['เกณฑ์คะแนน', 'ชื่อระดับ', 'ความหมาย'], ...options.map((option) => [option.rating_value, safeExcelText(option.label), safeExcelText(option.description)])], { origin: -1 });
+      questionSheet['!cols'] = [{ wch: 14 }, { wch: 18 }, { wch: 28 }, { wch: 80 }, { wch: 60 }, { wch: 14 }, { wch: 14 }];
+
+      const roundsSheet = XLSX.utils.json_to_sheet(trendData.map((round) => ({
+        รอบ: round.name,
+        'คะแนนเฉลี่ย': round.average,
+        'จำนวนผู้ตอบ': round.respondents,
+      })));
+      roundsSheet['!cols'] = [{ wch: 16 }, { wch: 18 }, { wch: 18 }];
+
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, summarySheet, 'สรุป KPI');
+      XLSX.utils.book_append_sheet(workbook, responsesSheet, 'คำตอบรายบุคคล');
+      XLSX.utils.book_append_sheet(workbook, answersSheet, 'คำตอบแบบรายการ');
+      XLSX.utils.book_append_sheet(workbook, questionSheet, 'คำถามและเกณฑ์');
+      XLSX.utils.book_append_sheet(workbook, roundsSheet, 'สรุปแต่ละรอบ');
+
+      const datePart = new Date().toISOString().slice(0, 10);
+      XLSX.writeFile(workbook, `SmartDSP-satisfaction-round-${currentSurvey.version}-${datePart}.xlsx`);
+      setMessage(`Export ข้อมูลรอบที่ ${currentSurvey.version} จำนวน ${filteredDashboardResponses.length} รายการเรียบร้อย`);
+    } catch (error) {
+      void reportClientError('Failed to export satisfaction survey', error);
+      setMessage(getSafeUserErrorMessage(error, 'ไม่สามารถ Export ข้อมูลแบบสำรวจได้'));
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const confirmDeleteResponse = async () => {
+    if (!deleteResponseId || profile?.role !== 'super_admin') return;
+    setDeleting(true);
+    setMessage(null);
+    try {
+      await deleteSurveyResponse(deleteResponseId);
+      setDeleteResponseId(null);
+      setMessage('ลบคำตอบรายบุคคลออกจากฐานข้อมูลเรียบร้อย');
+      await load(selectedId);
+    } catch (error) {
+      void reportClientError('Failed to delete satisfaction survey response', error);
+      setMessage(getSafeUserErrorMessage(error, 'ไม่สามารถลบคำตอบได้ กรุณาตรวจสอบสิทธิ์แล้วลองใหม่'));
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   const saveSettings = async () => {
     if (!bundle) return;
@@ -281,7 +429,26 @@ export function SiteManagerSatisfactionSurveyEditor() {
               <h3 className="font-semibold text-slate-900">คำตอบรายบุคคล</h3>
               {bundle.responses.length > 0 ? <span className="text-xs text-slate-500">รายการ {responsePage * RESPONSES_PER_PAGE + 1}–{Math.min((responsePage + 1) * RESPONSES_PER_PAGE, bundle.responses.length)} จาก {bundle.responses.length}</span> : null}
             </div>
-            {bundle.responses.length === 0 ? <div className="rounded-md border border-slate-200 bg-white p-6 text-center text-sm text-slate-500">ยังไม่มีผู้ตอบแบบสำรวจ</div> : pagedResponses.map((response) => { const respondent = profileById.get(response.respondent_id); return <details key={response.id} className="rounded-md border border-slate-200 bg-white"><summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-slate-800">{respondent?.full_name || 'ไม่พบชื่อผู้ตอบ'} · {new Intl.DateTimeFormat('th-TH', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(response.submitted_at))}</summary><div className="border-t border-slate-100 px-4 py-3">{(answersByResponse.get(response.id) || []).map((answer) => <div key={answer.id} className="border-b border-slate-100 py-2 last:border-0"><p className="text-xs text-slate-500">ข้อ {answer.question_position}: {answer.question_prompt}</p><p className="mt-1 text-sm text-slate-800">{answer.rating_value !== null ? `${answer.rating_value} คะแนน` : answer.text_value}</p></div>)}</div></details>; })}
+            {bundle.responses.length === 0 ? <div className="rounded-md border border-slate-200 bg-white p-6 text-center text-sm text-slate-500">ยังไม่มีผู้ตอบแบบสำรวจ</div> : pagedResponses.map((response) => {
+              const respondent = profileById.get(response.respondent_id);
+              const context = contextByResponse.get(response.id);
+              return (
+                <div key={response.id} className="rounded-md border border-slate-200 bg-white">
+                  <div className="flex items-center gap-2 border-b border-slate-100 pr-3">
+                    <details className="min-w-0 flex-1">
+                      <summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-slate-800">
+                        {respondent?.full_name || 'ไม่พบชื่อผู้ตอบ'} · {new Intl.DateTimeFormat('th-TH', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(response.submitted_at))}
+                      </summary>
+                      <div className="border-t border-slate-100 px-4 py-3">
+                        {context ? <div className="mb-3 grid gap-2 rounded-md bg-slate-50 p-3 text-xs text-slate-600 sm:grid-cols-3"><span><strong>บทบาท:</strong> {getSurveyOptionLabel(SURVEY_RESPONDENT_ROLE_OPTIONS, context.respondent_role)}{context.respondent_role_other ? `: ${context.respondent_role_other}` : ''}</span><span><strong>ความถี่:</strong> {getSurveyOptionLabel(SURVEY_USAGE_FREQUENCY_OPTIONS, context.usage_frequency)}</span><span><strong>บริการ:</strong> {context.used_services.map((service) => getSurveyOptionLabel(SURVEY_SERVICE_OPTIONS, service)).join(', ')}{context.used_services_other ? `: ${context.used_services_other}` : ''}</span></div> : null}
+                        {(answersByResponse.get(response.id) || []).map((answer) => <div key={answer.id} className="border-b border-slate-100 py-2 last:border-0"><p className="text-xs text-slate-500">ข้อ {answer.question_position}: {answer.question_prompt}</p><p className="mt-1 text-sm text-slate-800">{answer.rating_value !== null ? `${answer.rating_value} คะแนน` : answer.text_value}</p></div>)}
+                      </div>
+                    </details>
+                    {profile?.role === 'super_admin' ? <button type="button" onClick={() => setDeleteResponseId(response.id)} title="ลบคำตอบนี้" className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-red-600 hover:bg-red-50"><Trash2 className="h-4 w-4" aria-hidden="true" /></button> : null}
+                  </div>
+                </div>
+              );
+            })}
             {totalResponsePages > 1 ? (
               <div className="flex items-center justify-end gap-2 pt-2">
                 <button type="button" onClick={() => setResponsePage((current) => Math.max(0, current - 1))} disabled={responsePage === 0} title="หน้าก่อนหน้า" className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"><ChevronLeft className="h-4 w-4" aria-hidden="true" /></button>
@@ -304,6 +471,9 @@ export function SiteManagerSatisfactionSurveyEditor() {
               <label className="text-xs font-medium text-slate-600">ตั้งแต่<input type="date" value={dashboardStartDate} onChange={(event) => setDashboardStartDate(event.target.value)} className="mt-1 block rounded-md border border-slate-300 px-3 py-2 text-sm" /></label>
               <label className="text-xs font-medium text-slate-600">ถึง<input type="date" value={dashboardEndDate} onChange={(event) => setDashboardEndDate(event.target.value)} className="mt-1 block rounded-md border border-slate-300 px-3 py-2 text-sm" /></label>
               {(dashboardStartDate || dashboardEndDate) ? <button type="button" onClick={() => { setDashboardStartDate(''); setDashboardEndDate(''); }} className="self-end rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50">ล้างตัวกรอง</button> : null}
+              <button type="button" onClick={() => void exportDashboard()} disabled={exporting} className="inline-flex self-end items-center gap-2 rounded-md border border-brand-300 bg-white px-4 py-2 text-sm font-semibold text-brand-700 hover:bg-brand-50 disabled:cursor-not-allowed disabled:opacity-60">
+                <Download className="h-4 w-4" aria-hidden="true" /> {exporting ? 'กำลัง Export...' : 'Export Excel'}
+              </button>
             </div>
           </div>
 
@@ -361,6 +531,18 @@ export function SiteManagerSatisfactionSurveyEditor() {
           )}
         </div>
       ) : null}
+
+      <ConfirmModal
+        isOpen={Boolean(deleteResponseId)}
+        onClose={() => setDeleteResponseId(null)}
+        onConfirm={() => void confirmDeleteResponse()}
+        title="ยืนยันการลบคำตอบแบบสำรวจ"
+        message={<span>ต้องการลบคำตอบของ <strong>{deleteRespondent?.full_name || 'ผู้ตอบรายนี้'}</strong> ในรอบที่ {bundle.survey.version} ออกจากฐานข้อมูลอย่างถาวรใช่หรือไม่ การดำเนินการนี้ไม่สามารถกู้คืนได้</span>}
+        confirmLabel="ยืนยันการลบ"
+        cancelLabel="ยกเลิก"
+        isLoading={deleting}
+        variant="danger"
+      />
     </section>
   );
 }

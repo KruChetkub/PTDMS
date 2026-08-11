@@ -49,7 +49,15 @@ begin
     and question.question_type = 'rating_5'
     and question.is_active = true;
 
-  first_response_id := public.submit_smartdsp_survey(target_survey_id, test_answers);
+  first_response_id := public.submit_smartdsp_survey_with_context(
+    target_survey_id,
+    test_answers,
+    jsonb_build_object(
+      'respondent_role', 'general_user',
+      'usage_frequency', 'weekly',
+      'used_services', jsonb_build_array('public_home_search', 'reports_dashboard')
+    )
+  );
 
   select count(*)
   into own_response_count
@@ -62,7 +70,15 @@ begin
   end if;
 
   begin
-    perform public.submit_smartdsp_survey(target_survey_id, test_answers);
+    perform public.submit_smartdsp_survey_with_context(
+      target_survey_id,
+      test_answers,
+      jsonb_build_object(
+        'respondent_role', 'general_user',
+        'usage_frequency', 'weekly',
+        'used_services', jsonb_build_array('public_home_search')
+      )
+    );
     raise exception 'Uniqueness test failed: a second response was accepted.';
   exception
     when unique_violation then null;

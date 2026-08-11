@@ -335,6 +335,8 @@ export type SpdServiceNotificationSettings = {
 
 export type SmartDspSurveyStatus = 'draft' | 'active' | 'closed' | 'archived';
 export type SmartDspSurveyQuestionType = 'rating_5' | 'open_text';
+export type SmartDspSurveyRespondentRole = 'executive' | 'general_user' | 'data_editor' | 'reviewer' | 'system_admin' | 'other';
+export type SmartDspSurveyUsageFrequency = 'daily' | 'several_weekly' | 'weekly' | 'several_monthly' | 'rarely';
 
 export type SmartDspSurvey = {
   id: string;
@@ -395,6 +397,16 @@ export type SmartDspSurveyAnswer = {
   dimension: string | null;
   rating_value: number | null;
   text_value: string | null;
+  created_at: string;
+};
+
+export type SmartDspSurveyRespondentContext = {
+  response_id: string;
+  respondent_role: SmartDspSurveyRespondentRole;
+  respondent_role_other: string | null;
+  usage_frequency: SmartDspSurveyUsageFrequency;
+  used_services: string[];
+  used_services_other: string | null;
   created_at: string;
 };
 
@@ -686,6 +698,20 @@ export type Database = {
         Update: Partial<Omit<SmartDspSurveyAnswer, 'id' | 'response_id' | 'question_id' | 'created_at'>>;
         Relationships: [];
       };
+      smartdsp_survey_respondent_contexts: {
+        Row: SmartDspSurveyRespondentContext;
+        Insert: {
+          response_id: string;
+          respondent_role: SmartDspSurveyRespondentRole;
+          respondent_role_other?: string | null;
+          usage_frequency: SmartDspSurveyUsageFrequency;
+          used_services: string[];
+          used_services_other?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<Omit<SmartDspSurveyRespondentContext, 'response_id' | 'created_at'>>;
+        Relationships: [];
+      };
       strategy_events: {
         Row: StrategyEvent;
         Insert: {
@@ -962,6 +988,43 @@ export type Database = {
           }>;
         };
         Returns: string;
+      };
+      submit_smartdsp_survey_with_context: {
+        Args: {
+          target_survey_id: string;
+          submitted_answers: Array<{
+            question_id: string;
+            rating_value?: number;
+            text_value?: string;
+          }>;
+          respondent_context: {
+            respondent_role: SmartDspSurveyRespondentRole;
+            respondent_role_other?: string;
+            usage_frequency: SmartDspSurveyUsageFrequency;
+            used_services: string[];
+            used_services_other?: string;
+          };
+        };
+        Returns: string;
+      };
+      delete_smartdsp_survey_response: {
+        Args: {
+          target_response_id: string;
+        };
+        Returns: undefined;
+      };
+      complete_smartdsp_survey_respondent_context: {
+        Args: {
+          target_response_id: string;
+          respondent_context: {
+            respondent_role: SmartDspSurveyRespondentRole;
+            respondent_role_other?: string;
+            usage_frequency: SmartDspSurveyUsageFrequency;
+            used_services: string[];
+            used_services_other?: string;
+          };
+        };
+        Returns: undefined;
       };
       clone_smartdsp_survey: {
         Args: {

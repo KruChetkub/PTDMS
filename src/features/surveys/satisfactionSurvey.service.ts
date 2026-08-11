@@ -5,7 +5,10 @@ import type {
   SmartDspSurveyAnswer,
   SmartDspSurveyQuestion,
   SmartDspSurveyRatingOption,
+  SmartDspSurveyRespondentContext,
+  SmartDspSurveyRespondentRole,
   SmartDspSurveyResponse,
+  SmartDspSurveyUsageFrequency,
 } from '../../types/database.types';
 import { optionalPlainTextInput, sanitizePlainTextInput } from '../../utils/inputSecurity';
 
@@ -17,18 +20,28 @@ export type SurveySubmissionAnswer = {
   text_value?: string;
 };
 
+export type SurveyRespondentContextInput = {
+  respondent_role: SmartDspSurveyRespondentRole;
+  respondent_role_other?: string;
+  usage_frequency: SmartDspSurveyUsageFrequency;
+  used_services: string[];
+  used_services_other?: string;
+};
+
 export type SatisfactionSurveyBundle = {
   survey: SmartDspSurvey;
   questions: SmartDspSurveyQuestion[];
   ratingOptions: SmartDspSurveyRatingOption[];
   ownResponse: SmartDspSurveyResponse | null;
   ownAnswers: SmartDspSurveyAnswer[];
+  ownContext: SmartDspSurveyRespondentContext | null;
 };
 
 export type SatisfactionSurveyAdminBundle = SatisfactionSurveyBundle & {
   responses: SmartDspSurveyResponse[];
   answers: SmartDspSurveyAnswer[];
   respondents: Profile[];
+  respondentContexts: SmartDspSurveyRespondentContext[];
 };
 
 export type SatisfactionSurveyDashboardData = {
@@ -79,7 +92,7 @@ async function listOwnResponses(userId: string, surveyIds: string[]) {
 }
 
 async function loadSurveyContent(survey: SmartDspSurvey, ownResponse: SmartDspSurveyResponse | null): Promise<SatisfactionSurveyBundle> {
-  const [questionsResult, ratingOptionsResult, answersResult] = await Promise.all([
+  const [questionsResult, ratingOptionsResult, answersResult, contextResult] = await Promise.all([
     supabase
       .from('smartdsp_survey_questions')
       .select('*')
@@ -98,11 +111,19 @@ async function loadSurveyContent(survey: SmartDspSurvey, ownResponse: SmartDspSu
           .eq('response_id', ownResponse.id)
           .order('question_position', { ascending: true })
       : Promise.resolve({ data: [], error: null }),
+    ownResponse
+      ? supabase
+          .from('smartdsp_survey_respondent_contexts')
+          .select('*')
+          .eq('response_id', ownResponse.id)
+          .maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
   ]);
 
   if (questionsResult.error) throw new Error(`โหลดคำถามไม่สำเร็จ: ${questionsResult.error.message}`);
   if (ratingOptionsResult.error) throw new Error(`โหลดระดับคะแนนไม่สำเร็จ: ${ratingOptionsResult.error.message}`);
   if (answersResult.error) throw new Error(`โหลดคำตอบของท่านไม่สำเร็จ: ${answersResult.error.message}`);
+  if (contextResult.error) throw new Error(`โหลดข้อมูลผู้ตอบแบบสำรวจไม่สำเร็จ: ${contextResult.error.message}`);
 
   return {
     survey,
@@ -110,6 +131,7 @@ async function loadSurveyContent(survey: SmartDspSurvey, ownResponse: SmartDspSu
     ratingOptions: (ratingOptionsResult.data || []) as SmartDspSurveyRatingOption[],
     ownResponse,
     ownAnswers: (answersResult.data || []) as SmartDspSurveyAnswer[],
+    ownContext: (contextResult.data || null) as SmartDspSurveyRespondentContext | null,
   };
 }
 
@@ -134,14 +156,23 @@ export async function loadSatisfactionSurvey(userId: string) {
   return loadSurveyContent(state.survey, state.ownResponse);
 }
 
-export async function submitSatisfactionSurvey(surveyId: string, answers: SurveySubmissionAnswer[]) {
-  const { data, error } = await supabase.rpc('submit_smartdsp_survey', {
+export async function submitSatisfactionSurvey(surveyId: string, answers: SurveySubmissionAnswer[], context: SurveyRespondentContextInput) {
+  const { data, error } = await supabase.rpc('submit_smartdsp_survey_with_context', {
     target_survey_id: surveyId,
     submitted_answers: answers,
+    respondent_context: context,
   });
 
   if (error) throw new Error(`ส่งแบบสำรวจไม่สำเร็จ: ${error.message}`);
   return data as string;
+}
+
+export async function completeSurveyRespondentContext(responseId: string, context: SurveyRespondentContextInput) {
+  const { error } = await supabase.rpc('complete_smartdsp_survey_respondent_context', {
+    target_response_id: responseId,
+    respondent_context: context,
+  });
+  if (error) throw new Error(`บันทึกข้อมูลการใช้งานระบบไม่สำเร็จ: ${error.message}`);
 }
 
 export async function listSurveysForAdmin() {
@@ -166,17 +197,21 @@ export async function loadSurveyForAdmin(surveyId?: string): Promise<Satisfactio
   const responses = (responsesResult.data || []) as SmartDspSurveyResponse[];
   const responseIds = responses.map((response) => response.id);
   const respondentIds = [...new Set(responses.map((response) => response.respondent_id))];
-  const [answersResult, profilesResult] = await Promise.all([
+  const [answersResult, profilesResult, contextsResult] = await Promise.all([
     responseIds.length > 0
       ? supabase.from('smartdsp_survey_answers').select('*').in('response_id', responseIds).order('question_position', { ascending: true })
       : Promise.resolve({ data: [], error: null }),
     respondentIds.length > 0
       ? supabase.from('profiles').select('*').in('user_id', respondentIds)
       : Promise.resolve({ data: [], error: null }),
+    responseIds.length > 0
+      ? supabase.from('smartdsp_survey_respondent_contexts').select('*').in('response_id', responseIds)
+      : Promise.resolve({ data: [], error: null }),
   ]);
 
   if (answersResult.error) throw new Error(`โหลดรายละเอียดคำตอบไม่สำเร็จ: ${answersResult.error.message}`);
   if (profilesResult.error) throw new Error(`โหลดข้อมูลผู้ตอบไม่สำเร็จ: ${profilesResult.error.message}`);
+  if (contextsResult.error) throw new Error(`โหลดข้อมูลพื้นฐานผู้ตอบไม่สำเร็จ: ${contextsResult.error.message}`);
 
   return {
     survey,
@@ -184,10 +219,17 @@ export async function loadSurveyForAdmin(surveyId?: string): Promise<Satisfactio
     ratingOptions: (ratingOptionsResult.data || []) as SmartDspSurveyRatingOption[],
     ownResponse: null,
     ownAnswers: [],
+    ownContext: null,
     responses,
     answers: (answersResult.data || []) as SmartDspSurveyAnswer[],
     respondents: (profilesResult.data || []) as Profile[],
+    respondentContexts: (contextsResult.data || []) as SmartDspSurveyRespondentContext[],
   };
+}
+
+export async function deleteSurveyResponse(responseId: string) {
+  const { error } = await supabase.rpc('delete_smartdsp_survey_response', { target_response_id: responseId });
+  if (error) throw new Error(`ลบคำตอบแบบสำรวจไม่สำเร็จ: ${error.message}`);
 }
 
 export async function loadSurveyDashboard(): Promise<SatisfactionSurveyDashboardData> {
