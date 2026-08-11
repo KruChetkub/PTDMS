@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { AlertCircle, ArrowLeft, ChevronLeft, ChevronRight, Eye, FileDown, Filter, RefreshCw, Search, X } from 'lucide-react';
-import { getSpdServiceTickets } from '../../services/spd-service.service';
+import { getSpdServiceTicketDetail, getSpdServiceTickets, type SpdServiceTicketDetail } from '../../services/spd-service.service';
 import { useAuthStore } from '../../stores/auth.store';
 import type { SpdServiceTicket, SpdServiceTicketStatus, SpdServiceUrgency } from '../../types/database.types';
 import { cn } from '../../utils/cn';
 import { formatSpdServiceTicketNo } from './spdServiceTicketNo';
 import { reportClientError } from '../../utils/errorHandling';
+import { SpdServiceTicketDetailModal } from './SpdServiceTicketDetailModal';
 
 const statusLabels: Record<SpdServiceTicketStatus, string> = {
   NEW: 'งานใหม่',
@@ -141,6 +142,8 @@ export function SpdServiceTicketListPage() {
   const [exportMessage, setExportMessage] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
+  const [ticketDetail, setTicketDetail] = useState<SpdServiceTicketDetail | null>(null);
+  const [isDetailLoading, setIsDetailLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const loadTickets = async () => {
@@ -211,6 +214,21 @@ export function SpdServiceTicketListPage() {
     setUrgencyFilter('all');
   };
 
+  const handleOpenTicketDetail = async (ticketId: string) => {
+    try {
+      setIsDetailLoading(true);
+      setTicketDetail(null);
+      setError(null);
+      const detail = await getSpdServiceTicketDetail(ticketId);
+      setTicketDetail(detail);
+    } catch (detailError) {
+      void reportClientError('Failed to load DSP Service ticket detail:', detailError);
+      setError('ไม่สามารถโหลดรายละเอียดคำขอได้');
+    } finally {
+      setIsDetailLoading(false);
+    }
+  };
+
   const handleExportExcel = async () => {
     if (!canExportExcel) return;
 
@@ -251,7 +269,7 @@ export function SpdServiceTicketListPage() {
     XLSX.utils.book_append_sheet(workbook, worksheet, 'SPD Service Requests');
     const datePart = [exportStartDate, exportEndDate].filter(Boolean).join('_to_') || 'all-dates';
     const yearPart = exportYear === 'all' ? 'all-years' : `BE${exportYear}`;
-    XLSX.writeFile(workbook, `spd-service-requests-${yearPart}-${datePart}.xlsx`);
+    XLSX.writeFile(workbook, `Dsp-service-requests-${yearPart}-${datePart}.xlsx`);
     setExportMessage(`Export Excel สำเร็จ ${exportTickets.length.toLocaleString()} รายการ`);
   };
 
@@ -466,13 +484,14 @@ export function SpdServiceTicketListPage() {
                     </td>
                     <td className="px-2 py-3 text-slate-500">{new Date(ticket.created_at).toLocaleDateString('th-TH')}</td>
                     <td className="px-2 py-3">
-                      <Link
-                        to="/spd-service"
+                      <button
+                        type="button"
+                        onClick={() => void handleOpenTicketDetail(ticket.id)}
                         className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
                       >
                         <Eye className="h-3.5 w-3.5" aria-hidden="true" />
-                        Dashboard
-                      </Link>
+                        เปิดดู
+                      </button>
                     </td>
                   </tr>
                 ))}
@@ -519,6 +538,15 @@ export function SpdServiceTicketListPage() {
           </div>
         </section>
       </main>
+
+      <SpdServiceTicketDetailModal
+        detail={ticketDetail}
+        isLoading={isDetailLoading}
+        onClose={() => {
+          setTicketDetail(null);
+          setIsDetailLoading(false);
+        }}
+      />
     </div>
   );
 }
