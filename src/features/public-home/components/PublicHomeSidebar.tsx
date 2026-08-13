@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
-import { BarChart3, BookOpenText, ChevronLeft, ChevronRight, FilePlus, FileText, Microscope, TrendingUp } from 'lucide-react';
+import { ArrowLeft, BarChart3, BookOpenText, ChevronLeft, ChevronRight, FilePlus, FileText, Microscope, TrendingUp } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../../stores/auth.store';
 import type { PublicHomeView } from '../types/publicHomeView.types';
 
@@ -35,7 +36,9 @@ function getCollapsedItemClass(isActive: boolean) {
 }
 
 export function PublicHomeSidebar({ activeView, isCollapsed, logoUrl, siteName, onToggleCollapsed, onViewChange }: PublicHomeSidebarProps) {
-  const { initialize, initialized, profile } = useAuthStore();
+  const navigate = useNavigate();
+  const { initialize, initialized, user, profile } = useAuthStore();
+  const isSignedIn = Boolean(user);
   const canManagePublicContent = profile?.role === 'admin' || profile?.role === 'super_admin';
 
   useEffect(() => {
@@ -90,6 +93,11 @@ export function PublicHomeSidebar({ activeView, isCollapsed, logoUrl, siteName, 
               <BarChart3 className="h-5 w-5" aria-hidden="true" />
             </a>
           </nav>
+          {isSignedIn ? (
+            <button type="button" onClick={() => navigate('/portal')} className={getCollapsedItemClass(false)} title="กลับไปที่ SmartDSP" aria-label="กลับไปที่ SmartDSP">
+              <ArrowLeft className="h-5 w-5" aria-hidden="true" />
+            </button>
+          ) : null}
         </div>
       </aside>
     );
@@ -175,6 +183,19 @@ export function PublicHomeSidebar({ activeView, isCollapsed, logoUrl, siteName, 
             <span>Dashboard</span>
           </a>
         </nav>
+
+        {isSignedIn ? (
+          <div className="order-3 mt-5 border-t border-white/15 pt-4 lg:shrink-0">
+            <button
+              type="button"
+              onClick={() => navigate('/portal')}
+              className="flex w-full items-center justify-center gap-2 rounded-md border border-white/70 bg-white px-3 py-2.5 text-sm font-semibold text-cyan-900 shadow-sm transition hover:bg-cyan-50"
+            >
+              <ArrowLeft className="h-4 w-4 shrink-0" aria-hidden="true" />
+              <span>กลับไปที่ SmartDSP</span>
+            </button>
+          </div>
+        ) : null}
       </div>
     </aside>
   );
