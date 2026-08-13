@@ -12,14 +12,13 @@ import type { HomePlanSection } from '../types/publicHome.types';
 const iconMap = {
   'key-result': TrendingUp,
   'annual-report': FileText,
+  'achievement-report': FileText,
+  'risk-management-report': FileText,
   'indicator-report': Gauge,
   other: Target,
 };
 
-const repositoryCategoryOptions = [
-  ...performanceCategoryOptions.filter((category) => category.value === 'annual-report'),
-  ...performanceCategoryOptions.filter((category) => category.value !== 'annual-report'),
-];
+const repositoryCategoryOptions = performanceCategoryOptions;
 
 type Props = { logoUrl: string };
 

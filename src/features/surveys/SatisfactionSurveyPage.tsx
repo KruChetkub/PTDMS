@@ -1,12 +1,19 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, CheckCircle2, ClipboardCheck, Save, Send } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, ClipboardCheck, Save, Send, ShieldCheck } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { ConfirmModal } from '../../components/ui/ConfirmModal';
 import { useAuthStore } from '../../stores/auth.store';
 import type { SmartDspSurveyRespondentRole, SmartDspSurveyUsageFrequency } from '../../types/database.types';
 import { getSafeUserErrorMessage, reportClientError } from '../../utils/errorHandling';
 import type { SatisfactionSurveyBundle, SurveySubmissionAnswer } from './satisfactionSurvey.service';
-import { completeSurveyRespondentContext, loadSatisfactionSurvey, submitSatisfactionSurvey } from './satisfactionSurvey.service';
+import {
+  acceptSatisfactionSurveyPdpa,
+  completeSurveyRespondentContext,
+  loadSatisfactionSurvey,
+  SMARTDSP_SURVEY_PDPA_ACKNOWLEDGEMENT,
+  SMARTDSP_SURVEY_PDPA_CONSENT,
+  submitSatisfactionSurvey,
+} from './satisfactionSurvey.service';
 import { getSurveyOptionLabel, SURVEY_RESPONDENT_ROLE_OPTIONS, SURVEY_SERVICE_OPTIONS, SURVEY_USAGE_FREQUENCY_OPTIONS } from './satisfactionSurvey.constants';
 
 function formatThaiDate(value: string) {
@@ -25,7 +32,13 @@ export function SatisfactionSurveyPage() {
   const [usedServicesOther, setUsedServicesOther] = useState('');
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [acceptingPdpa, setAcceptingPdpa] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [pdpaAcknowledged, setPdpaAcknowledged] = useState(false);
+  const [pdpaConsented, setPdpaConsented] = useState(false);
+  const [pdpaAccepted, setPdpaAccepted] = useState(false);
+  const [pdpaConsentRecordId, setPdpaConsentRecordId] = useState<string | null>(null);
+  const [pdpaError, setPdpaError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
   const reload = async () => {
@@ -44,6 +57,25 @@ export function SatisfactionSurveyPage() {
   useEffect(() => {
     void reload();
   }, [user?.id]);
+
+  useEffect(() => {
+    setPdpaAcknowledged(false);
+    setPdpaConsented(false);
+    setPdpaAccepted(Boolean(bundle?.ownResponse));
+    setPdpaConsentRecordId(null);
+    setPdpaError(null);
+  }, [bundle?.survey.id, bundle?.ownResponse?.id]);
+
+  const pdpaRequired = Boolean(bundle && !bundle.ownResponse && !pdpaAccepted);
+
+  useEffect(() => {
+    if (!pdpaRequired) return undefined;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [pdpaRequired]);
 
   const answerByQuestion = useMemo(
     () => new Map((bundle?.ownAnswers || []).map((answer) => [answer.question_id, answer])),
@@ -84,7 +116,12 @@ export function SatisfactionSurveyPage() {
   });
 
   const validate = () => {
-    if (!bundle || !validateContext()) return false;
+    if (!bundle) return false;
+    if (!pdpaAccepted || !pdpaAcknowledged || !pdpaConsented || !pdpaConsentRecordId) {
+      setMessage('กรุณาอ่านและยืนยันคำชี้แจงการคุ้มครองข้อมูลส่วนบุคคลก่อนตอบแบบสำรวจ');
+      return false;
+    }
+    if (!validateContext()) return false;
     const missing = bundle.questions.find((question) => {
       if (!question.is_required) return false;
       return question.question_type === 'rating_5'
@@ -103,8 +140,27 @@ export function SatisfactionSurveyPage() {
     if (validate()) setConfirmOpen(true);
   };
 
+  const handleAcceptPdpa = async () => {
+    if (!bundle || !pdpaAcknowledged || !pdpaConsented) return;
+    setAcceptingPdpa(true);
+    setPdpaError(null);
+    try {
+      const consentRecordId = await acceptSatisfactionSurveyPdpa(bundle.survey.id, {
+        acknowledged: pdpaAcknowledged,
+        consented: pdpaConsented,
+      });
+      setPdpaConsentRecordId(consentRecordId);
+      setPdpaAccepted(true);
+    } catch (error) {
+      void reportClientError('Failed to accept satisfaction survey PDPA notice', error);
+      setPdpaError(getSafeUserErrorMessage(error, 'ไม่สามารถบันทึกการรับทราบและความยินยอมได้ กรุณาลองใหม่'));
+    } finally {
+      setAcceptingPdpa(false);
+    }
+  };
+
   const handleSubmit = async () => {
-    if (!bundle || !validate()) return;
+    if (!bundle || !pdpaConsentRecordId || !validate()) return;
     const answers = bundle.questions.reduce<SurveySubmissionAnswer[]>((result, question) => {
       if (question.question_type === 'rating_5') {
         if (ratings[question.id]) result.push({ question_id: question.id, rating_value: ratings[question.id] });
@@ -117,13 +173,20 @@ export function SatisfactionSurveyPage() {
 
     setSubmitting(true);
     try {
-      await submitSatisfactionSurvey(bundle.survey.id, answers, buildContext());
+      await submitSatisfactionSurvey(bundle.survey.id, answers, buildContext(), pdpaConsentRecordId);
       setConfirmOpen(false);
       setMessage('ส่งแบบสำรวจเรียบร้อยแล้ว ขอบคุณสำหรับความคิดเห็นของท่าน');
       await reload();
     } catch (error) {
       void reportClientError('Failed to submit satisfaction survey', error);
       setConfirmOpen(false);
+      if (error instanceof Error && error.message.includes('notice has changed')) {
+        setPdpaAccepted(false);
+        setPdpaConsentRecordId(null);
+        setPdpaAcknowledged(false);
+        setPdpaConsented(false);
+        setPdpaError('คำชี้แจงมีการแก้ไขระหว่างที่ท่านตอบแบบสำรวจ กรุณาอ่านและยืนยันฉบับล่าสุดอีกครั้ง');
+      }
       setMessage(getSafeUserErrorMessage(error, 'ไม่สามารถส่งแบบสำรวจได้ กรุณาตรวจสอบคำตอบแล้วลองใหม่'));
     } finally {
       setSubmitting(false);
@@ -191,8 +254,6 @@ export function SatisfactionSurveyPage() {
                   </span>
                 ) : null}
               </div>
-              {bundle.survey.description ? <p className="mt-3 whitespace-pre-line text-sm leading-6 text-slate-600">{bundle.survey.description}</p> : null}
-              {bundle.survey.instructions ? <p className="mt-3 whitespace-pre-line border-l-4 border-brand-200 pl-3 text-sm leading-6 text-slate-700">{bundle.survey.instructions}</p> : null}
               {bundle.ownResponse ? <p className="mt-4 text-xs text-slate-500">ส่งเมื่อ {formatThaiDate(bundle.ownResponse.submitted_at)} และไม่สามารถแก้ไขคำตอบได้</p> : null}
             </section>
 
@@ -301,6 +362,59 @@ export function SatisfactionSurveyPage() {
       </div>
 
       <ConfirmModal isOpen={confirmOpen} onClose={() => setConfirmOpen(false)} onConfirm={() => void handleSubmit()} title="ยืนยันการส่งแบบสำรวจ" message="เมื่อส่งแล้วจะไม่สามารถแก้ไขหรือตอบซ้ำในรอบนี้ได้" confirmLabel="ยืนยันการส่ง" variant="info" isLoading={submitting} />
+
+      {pdpaRequired && bundle ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-3 sm:p-6" role="dialog" aria-modal="true" aria-labelledby="smartdsp-pdpa-title">
+          <div className="flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-md bg-white shadow-2xl">
+            <div className="flex items-start gap-3 border-b border-slate-200 px-5 py-4 sm:px-6">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-brand-50 text-brand-700">
+                <ShieldCheck className="h-5 w-5" aria-hidden="true" />
+              </span>
+              <div>
+                <h2 id="smartdsp-pdpa-title" className="text-lg font-semibold text-slate-950">คำชี้แจงการคุ้มครองข้อมูลส่วนบุคคล</h2>
+                <p className="mt-1 text-sm text-slate-600">โปรดอ่านรายละเอียดและยืนยันก่อนเริ่มตอบแบบสำรวจ รอบที่ {bundle.survey.version}</p>
+              </div>
+            </div>
+
+            <div className="overflow-y-auto px-5 py-4 sm:px-6">
+              <section>
+                <h3 className="text-sm font-semibold text-slate-900">รายละเอียด</h3>
+                <p className="mt-2 whitespace-pre-line text-sm leading-6 text-slate-700">{bundle.survey.description || 'ไม่มีรายละเอียดเพิ่มเติม'}</p>
+              </section>
+              <section className="mt-5 border-t border-slate-100 pt-5">
+                <h3 className="text-sm font-semibold text-slate-900">คำชี้แจง</h3>
+                <p className="mt-2 whitespace-pre-line text-sm leading-6 text-slate-700">{bundle.survey.instructions || 'ไม่มีคำชี้แจงเพิ่มเติม'}</p>
+              </section>
+
+              <div className="mt-6 space-y-3 border-t border-slate-200 pt-5">
+                <label className={`flex cursor-pointer items-start gap-3 rounded-md border p-4 text-sm leading-6 ${pdpaAcknowledged ? 'border-brand-400 bg-brand-50 text-brand-900' : 'border-slate-200 text-slate-700 hover:border-brand-300'}`}>
+                  <input type="checkbox" checked={pdpaAcknowledged} onChange={(event) => setPdpaAcknowledged(event.target.checked)} className="mt-1 h-4 w-4 shrink-0" />
+                  <span>{SMARTDSP_SURVEY_PDPA_ACKNOWLEDGEMENT}</span>
+                </label>
+                <label className={`flex cursor-pointer items-start gap-3 rounded-md border p-4 text-sm leading-6 ${pdpaConsented ? 'border-brand-400 bg-brand-50 text-brand-900' : 'border-slate-200 text-slate-700 hover:border-brand-300'}`}>
+                  <input type="checkbox" checked={pdpaConsented} onChange={(event) => setPdpaConsented(event.target.checked)} className="mt-1 h-4 w-4 shrink-0" />
+                  <span>{SMARTDSP_SURVEY_PDPA_CONSENT}</span>
+                </label>
+                {pdpaError ? <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{pdpaError}</div> : null}
+              </div>
+            </div>
+
+            <div className="flex flex-col-reverse gap-2 border-t border-slate-200 bg-slate-50 px-5 py-4 sm:flex-row sm:justify-end sm:px-6">
+              <Link to="/portal" className="inline-flex items-center justify-center rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-100">
+                กลับหน้า Portal
+              </Link>
+              <button
+                type="button"
+                disabled={!pdpaAcknowledged || !pdpaConsented || acceptingPdpa}
+                onClick={() => void handleAcceptPdpa()}
+                className="inline-flex items-center justify-center gap-2 rounded-md bg-brand-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-800 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <ClipboardCheck className="h-4 w-4" aria-hidden="true" /> {acceptingPdpa ? 'กำลังบันทึก...' : 'ตอบแบบสำรวจ'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </main>
   );
 }

@@ -7,6 +7,8 @@ export type PublicUserPlanCategory =
   | 'plan-level-1'
   | 'plan-level-2'
   | 'plan-level-3'
+  | 'annual-budget-document'
+  | 'action-plan'
   | 'executive-policy'
   | 'other';
 
@@ -54,6 +56,8 @@ const categoryColorMap: Record<PublicUserPlanCategory, string> = {
   'plan-level-1': 'bg-blue-600',
   'plan-level-2': 'bg-emerald-600',
   'plan-level-3': 'bg-violet-600',
+  'annual-budget-document': 'bg-cyan-600',
+  'action-plan': 'bg-teal-600',
   'executive-policy': 'bg-orange-500',
   other: 'bg-rose-500',
 };
@@ -63,7 +67,9 @@ const categorySortIndexMap: Record<PublicUserPlanCategory, number> = {
   'plan-level-2': 1,
   'plan-level-3': 2,
   'executive-policy': 3,
-  other: 4,
+  'annual-budget-document': 4,
+  'action-plan': 5,
+  other: 6,
 };
 
 type SupabaseFrom = (table: string) => any;
@@ -82,7 +88,7 @@ export function getPublicUserPlanCategorySortIndex(category: PublicUserPlanCateg
 }
 
 export function normalizePublicUserPlanCategory(category: string | null | undefined): PublicUserPlanCategory {
-  if (category === 'plan-level-1' || category === 'plan-level-2' || category === 'plan-level-3' || category === 'executive-policy' || category === 'other') {
+  if (category === 'plan-level-1' || category === 'plan-level-2' || category === 'plan-level-3' || category === 'annual-budget-document' || category === 'action-plan' || category === 'executive-policy' || category === 'other') {
     return category;
   }
 

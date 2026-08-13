@@ -15,6 +15,7 @@ import {
   saveSurveyQuestions,
   saveSurveyRatingOptions,
   saveSurveySettings,
+  SMARTDSP_SURVEY_LONG_TEXT_MAX_LENGTH,
   type SatisfactionSurveyAdminBundle,
   type SatisfactionSurveyDashboardData,
 } from '../../surveys/satisfactionSurvey.service';
@@ -53,6 +54,19 @@ function toLocalDateTime(value: string | null) {
 
 function toIso(value: string) {
   return value ? new Date(value).toISOString() : null;
+}
+
+function CharacterCounter({ value }: { value: string }) {
+  const count = value.length;
+
+  return (
+    <span
+      className={cn('mt-1 block text-right text-xs font-normal', count >= SMARTDSP_SURVEY_LONG_TEXT_MAX_LENGTH ? 'text-red-600' : 'text-slate-500')}
+      aria-live="polite"
+    >
+      {count.toLocaleString('th-TH')} / {SMARTDSP_SURVEY_LONG_TEXT_MAX_LENGTH.toLocaleString('th-TH')} ตัวอักษร
+    </span>
+  );
 }
 
 function safeExcelText(value: string | null | undefined) {
@@ -166,6 +180,7 @@ export function SiteManagerSatisfactionSurveyEditor() {
   const [saving, setSaving] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [saveSuccessOpen, setSaveSuccessOpen] = useState(false);
   const [deleteResponseId, setDeleteResponseId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -468,8 +483,8 @@ export function SiteManagerSatisfactionSurveyEditor() {
     setMessage(null);
     try {
       await saveSurveySettings(bundle.survey);
-      setMessage('บันทึกการตั้งค่าแบบสำรวจเรียบร้อย');
       await load(bundle.survey.id);
+      setSaveSuccessOpen(true);
     } catch (error) {
       void reportClientError('Failed to save survey settings', error);
       setMessage(getSafeUserErrorMessage(error, 'บันทึกการตั้งค่าไม่สำเร็จ กรุณาตรวจสอบช่วงเวลาและสถานะของรอบอื่น'));
@@ -560,8 +575,16 @@ export function SiteManagerSatisfactionSurveyEditor() {
         <div className="rounded-md border border-slate-200 bg-white p-5 shadow-sm">
           <div className="grid gap-4 md:grid-cols-2">
             <label className="text-sm font-medium text-slate-700 md:col-span-2">ชื่อแบบสำรวจ<input value={bundle.survey.title} onChange={(event) => setBundle({ ...bundle, survey: { ...bundle.survey, title: event.target.value } })} className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2" /></label>
-            <label className="text-sm font-medium text-slate-700 md:col-span-2">รายละเอียด<textarea rows={3} value={bundle.survey.description} onChange={(event) => setBundle({ ...bundle, survey: { ...bundle.survey, description: event.target.value } })} className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2" /></label>
-            <label className="text-sm font-medium text-slate-700 md:col-span-2">คำชี้แจง<textarea rows={3} value={bundle.survey.instructions} onChange={(event) => setBundle({ ...bundle, survey: { ...bundle.survey, instructions: event.target.value } })} className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2" /></label>
+            <label className="text-sm font-medium text-slate-700 md:col-span-2">
+              รายละเอียด
+              <textarea rows={3} maxLength={SMARTDSP_SURVEY_LONG_TEXT_MAX_LENGTH} value={bundle.survey.description} onChange={(event) => setBundle({ ...bundle, survey: { ...bundle.survey, description: event.target.value } })} className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2" />
+              <CharacterCounter value={bundle.survey.description} />
+            </label>
+            <label className="text-sm font-medium text-slate-700 md:col-span-2">
+              คำชี้แจง
+              <textarea rows={3} maxLength={SMARTDSP_SURVEY_LONG_TEXT_MAX_LENGTH} value={bundle.survey.instructions} onChange={(event) => setBundle({ ...bundle, survey: { ...bundle.survey, instructions: event.target.value } })} className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2" />
+              <CharacterCounter value={bundle.survey.instructions} />
+            </label>
             <label className="text-sm font-medium text-slate-700">สถานะ<select value={bundle.survey.status} onChange={(event) => setBundle({ ...bundle, survey: { ...bundle.survey, status: event.target.value as SmartDspSurveyStatus } })} className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2">{Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
             <label className="flex items-center gap-3 self-end rounded-md border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700"><input type="checkbox" checked={bundle.survey.is_enabled} onChange={(event) => setBundle({ ...bundle, survey: { ...bundle.survey, is_enabled: event.target.checked } })} className="h-4 w-4" /> แสดงแบบสำรวจที่หน้า Portal</label>
             <label className="text-sm font-medium text-slate-700">เริ่มรับคำตอบ<input type="datetime-local" value={toLocalDateTime(bundle.survey.starts_at)} onChange={(event) => setBundle({ ...bundle, survey: { ...bundle.survey, starts_at: toIso(event.target.value) } })} className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2" /></label>
@@ -790,6 +813,17 @@ export function SiteManagerSatisfactionSurveyEditor() {
           )}
         </div>
       ) : null}
+
+      <ConfirmModal
+        isOpen={saveSuccessOpen}
+        onClose={() => setSaveSuccessOpen(false)}
+        onConfirm={() => setSaveSuccessOpen(false)}
+        title="บันทึกสำเร็จ"
+        message="บันทึกการตั้งค่าแบบสำรวจเรียบร้อยแล้ว"
+        confirmLabel="ตกลง"
+        variant="success"
+        showCancelButton={false}
+      />
 
       <ConfirmModal
         isOpen={Boolean(deleteResponseId)}

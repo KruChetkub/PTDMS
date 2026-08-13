@@ -1,13 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Edit3, FileText, Save, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, Edit3, FileText, Save, X } from 'lucide-react';
 import { ConfirmModal } from '../../../components/ui/ConfirmModal';
 import { useAuthStore } from '../../../stores/auth.store';
 import type { SiteContentPlanCoverLayout, SiteContentStatus } from '../../site-content/types/siteContent.types';
 import { AdminCoverImageUpload } from './AdminCoverImageUpload';
 import { AdminPublicPdfUpload } from './AdminPublicPdfUpload';
 import { CoverImagePreview } from './CoverImagePreview';
+import { PublicRepositoryEditModal } from './PublicRepositoryEditModal';
 import {
   createPublicResearchItem,
+  compareResearchItems,
   getResearchCategory,
   loadPublicResearchItems,
   researchCategoryOptions,
@@ -30,6 +32,8 @@ type FormState = {
   coverImageLayout: SiteContentPlanCoverLayout;
   status: SiteContentStatus;
 };
+
+const PAGE_SIZE = 10;
 
 const currentThaiYear = new Date().getFullYear() + 543;
 const defaultForm: FormState = {
@@ -77,6 +81,7 @@ export function PublicResearchItemsManager() {
   const [items, setItems] = useState<PublicResearchItem[]>([]);
   const [form, setForm] = useState<FormState>(defaultForm);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(0);
   const [isSaving, setIsSaving] = useState(false);
   const [isUploadingPdf, setIsUploadingPdf] = useState(false);
   const [isUploadingCover, setIsUploadingCover] = useState(false);
@@ -84,7 +89,13 @@ export function PublicResearchItemsManager() {
   const [error, setError] = useState<string | null>(null);
   const canManagePublicContent = profile?.role === 'admin' || profile?.role === 'super_admin';
   const canUploadPdf = canManagePublicContent;
-  const myItems = useMemo(() => canManagePublicContent ? items : [], [canManagePublicContent, items]);
+  const myItems = useMemo(
+    () => canManagePublicContent ? [...items].sort(compareResearchItems) : [],
+    [canManagePublicContent, items],
+  );
+  const totalPages = Math.max(1, Math.ceil(myItems.length / PAGE_SIZE));
+  const safeCurrentPage = Math.min(currentPage, totalPages - 1);
+  const pagedItems = myItems.slice(safeCurrentPage * PAGE_SIZE, safeCurrentPage * PAGE_SIZE + PAGE_SIZE);
   const editingItem = myItems.find((item) => item.id === editingId) || null;
 
   useEffect(() => {
@@ -99,6 +110,10 @@ export function PublicResearchItemsManager() {
       .catch(() => { if (mounted) setError('ไม่สามารถโหลดข้อมูลงานวิจัยจาก Supabase ได้ กรุณาตรวจสอบ migration และการเชื่อมต่อ'); });
     return () => { mounted = false; };
   }, [canManagePublicContent]);
+
+  useEffect(() => {
+    if (currentPage > totalPages - 1) setCurrentPage(totalPages - 1);
+  }, [currentPage, totalPages]);
 
   const updateForm = <Key extends keyof FormState>(key: Key, value: FormState[Key]) => {
     setForm((current) => ({ ...current, [key]: value }));
@@ -118,7 +133,6 @@ export function PublicResearchItemsManager() {
     setForm(toForm(item));
     setMessage(null);
     setError(null);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleSave = async () => {
@@ -157,9 +171,10 @@ export function PublicResearchItemsManager() {
       setIsSaving(true);
       setError(null);
       const saved = await savePublicResearchItem(nextItem);
-      setItems((current) => [saved, ...current.filter((item) => item.id !== saved.id)]);
+      setItems((current) => [saved, ...current.filter((item) => item.id !== saved.id)].sort(compareResearchItems));
       setForm(defaultForm);
       setEditingId(null);
+      setCurrentPage(0);
       setMessage(editingItem ? 'แก้ไขงานวิจัยเรียบร้อย และบันทึกประวัติไว้แล้ว' : 'เพิ่มงานวิจัยลง Supabase เรียบร้อย');
     } catch {
       setError('บันทึกไม่สำเร็จ ข้อมูลยังไม่ถูกยืนยันลง Supabase กรุณาลองใหม่');
@@ -173,10 +188,48 @@ export function PublicResearchItemsManager() {
     const nextStatus = item.status === 'published' ? 'draft' : 'published';
     try {
       const saved = await updatePublicResearchItemStatus(item.id, nextStatus);
-      setItems((current) => current.map((currentItem) => currentItem.id === saved.id ? saved : currentItem));
+      setItems((current) => current.map((currentItem) => currentItem.id === saved.id ? saved : currentItem).sort(compareResearchItems));
       setMessage(nextStatus === 'published' ? 'เผยแพร่งานวิจัยเรียบร้อย' : 'เปลี่ยนงานวิจัยเป็นฉบับร่างแล้ว');
     } catch {
       setError('ไม่สามารถเปลี่ยนสถานะงานวิจัยได้');
+    }
+  };
+
+  const getItemsInGroup = (item: PublicResearchItem) => myItems.filter(
+    (currentItem) => currentItem.category === item.category && currentItem.publicationYear === item.publicationYear,
+  );
+
+  const canMoveItem = (item: PublicResearchItem, direction: -1 | 1) => {
+    const group = getItemsInGroup(item);
+    const index = group.findIndex((currentItem) => currentItem.id === item.id);
+    return index >= 0 && Boolean(group[index + direction]);
+  };
+
+  const moveItem = async (item: PublicResearchItem, direction: -1 | 1) => {
+    if (!user || !canManagePublicContent) return;
+    const group = getItemsInGroup(item);
+    const index = group.findIndex((currentItem) => currentItem.id === item.id);
+    const targetIndex = index + direction;
+    if (index < 0 || targetIndex < 0 || targetIndex >= group.length) return;
+
+    const reordered = [...group];
+    [reordered[index], reordered[targetIndex]] = [reordered[targetIndex], reordered[index]];
+
+    try {
+      setIsSaving(true);
+      setError(null);
+      const savedItems = await Promise.all(reordered.map((currentItem, itemIndex) => savePublicResearchItem({
+        ...currentItem,
+        sortOrder: (itemIndex + 1) * 10,
+        updatedAt: new Date().toISOString(),
+      })));
+      const savedById = new Map(savedItems.map((currentItem) => [currentItem.id, currentItem]));
+      setItems((current) => current.map((currentItem) => savedById.get(currentItem.id) || currentItem).sort(compareResearchItems));
+      setMessage('ย้ายลำดับงานวิจัยเรียบร้อย');
+    } catch {
+      setError('ไม่สามารถย้ายลำดับงานวิจัยได้');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -269,11 +322,74 @@ export function PublicResearchItemsManager() {
           {error ? <p className="mt-4 rounded-md bg-red-50 px-3 py-2 text-sm font-medium text-red-700">{error}</p> : null}
         </div>
 
-        <div className="mt-6 overflow-hidden rounded-md border border-slate-200">
-          <div className="border-b border-slate-200 bg-slate-50 px-4 py-3"><h2 className="font-semibold text-slate-950">รายการที่นำเข้าแล้ว ({myItems.length})</h2></div>
-          {myItems.length ? <div className="divide-y divide-slate-200">{myItems.map((item) => <div key={item.id} className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between"><div className="flex min-w-0 gap-3"><span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-md text-white ${getResearchCategory(item.category).color}`}><FileText className="h-5 w-5" /></span><div className="min-w-0"><p className="font-semibold text-slate-900">{item.title}</p><p className="mt-1 text-xs text-slate-500">พ.ศ. {item.publicationYear} · {getResearchCategory(item.category).label} · {item.status === 'published' ? 'เผยแพร่' : 'ฉบับร่าง'}</p></div></div><div className="flex gap-2"><button type="button" onClick={() => startEdit(item)} className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-200 text-slate-600" title="แก้ไข"><Edit3 className="h-4 w-4" /></button><button type="button" onClick={() => void toggleStatus(item)} className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800">{item.status === 'published' ? 'เก็บเป็นร่าง' : 'เผยแพร่'}</button></div></div>)}</div> : <p className="p-6 text-sm text-slate-500">ยังไม่มีงานวิจัยที่นำเข้า</p>}
+        <div className="mt-6 rounded-md border border-slate-200 bg-white p-4">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div><h2 className="text-lg font-semibold text-slate-950">รายการที่นำเข้าแล้ว</h2><p className="mt-1 text-sm text-slate-500">แสดงครั้งละ 10 รายการ เรียงตามปี ประเภทงานวิจัย และลำดับการแสดงผล</p></div>
+            <p className="text-sm font-semibold text-slate-600">ทั้งหมด {myItems.length} รายการ</p>
+          </div>
+          {myItems.length ? (
+            <>
+              <div className="mt-4 overflow-x-auto">
+                <table className="min-w-full divide-y divide-slate-200 text-sm">
+                  <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-normal text-slate-500"><tr><th className="w-16 px-3 py-3">ลำดับ</th><th className="min-w-56 px-3 py-3">ชื่องานวิจัย</th><th className="min-w-40 px-3 py-3">ประเภทงานวิจัย</th><th className="w-28 px-3 py-3">ปีเผยแพร่</th><th className="w-28 px-3 py-3">ลำดับแสดงผล</th><th className="min-w-28 px-3 py-3">สถานะ</th><th className="min-w-48 px-3 py-3">จัดการ</th></tr></thead>
+                  <tbody className="divide-y divide-slate-100 bg-white">
+                    {pagedItems.map((item, index) => (
+                      <tr key={item.id} className={editingId === item.id ? 'bg-brand-50/70' : undefined}>
+                        <td className="px-3 py-3 font-semibold text-slate-700">{safeCurrentPage * PAGE_SIZE + index + 1}</td>
+                        <td className="px-3 py-3"><div className="flex min-w-0 items-center gap-3"><span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-white ${getResearchCategory(item.category).color}`}><FileText className="h-4 w-4" /></span><div className="min-w-0"><p className="max-w-md truncate font-semibold text-slate-950">{item.title}</p><p className="mt-1 max-w-md truncate text-xs text-slate-500">{item.researcherNames || item.organization || '-'}</p></div></div></td>
+                        <td className="px-3 py-3 text-slate-600">{getResearchCategory(item.category).label}</td>
+                        <td className="px-3 py-3 text-slate-600">{item.publicationYear}</td>
+                        <td className="px-3 py-3 font-semibold text-slate-700">{item.sortOrder}</td>
+                        <td className="px-3 py-3"><button type="button" onClick={() => void toggleStatus(item)} className={`inline-flex items-center justify-center rounded-full border px-3 py-1.5 text-xs font-semibold ${item.status === 'published' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-slate-50 text-slate-600'}`}>{item.status === 'published' ? 'เผยแพร่แล้ว' : 'ฉบับร่าง'}</button></td>
+                        <td className="px-3 py-3"><div className="flex flex-wrap items-center gap-2"><button type="button" onClick={() => void moveItem(item, -1)} disabled={!canMoveItem(item, -1) || isSaving} className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-700 disabled:opacity-40" title="เลื่อนขึ้นในประเภทและปีเดียวกัน"><ArrowUp className="h-4 w-4" /></button><button type="button" onClick={() => void moveItem(item, 1)} disabled={!canMoveItem(item, 1) || isSaving} className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-700 disabled:opacity-40" title="เลื่อนลงในประเภทและปีเดียวกัน"><ArrowDown className="h-4 w-4" /></button><button type="button" onClick={() => startEdit(item)} className="inline-flex h-9 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700"><Edit3 className="h-4 w-4" />แก้ไข</button></div></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><p className="text-sm text-slate-500">หน้า {safeCurrentPage + 1} จาก {totalPages}</p><div className="flex gap-2"><button type="button" onClick={() => setCurrentPage((page) => Math.max(0, page - 1))} disabled={safeCurrentPage === 0} className="inline-flex h-9 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 disabled:opacity-40"><ChevronLeft className="h-4 w-4" />ก่อนหน้า</button><button type="button" onClick={() => setCurrentPage((page) => Math.min(totalPages - 1, page + 1))} disabled={safeCurrentPage >= totalPages - 1} className="inline-flex h-9 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 disabled:opacity-40">ถัดไป<ChevronRight className="h-4 w-4" /></button></div></div>
+            </>
+          ) : <div className="mt-4 rounded-md border border-dashed border-slate-300 bg-slate-50 p-6 text-sm text-slate-500">ยังไม่มีงานวิจัยที่นำเข้า</div>}
         </div>
       </div>
+      <PublicRepositoryEditModal
+        isOpen={Boolean(editingItem)}
+        title="แก้ไขงานวิจัย"
+        onClose={resetForm}
+        onSave={() => void handleSave()}
+        isSaving={isSaving}
+        saveDisabled={isUploadingPdf || isUploadingCover}
+        error={error}
+      >
+        <div className="grid gap-4 lg:grid-cols-2">
+          <div className="grid content-start gap-3">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="block"><span className="text-sm font-medium text-slate-700">ประเภทงานวิจัย</span><select value={form.category} onChange={(event) => updateForm('category', event.target.value as ResearchCategory)} className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm">{researchCategoryOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
+              <label className="block"><span className="text-sm font-medium text-slate-700">ปีที่เผยแพร่</span><input type="number" min={2400} max={2700} value={form.publicationYear} onChange={(event) => updateForm('publicationYear', Number(event.target.value))} className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm" /></label>
+            </div>
+            <label className="block"><span className="text-sm font-medium text-slate-700">ชื่องานวิจัย</span><input value={form.title} onChange={(event) => updateForm('title', event.target.value)} className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm" /></label>
+            <label className="block"><span className="text-sm font-medium text-slate-700">ผู้วิจัย/ผู้จัดทำ</span><input value={form.researcherNames} onChange={(event) => updateForm('researcherNames', event.target.value)} className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm" /></label>
+            <label className="block"><span className="text-sm font-medium text-slate-700">หน่วยงาน</span><input value={form.organization} onChange={(event) => updateForm('organization', event.target.value)} className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm" /></label>
+            <label className="block"><span className="text-sm font-medium text-slate-700">บทคัดย่อ/รายละเอียด</span><textarea rows={4} value={form.abstract} onChange={(event) => updateForm('abstract', event.target.value)} className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm" /></label>
+          </div>
+          <div className="grid content-start gap-3">
+            <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+              <label className="block"><span className="text-sm font-medium text-slate-700">ลิงก์เอกสาร PDF</span><input value={form.pdfUrl} onChange={(event) => updateForm('pdfUrl', event.target.value)} className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm" /></label>
+              {user ? <AdminPublicPdfUpload userId={user.id} folder="research" disabled={isSaving || isUploadingCover} onUploadingChange={setIsUploadingPdf} onError={setError} onUploaded={(upload) => setForm((current) => ({ ...current, pdfUrl: upload.pdfUrl, coverImageUrl: current.coverImageUrl.trim() && !current.coverImageUrl.includes('/public-home-documents/') ? current.coverImageUrl : upload.coverImageUrl }))} /> : null}
+            </div>
+            <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+              <label className="block"><span className="text-sm font-medium text-slate-700">ลิงก์ภาพหน้าปก</span><input value={form.coverImageUrl} onChange={(event) => updateForm('coverImageUrl', event.target.value)} className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm" /></label>
+              <AdminCoverImageUpload disabled={isSaving || isUploadingPdf} onUploadingChange={setIsUploadingCover} onError={setError} onUploaded={(imageUrl) => updateForm('coverImageUrl', imageUrl)} />
+            </div>
+            <label className="block"><span className="text-sm font-medium text-slate-700">ลำดับการแสดงผล</span><input type="number" min={1} value={form.sortOrder} onChange={(event) => updateForm('sortOrder', Math.max(1, Number(event.target.value)))} className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm" /></label>
+            <div className="grid grid-cols-2 gap-2">
+              <button type="button" onClick={() => updateForm('coverImageLayout', 'portrait')} className={`rounded-md border px-3 py-2 text-xs font-semibold ${form.coverImageLayout === 'portrait' ? 'border-emerald-600 bg-emerald-50 text-emerald-800' : 'border-slate-200 bg-white text-slate-600'}`}>360 x 640 px<br />ภาพแนวตั้ง</button>
+              <button type="button" onClick={() => updateForm('coverImageLayout', 'landscape')} className={`rounded-md border px-3 py-2 text-xs font-semibold ${form.coverImageLayout === 'landscape' ? 'border-emerald-600 bg-emerald-50 text-emerald-800' : 'border-slate-200 bg-white text-slate-600'}`}>640 x 360 px<br />ภาพแนวนอน</button>
+            </div>
+          </div>
+        </div>
+        <div className="mt-4"><CoverImagePreview imageUrl={form.coverImageUrl} pdfUrl={form.pdfUrl} layout={form.coverImageLayout} title={form.title} /></div>
+      </PublicRepositoryEditModal>
       <ConfirmModal
         isOpen={Boolean(message)}
         onClose={() => setMessage(null)}

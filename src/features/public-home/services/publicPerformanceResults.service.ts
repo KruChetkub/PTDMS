@@ -3,7 +3,13 @@ import { runSupabaseQuery } from '../../../lib/supabase-query';
 import { createUuid } from '../../../utils/uuid';
 import type { SiteContentPlanCoverLayout, SiteContentPlanIconKey, SiteContentStatus } from '../../site-content/types/siteContent.types';
 
-export type PerformanceResultCategory = 'key-result' | 'annual-report' | 'indicator-report' | 'other';
+export type PerformanceResultCategory =
+  | 'key-result'
+  | 'annual-report'
+  | 'achievement-report'
+  | 'risk-management-report'
+  | 'indicator-report'
+  | 'other';
 
 export type PublicPerformanceResult = {
   id: string;
@@ -31,10 +37,12 @@ export const performanceCategoryOptions: Array<{
   value: PerformanceResultCategory;
   label: string;
   color: string;
-  tone: 'blue' | 'emerald' | 'violet' | 'rose';
+  tone: 'blue' | 'emerald' | 'violet' | 'orange' | 'rose';
 }> = [
   { value: 'key-result', label: 'ผลการดำเนินงานสำคัญ', color: 'bg-sky-600', tone: 'blue' },
-  { value: 'annual-report', label: 'รายงานผลประจำปี', color: 'bg-emerald-600', tone: 'emerald' },
+  { value: 'annual-report', label: 'รายงานประจำปี', color: 'bg-emerald-600', tone: 'emerald' },
+  { value: 'achievement-report', label: 'รายงานผลสัมฤทธิ์', color: 'bg-cyan-600', tone: 'blue' },
+  { value: 'risk-management-report', label: 'รายงานแผนบริหารความเสี่ยง', color: 'bg-orange-500', tone: 'orange' },
   { value: 'indicator-report', label: 'รายงานตัวชี้วัด', color: 'bg-violet-600', tone: 'violet' },
   { value: 'other', label: 'อื่น ๆ', color: 'bg-rose-500', tone: 'rose' },
 ];
@@ -79,7 +87,8 @@ function normalizeCategory(value: string): PerformanceResultCategory {
 }
 
 export function getPerformanceCategory(category: PerformanceResultCategory) {
-  return performanceCategoryOptions.find((option) => option.value === category) || performanceCategoryOptions[3];
+  return performanceCategoryOptions.find((option) => option.value === category)
+    || performanceCategoryOptions.find((option) => option.value === 'other')!;
 }
 
 function mapRow(row: PerformanceResultRow): PublicPerformanceResult {

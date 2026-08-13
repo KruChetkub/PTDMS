@@ -22,6 +22,7 @@ import type { SiteContentPlanCard, SiteContentPlanIconKey, SiteContentStatus } f
 import { AdminCoverImageUpload } from './AdminCoverImageUpload';
 import { AdminPublicPdfUpload } from './AdminPublicPdfUpload';
 import { CoverImagePreview } from './CoverImagePreview';
+import { PublicRepositoryEditModal } from './PublicRepositoryEditModal';
 import {
   comparePublicUserPlans,
   createPublicUserPlan,
@@ -52,6 +53,8 @@ const categoryOptions: Array<{ value: PublicUserPlanCategory; label: string; col
   { value: 'plan-level-2', label: 'แผนระดับ 2', colorLabel: 'เขียว' },
   { value: 'plan-level-3', label: 'แผนระดับ 3', colorLabel: 'ม่วง' },
   { value: 'executive-policy', label: 'นโยบายผู้บริหาร', colorLabel: 'ส้ม' },
+  { value: 'annual-budget-document', label: 'เอกสารงบประมาณรายจ่ายประจำปี', colorLabel: 'ฟ้า' },
+  { value: 'action-plan', label: 'แผนปฏิบัติราชการ', colorLabel: 'เขียวอมฟ้า' },
   { value: 'other', label: 'อื่นๆ', colorLabel: 'ชมพู' },
 ];
 
@@ -207,9 +210,6 @@ export function PublicUserPlansSection() {
     setEditingPlanId(plan.id);
     setMessage(null);
     setError(null);
-    window.setTimeout(() => {
-      document.getElementById('my-plan-form')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }, 0);
   };
 
   const handleSave = async () => {
@@ -572,6 +572,39 @@ export function PublicUserPlansSection() {
           )}
         </div>
       </div>
+      <PublicRepositoryEditModal
+        isOpen={Boolean(editingPlan)}
+        title="แก้ไขแผนของฉัน"
+        onClose={resetForm}
+        onSave={() => void handleSave()}
+        isSaving={isSaving}
+        saveDisabled={isUploadingPdf || isUploadingCover}
+        error={error}
+      >
+        <div className="grid gap-4 lg:grid-cols-2">
+          <div className="grid content-start gap-3">
+            <label className="block"><span className="text-sm font-medium text-slate-700">หัวข้อแผน</span><select className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm" value={form.category} onChange={(event) => updateForm('category', event.target.value as PublicUserPlanCategory)}>{categoryOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
+            <label className="block"><span className="text-sm font-medium text-slate-700">ชื่อแผน</span><input className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm" value={form.title} onChange={(event) => updateForm('title', event.target.value)} /></label>
+            <label className="block"><span className="text-sm font-medium text-slate-700">รายละเอียด</span><textarea rows={5} className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm" value={form.description} onChange={(event) => updateForm('description', event.target.value)} /></label>
+          </div>
+          <div className="grid content-start gap-3">
+            <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+              <label className="block"><span className="text-sm font-medium text-slate-700">ลิงก์เอกสาร PDF</span><input className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm" value={form.pdfUrl} onChange={(event) => updateForm('pdfUrl', event.target.value)} /></label>
+              {user ? <AdminPublicPdfUpload userId={user.id} folder="plans" disabled={isSaving || isUploadingCover} onUploadingChange={setIsUploadingPdf} onError={setError} onUploaded={(upload) => setForm((current) => ({ ...current, pdfUrl: upload.pdfUrl, coverImageUrl: current.coverImageUrl.trim() && !current.coverImageUrl.includes('/public-home-documents/') ? current.coverImageUrl : upload.coverImageUrl }))} /> : null}
+            </div>
+            <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+              <label className="block"><span className="text-sm font-medium text-slate-700">ลิงก์ภาพหน้าปก</span><input className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm" value={form.coverImageUrl} onChange={(event) => updateForm('coverImageUrl', event.target.value)} /></label>
+              <AdminCoverImageUpload disabled={isSaving || isUploadingPdf} onUploadingChange={setIsUploadingCover} onError={setError} onUploaded={(imageUrl) => updateForm('coverImageUrl', imageUrl)} />
+            </div>
+            <label className="block"><span className="text-sm font-medium text-slate-700">ลำดับการแสดงผล</span><input type="number" min={1} className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm" value={form.sortOrder} onChange={(event) => updateForm('sortOrder', normalizeSortOrder(Number(event.target.value)))} /></label>
+            <div className="grid grid-cols-2 gap-2">
+              <button type="button" onClick={() => updateForm('coverImageLayout', 'portrait')} className={`rounded-md border px-3 py-2 text-xs font-semibold ${form.coverImageLayout === 'portrait' ? 'border-brand-500 bg-brand-50 text-brand-700' : 'border-slate-200 bg-white text-slate-600'}`}>360 x 640 px<br />ภาพแนวตั้ง</button>
+              <button type="button" onClick={() => updateForm('coverImageLayout', 'landscape')} className={`rounded-md border px-3 py-2 text-xs font-semibold ${form.coverImageLayout === 'landscape' ? 'border-brand-500 bg-brand-50 text-brand-700' : 'border-slate-200 bg-white text-slate-600'}`}>640 x 360 px<br />ภาพแนวนอน</button>
+            </div>
+          </div>
+        </div>
+        <div className="mt-4"><CoverImagePreview imageUrl={form.coverImageUrl} pdfUrl={form.pdfUrl} layout={form.coverImageLayout} title={form.title} /></div>
+      </PublicRepositoryEditModal>
       <ConfirmModal
         isOpen={Boolean(message)}
         onClose={() => setMessage(null)}

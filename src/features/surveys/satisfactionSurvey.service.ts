@@ -13,6 +13,9 @@ import type {
 import { optionalPlainTextInput, sanitizePlainTextInput } from '../../utils/inputSecurity';
 
 export const SMARTDSP_SURVEY_CODE = 'smartdsp-satisfaction';
+export const SMARTDSP_SURVEY_LONG_TEXT_MAX_LENGTH = 4000;
+export const SMARTDSP_SURVEY_PDPA_ACKNOWLEDGEMENT = 'ข้าพเจ้าได้อ่านและรับทราบคำชี้แจงการคุ้มครองข้อมูลส่วนบุคคลฉบับนี้แล้ว';
+export const SMARTDSP_SURVEY_PDPA_CONSENT = 'ข้าพเจ้ายินยอมให้กองยุทธศาสตร์และแผนงาน กรมควบคุมโรค เก็บรวบรวม ใช้ หรือเปิดเผยข้อมูลส่วนบุคคลเพื่อวัตถุประสงค์ที่ระบุไว้ข้างต้น';
 
 export type SurveySubmissionAnswer = {
   question_id: string;
@@ -26,6 +29,11 @@ export type SurveyRespondentContextInput = {
   usage_frequency: SmartDspSurveyUsageFrequency;
   used_services: string[];
   used_services_other?: string;
+};
+
+export type SurveyConsentConfirmation = {
+  acknowledged: boolean;
+  consented: boolean;
 };
 
 export type SatisfactionSurveyBundle = {
@@ -156,14 +164,30 @@ export async function loadSatisfactionSurvey(userId: string) {
   return loadSurveyContent(state.survey, state.ownResponse);
 }
 
-export async function submitSatisfactionSurvey(surveyId: string, answers: SurveySubmissionAnswer[], context: SurveyRespondentContextInput) {
+export async function submitSatisfactionSurvey(
+  surveyId: string,
+  answers: SurveySubmissionAnswer[],
+  context: SurveyRespondentContextInput,
+  consentRecordId: string,
+) {
   const { data, error } = await supabase.rpc('submit_smartdsp_survey_with_context', {
     target_survey_id: surveyId,
     submitted_answers: answers,
     respondent_context: context,
+    consent_record_id: consentRecordId,
   });
 
   if (error) throw new Error(`ส่งแบบสำรวจไม่สำเร็จ: ${error.message}`);
+  return data as string;
+}
+
+export async function acceptSatisfactionSurveyPdpa(surveyId: string, confirmation: SurveyConsentConfirmation) {
+  const { data, error } = await supabase.rpc('accept_smartdsp_survey_pdpa', {
+    target_survey_id: surveyId,
+    consent_confirmation: confirmation,
+  });
+
+  if (error) throw new Error(`บันทึกการรับทราบและความยินยอมไม่สำเร็จ: ${error.message}`);
   return data as string;
 }
 
@@ -260,8 +284,8 @@ export async function loadSurveyDashboard(): Promise<SatisfactionSurveyDashboard
 
 export async function saveSurveySettings(draft: SatisfactionSurveyDraft) {
   const title = sanitizePlainTextInput(draft.title, { fieldName: 'ชื่อแบบสำรวจ', maxLength: 300, allowNewlines: false });
-  const description = optionalPlainTextInput(draft.description, { fieldName: 'รายละเอียดแบบสำรวจ', maxLength: 2000, allowNewlines: true }) || '';
-  const instructions = optionalPlainTextInput(draft.instructions, { fieldName: 'คำชี้แจง', maxLength: 2000, allowNewlines: true }) || '';
+  const description = optionalPlainTextInput(draft.description, { fieldName: 'รายละเอียดแบบสำรวจ', maxLength: SMARTDSP_SURVEY_LONG_TEXT_MAX_LENGTH, allowNewlines: true }) || '';
+  const instructions = optionalPlainTextInput(draft.instructions, { fieldName: 'คำชี้แจง', maxLength: SMARTDSP_SURVEY_LONG_TEXT_MAX_LENGTH, allowNewlines: true }) || '';
 
   if (!title) throw new Error('กรุณากรอกชื่อแบบสำรวจ');
   if (draft.starts_at && draft.ends_at && new Date(draft.ends_at) <= new Date(draft.starts_at)) {

@@ -21,7 +21,9 @@ const categorySections: Array<Pick<HomePlanSection, 'id' | 'number' | 'title' | 
   { id: 'plan-level-2', category: 'plan-level-2', number: '2', title: 'แผนระดับ 2', tone: 'emerald' },
   { id: 'plan-level-3', category: 'plan-level-3', number: '3', title: 'แผนระดับ 3', tone: 'violet' },
   { id: 'executive-policy', category: 'executive-policy', number: '4', title: 'นโยบายผู้บริหาร', tone: 'orange' },
-  { id: 'other', category: 'other', number: '5', title: 'อื่นๆ', tone: 'rose' },
+  { id: 'annual-budget-document', category: 'annual-budget-document', number: '5', title: 'เอกสารงบประมาณรายจ่ายประจำปี', tone: 'blue' },
+  { id: 'action-plan', category: 'action-plan', number: '6', title: 'แผนปฏิบัติราชการ', tone: 'emerald' },
+  { id: 'other', category: 'other', number: '7', title: 'อื่นๆ', tone: 'rose' },
 ];
 
 const heroSectionClassName = 'relative isolate overflow-hidden bg-[#073B74] px-3 py-1.5 text-white sm:px-4 sm:py-2 lg:px-5';

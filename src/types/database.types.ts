@@ -410,6 +410,22 @@ export type SmartDspSurveyRespondentContext = {
   created_at: string;
 };
 
+export type SmartDspSurveyConsent = {
+  id: string;
+  response_id: string | null;
+  survey_id: string;
+  respondent_id: string;
+  notice_version: string;
+  description_snapshot: string;
+  instructions_snapshot: string;
+  acknowledgement_statement: string;
+  consent_statement: string;
+  acknowledged: boolean;
+  consented: boolean;
+  accepted_at: string;
+  notice_sha256: string;
+};
+
 export type Database = {
   public: {
     Tables: {
@@ -712,6 +728,26 @@ export type Database = {
         Update: Partial<Omit<SmartDspSurveyRespondentContext, 'response_id' | 'created_at'>>;
         Relationships: [];
       };
+      smartdsp_survey_consents: {
+        Row: SmartDspSurveyConsent;
+        Insert: {
+          id?: string;
+          response_id?: string | null;
+          survey_id: string;
+          respondent_id: string;
+          notice_version: string;
+          description_snapshot: string;
+          instructions_snapshot: string;
+          acknowledgement_statement: string;
+          consent_statement: string;
+          acknowledged?: boolean;
+          consented?: boolean;
+          accepted_at?: string;
+          notice_sha256: string;
+        };
+        Update: never;
+        Relationships: [];
+      };
       strategy_events: {
         Row: StrategyEvent;
         Insert: {
@@ -1003,6 +1039,17 @@ export type Database = {
             usage_frequency: SmartDspSurveyUsageFrequency;
             used_services: string[];
             used_services_other?: string;
+          };
+          consent_record_id: string;
+        };
+        Returns: string;
+      };
+      accept_smartdsp_survey_pdpa: {
+        Args: {
+          target_survey_id: string;
+          consent_confirmation: {
+            acknowledged: boolean;
+            consented: boolean;
           };
         };
         Returns: string;
