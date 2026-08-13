@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { ArrowLeft, BarChart3, BookOpenText, ChevronLeft, ChevronRight, FilePlus, FileText, Microscope, TrendingUp } from 'lucide-react';
+import { ArrowLeft, BarChart3, BookOpenText, ChevronLeft, ChevronRight, FilePlus, FileText, Microscope, Settings2, TrendingUp } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../../stores/auth.store';
 import type { PublicHomeView } from '../types/publicHomeView.types';
@@ -51,9 +51,9 @@ export function PublicHomeSidebar({ activeView, isCollapsed, logoUrl, siteName, 
     return (
       <aside className={`border-b border-cyan-200/20 ${sidebarSurface} lg:sticky lg:top-0 lg:h-screen lg:w-16 lg:shrink-0 lg:overflow-hidden lg:border-b-0 lg:border-r`}>
         <div className="flex items-center justify-between gap-2 px-4 py-3 lg:h-full lg:flex-col lg:px-2 lg:py-4">
-          <div className="flex w-full justify-center">
+          <button type="button" onClick={() => navigate('/')} className="flex w-full justify-center" title="กลับหน้าหลัก" aria-label="กลับหน้าหลัก">
             <img src={logoUrl} alt={siteName} className="h-11 w-11 shrink-0 rounded-md border border-white/70 bg-white p-1.5 object-contain shadow-sm" />
-          </div>
+          </button>
           <button
             type="button"
             onClick={onToggleCollapsed}
@@ -92,6 +92,11 @@ export function PublicHomeSidebar({ activeView, isCollapsed, logoUrl, siteName, 
             <a href={dashboardUrl} target="_blank" rel="noreferrer" className={getCollapsedItemClass(false)} title="Dashboard" aria-label="Dashboard">
               <BarChart3 className="h-5 w-5" aria-hidden="true" />
             </a>
+            {canManagePublicContent ? (
+              <button type="button" onClick={() => onViewChange('home-settings')} className={getCollapsedItemClass(activeView === 'home-settings')} title="ตั้งค่าหน้า Home" aria-label="ตั้งค่าหน้า Home">
+                <Settings2 className="h-5 w-5" aria-hidden="true" />
+              </button>
+            ) : null}
           </nav>
           {isSignedIn ? (
             <button type="button" onClick={() => navigate('/portal')} className={getCollapsedItemClass(false)} title="กลับไปที่ SmartDSP" aria-label="กลับไปที่ SmartDSP">
@@ -116,7 +121,9 @@ export function PublicHomeSidebar({ activeView, isCollapsed, logoUrl, siteName, 
           >
             <ChevronLeft className="h-5 w-5" aria-hidden="true" />
           </button>
-          <img src={logoUrl} alt={siteName} className="h-16 w-16 shrink-0 rounded-md border border-white/70 bg-white p-2 object-contain shadow-lg" />
+          <button type="button" onClick={() => navigate('/')} className="rounded-md" title="กลับหน้าหลัก" aria-label="กลับหน้าหลัก">
+            <img src={logoUrl} alt={siteName} className="h-16 w-16 shrink-0 rounded-md border border-white/70 bg-white p-2 object-contain shadow-lg" />
+          </button>
           <div className="min-w-0 px-6">
             <p className="text-xs font-semibold uppercase tracking-normal text-cyan-100">คลังข้อมูลด้านยุทธศาสตร์</p>
             <h2 className="mt-1 text-sm font-bold leading-5 tracking-normal text-white">กองยุทธศาสตร์และแผนงาน กรมควบคุมโรค</h2>
@@ -182,6 +189,12 @@ export function PublicHomeSidebar({ activeView, isCollapsed, logoUrl, siteName, 
             <BarChart3 className="h-5 w-5 shrink-0" aria-hidden="true" />
             <span>Dashboard</span>
           </a>
+          {canManagePublicContent ? (
+            <button type="button" onClick={() => onViewChange('home-settings')} className={getMainItemClass(activeView === 'home-settings', 'bg-white text-cyan-950 shadow-sm ring-1 ring-white/70 hover:bg-cyan-50')}>
+              <Settings2 className="h-5 w-5 shrink-0" aria-hidden="true" />
+              <span>ตั้งค่าหน้า Home</span>
+            </button>
+          ) : null}
         </nav>
 
         {isSignedIn ? (

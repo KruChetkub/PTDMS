@@ -103,7 +103,7 @@ const adminSystems: PortalCard[] = [
     title: 'คลังข้อมูลด้านยุทธศาสตร์ กองยุทธศาสตร์และแผนงาน',
     shortTitle: 'คลังข้อมูลด้านยุทธศาสตร์',
     description: 'จัดการแผน ผลการดำเนินงาน และงานวิจัยที่เผยแพร่ในคลังข้อมูลด้านยุทธศาสตร์',
-    to: '/',
+    to: '/strategic-repository',
     icon: BookOpenText,
     roles: ['super_admin', 'admin'],
     accent: 'from-blue-700 to-teal-500',

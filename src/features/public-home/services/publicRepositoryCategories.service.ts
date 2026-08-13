@@ -2,7 +2,7 @@ import { supabase } from '../../../lib/supabase';
 import { runSupabaseQuery } from '../../../lib/supabase-query';
 import { createUuid } from '../../../utils/uuid';
 
-export type PublicRepositoryType = 'plan' | 'performance' | 'research';
+export type PublicRepositoryType = 'plan' | 'performance' | 'research' | 'home';
 export type PublicRepositoryCategoryTone = 'blue' | 'emerald' | 'violet' | 'orange' | 'rose';
 
 export type PublicRepositoryCategory = {
@@ -68,6 +68,10 @@ const defaultCategoryRows: Record<PublicRepositoryType, ReadonlyArray<readonly [
     ['innovation', 'นวัตกรรมและการพัฒนางาน', 'bg-sky-600', 'blue'],
     ['evaluation', 'การประเมินผล', 'bg-violet-600', 'violet'],
     ['other', 'งานวิจัยอื่น ๆ', 'bg-rose-500', 'rose'],
+  ],
+  home: [
+    ['plan', 'แผนระดับต่าง ๆ', 'bg-emerald-600', 'emerald'],
+    ['policy', 'นโยบายและการดำเนินงาน', 'bg-blue-600', 'blue'],
   ],
 };
 

@@ -54,6 +54,29 @@ export async function uploadPlanCoverImage(file: File) {
   return data.publicUrl;
 }
 
+export async function uploadHomeContentLogo(file: File) {
+  validateUploadFile(file, {
+    allowedTypes: ['image/png', 'image/jpeg', 'image/webp'],
+    maxSizeBytes: SITE_CONTENT_MAX_IMAGE_SIZE_BYTES,
+    label: 'ไฟล์โลโก้หน้า Home',
+  });
+
+  const extension = file.name.split('.').pop() || 'png';
+  const safeName = sanitizeFileName(file.name) || `home-logo.${extension}`;
+  const filePath = `home-logos/${Date.now()}-${createUuid()}-${safeName}`;
+  const { error } = await supabase.storage.from(SITE_CONTENT_ASSETS_BUCKET).upload(filePath, file, {
+    cacheControl: '3600',
+    upsert: false,
+  });
+
+  if (error) {
+    throw new Error(`อัปโหลดโลโก้หน้า Home ไม่สำเร็จ: ${error.message}`);
+  }
+
+  const { data } = supabase.storage.from(SITE_CONTENT_ASSETS_BUCKET).getPublicUrl(filePath);
+  return data.publicUrl;
+}
+
 export async function uploadLoginPageImage(file: File) {
   validateUploadFile(file, { allowedTypes: SITE_CONTENT_ALLOWED_IMAGE_TYPES, maxSizeBytes: SITE_CONTENT_MAX_IMAGE_SIZE_BYTES, label: 'ภาพหน้า Login' });
 

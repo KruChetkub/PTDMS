@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { CookieConsentBanner } from '../components/CookieConsentBanner';
 import { HomeFooter } from '../components/HomeFooter';
 import { PublicHomeSidebar } from '../components/PublicHomeSidebar';
 import { PublicPerformanceResultsManager } from '../components/PublicPerformanceResultsManager';
 import { PublicResearchItemsManager } from '../components/PublicResearchItemsManager';
 import { PublicUserPlansSection } from '../components/PublicUserPlansSection';
+import { PublicHomeContentManager } from '../components/PublicHomeContentManager';
 import { PublicOfficialPlansView } from '../views/PublicOfficialPlansView';
 import { PublicPerformanceResultsRepositoryView } from '../views/PublicPerformanceResultsRepositoryView';
 import { PublicResearchRepositoryView } from '../views/PublicResearchRepositoryView';
@@ -14,13 +16,16 @@ import { useAuthStore } from '../../../stores/auth.store';
 import type { PublicHomeView } from '../types/publicHomeView.types';
 
 export function PublicHomePage() {
-  const [activeView, setActiveView] = useState<PublicHomeView>('plans');
+  const [searchParams] = useSearchParams();
+  const requestedView = searchParams.get('view');
+  const initialView: PublicHomeView = requestedView === 'performance' || requestedView === 'research' ? requestedView : 'plans';
+  const [activeView, setActiveView] = useState<PublicHomeView>(initialView);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const profile = useAuthStore((state) => state.profile);
   const canManagePublicContent = profile?.role === 'admin' || profile?.role === 'super_admin';
 
   useEffect(() => {
-    document.title = 'Strategic Information Repository';
+    document.title = 'คลังเอกสารยุทธศาสตร์ SmartDSP';
 
     return () => {
       document.title = 'SmartDSP';
@@ -28,7 +33,13 @@ export function PublicHomePage() {
   }, []);
 
   useEffect(() => {
-    if (!canManagePublicContent && (activeView === 'my-plans' || activeView === 'my-performance' || activeView === 'my-research')) {
+    if (requestedView === 'plans' || requestedView === 'performance' || requestedView === 'research') {
+      setActiveView(requestedView);
+    }
+  }, [requestedView]);
+
+  useEffect(() => {
+    if (!canManagePublicContent && (activeView === 'my-plans' || activeView === 'my-performance' || activeView === 'my-research' || activeView === 'home-settings')) {
       setActiveView('plans');
     }
   }, [activeView, canManagePublicContent]);
@@ -54,6 +65,7 @@ export function PublicHomePage() {
             {activeView === 'my-performance' && canManagePublicContent ? <PublicPerformanceResultsManager /> : null}
             {activeView === 'research' ? <PublicResearchRepositoryView logoUrl={siteContent.brandSettings.logoUrl} /> : null}
             {activeView === 'my-research' && canManagePublicContent ? <PublicResearchItemsManager /> : null}
+            {activeView === 'home-settings' && canManagePublicContent ? <PublicHomeContentManager /> : null}
           </div>
         </div>
       </main>

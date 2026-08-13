@@ -352,11 +352,11 @@ export function HomePlanSections({
     const ActionElement = card.pdfUrl ? 'a' : 'button';
     const isLandscapeCover = card.coverImageLayout === 'landscape';
     const compactCardClassName = isLandscapeCover
-      ? 'flex w-[88vw] shrink-0 gap-3 rounded-md bg-white/95 p-3 text-left text-slate-900 shadow-sm ring-1 ring-cyan-100/80 backdrop-blur transition hover:shadow-lg sm:w-[clamp(30rem,38vw,44rem)] sm:gap-4 sm:hover:-translate-y-0.5'
-      : 'flex w-[84vw] shrink-0 gap-3 rounded-md bg-white/95 p-3 text-left text-slate-900 shadow-sm ring-1 ring-cyan-100/80 backdrop-blur transition hover:shadow-lg sm:w-[clamp(23rem,29vw,33rem)] sm:gap-4 sm:hover:-translate-y-0.5';
+      ? 'flex w-[88vw] shrink-0 gap-3 rounded-md bg-white/95 p-3 text-left text-slate-900 shadow-sm ring-1 ring-cyan-100/80 backdrop-blur transition hover:shadow-lg sm:w-[clamp(30rem,38vw,44rem)] sm:gap-4 sm:hover:-translate-y-0.5 lg:w-[calc((100%-3rem)/4)] lg:gap-3'
+      : 'flex w-[84vw] shrink-0 gap-3 rounded-md bg-white/95 p-3 text-left text-slate-900 shadow-sm ring-1 ring-cyan-100/80 backdrop-blur transition hover:shadow-lg sm:w-[clamp(23rem,29vw,33rem)] sm:gap-4 sm:hover:-translate-y-0.5 lg:w-[calc((100%-3rem)/4)] lg:gap-3';
     const compactCoverClassName = isLandscapeCover
-      ? 'group/media relative h-28 w-40 shrink-0 overflow-hidden rounded-md border border-slate-200 bg-slate-100 shadow-sm focus:outline-none focus:ring-2 focus:ring-cyan-300 sm:h-36 sm:w-56'
-      : 'group/media relative h-44 w-28 shrink-0 overflow-hidden rounded-md border border-slate-200 bg-slate-100 shadow-sm focus:outline-none focus:ring-2 focus:ring-cyan-300';
+      ? 'group/media relative h-28 w-40 shrink-0 overflow-hidden rounded-md border border-slate-200 bg-slate-100 shadow-sm focus:outline-none focus:ring-2 focus:ring-cyan-300 sm:h-36 sm:w-56 lg:h-24 lg:w-28 xl:w-32'
+      : 'group/media relative h-44 w-28 shrink-0 overflow-hidden rounded-md border border-slate-200 bg-slate-100 shadow-sm focus:outline-none focus:ring-2 focus:ring-cyan-300 lg:h-40 lg:w-24 xl:h-44 xl:w-28';
     const actionProps = card.pdfUrl
       ? { href: card.pdfUrl, target: '_blank', rel: 'noopener noreferrer' }
       : { type: 'button' as const };
@@ -435,9 +435,14 @@ export function HomePlanSections({
             {shelfSearchResult.sections.map((section, sectionIndex) => (
               <RevealOnScroll key={section.id} delayMs={sectionIndex * 120}>
                 <article id={section.id} className="scroll-mt-24">
+                  <div className={`mb-2 inline-flex max-w-full items-center rounded-md px-3 py-1.5 text-xs font-semibold leading-5 text-white shadow-sm ${section.cards[0]?.color || 'bg-blue-600'}`}>
+                    <span style={{ overflowWrap: 'anywhere', wordBreak: 'break-word' }}>
+                      {section.number ? `${section.number}. ` : ''}{section.title}
+                    </span>
+                  </div>
                   <div className="relative">
                     <div
-                      className="flex cursor-grab select-none gap-4 overflow-x-auto overscroll-x-contain pb-5 active:cursor-grabbing 2xl:gap-5"
+                      className="flex cursor-grab select-none gap-4 overflow-x-auto overscroll-x-contain pb-5 active:cursor-grabbing"
                       style={{ touchAction: 'pan-x pan-y', WebkitOverflowScrolling: 'touch' }}
                       onPointerDown={(event) => handleShelfPointerDown(section.id, event)}
                       onPointerMove={(event) => handleShelfPointerMove(section.id, event)}

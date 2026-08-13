@@ -10,6 +10,7 @@ import { SetNewPasswordPage } from '../features/auth/pages/SetNewPasswordPage';
 import { AuthCallbackPage } from '../features/auth/pages/AuthCallbackPage';
 import { PendingApprovalPage } from '../features/auth/pages/PendingApprovalPage';
 import { PublicHomePage } from '../features/public-home/pages/PublicHomePage';
+import { StrategicPolicyHomePage } from '../features/public-home/pages/StrategicPolicyHomePage';
 import { PortalPage } from '../features/portal/PortalPage';
 import { SatisfactionSurveyPage } from '../features/surveys/SatisfactionSurveyPage';
 import { DashboardPage } from '../features/dashboard/DashboardPage';
@@ -42,10 +43,14 @@ import { NotFoundPage } from '../features/system/NotFoundPage';
 export const router = createBrowserRouter([
   {
     path: '/',
-    element: <PublicHomePage />,
+    element: <StrategicPolicyHomePage />,
   },
   {
     path: '/home',
+    element: <StrategicPolicyHomePage />,
+  },
+  {
+    path: '/strategic-repository',
     element: <PublicHomePage />,
   },
   {
