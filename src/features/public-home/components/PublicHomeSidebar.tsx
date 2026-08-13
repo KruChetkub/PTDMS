@@ -110,7 +110,7 @@ export function PublicHomeSidebar({ activeView, isCollapsed, logoUrl, siteName, 
           </button>
           <img src={logoUrl} alt={siteName} className="h-16 w-16 shrink-0 rounded-md border border-white/70 bg-white p-2 object-contain shadow-lg" />
           <div className="min-w-0 px-6">
-            <p className="text-xs font-semibold uppercase tracking-normal text-cyan-100">คลังข้อมูล</p>
+            <p className="text-xs font-semibold uppercase tracking-normal text-cyan-100">คลังข้อมูลด้านยุทธศาสตร์</p>
             <h2 className="mt-1 text-sm font-bold leading-5 tracking-normal text-white">กองยุทธศาสตร์และแผนงาน กรมควบคุมโรค</h2>
           </div>
         </div>
