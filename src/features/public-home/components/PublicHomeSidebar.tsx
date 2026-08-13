@@ -91,8 +91,8 @@ export function PublicHomeSidebar({ activeView, isCollapsed, logoUrl, siteName, 
 
   if (isCollapsed) {
     return (
-      <aside className={`border-b border-cyan-200/20 ${sidebarSurface} lg:sticky lg:top-0 lg:h-screen lg:w-16 lg:shrink-0 lg:overflow-y-auto lg:border-b-0 lg:border-r`}>
-        <div className="flex items-center justify-between gap-2 px-4 py-3 lg:flex-col lg:px-2 lg:py-4">
+      <aside className={`border-b border-cyan-200/20 ${sidebarSurface} lg:sticky lg:top-0 lg:h-screen lg:w-16 lg:shrink-0 lg:overflow-hidden lg:border-b-0 lg:border-r`}>
+        <div className="flex items-center justify-between gap-2 px-4 py-3 lg:h-full lg:flex-col lg:px-2 lg:py-4">
           <div className="flex w-full justify-center">
             <img src={logoUrl} alt={siteName} className="h-11 w-11 shrink-0 rounded-md border border-white/70 bg-white p-1.5 object-contain shadow-sm" />
           </div>
@@ -106,13 +106,13 @@ export function PublicHomeSidebar({ activeView, isCollapsed, logoUrl, siteName, 
             <ChevronRight className="h-5 w-5" aria-hidden="true" />
           </button>
 
-          <nav className="flex items-center gap-2 lg:flex-col" aria-label="เมนูคลังข้อมูลแบบย่อ">
+          <nav className="flex items-center gap-2 lg:min-h-0 lg:flex-1 lg:flex-col lg:overflow-y-auto" aria-label="เมนูคลังข้อมูลแบบย่อ">
             {isSignedIn ? (
-              <button type="button" onClick={() => setIsUserPanelOpen((current) => !current)} className={getCollapsedItemClass(false)} title="บัญชีผู้ใช้" aria-label="บัญชีผู้ใช้">
+              <button type="button" onClick={() => setIsUserPanelOpen((current) => !current)} className={`${getCollapsedItemClass(false)} lg:order-last lg:mt-auto`} title="บัญชีผู้ใช้" aria-label="บัญชีผู้ใช้">
                 <ShieldCheck className="h-5 w-5" aria-hidden="true" />
               </button>
             ) : (
-              <button type="button" onClick={() => navigate('/login')} className={getCollapsedItemClass(false)} title="เข้าสู่ระบบ" aria-label="เข้าสู่ระบบ">
+              <button type="button" onClick={() => navigate('/login')} className={`${getCollapsedItemClass(false)} lg:order-last lg:mt-auto`} title="เข้าสู่ระบบ" aria-label="เข้าสู่ระบบ">
                 <ShieldCheck className="h-5 w-5" aria-hidden="true" />
               </button>
             )}
@@ -150,8 +150,8 @@ export function PublicHomeSidebar({ activeView, isCollapsed, logoUrl, siteName, 
   }
 
   return (
-    <aside className={`border-b border-cyan-200/20 ${sidebarSurface} lg:sticky lg:top-0 lg:h-screen lg:w-72 lg:shrink-0 lg:overflow-y-auto lg:border-b-0 lg:border-r`}>
-      <div className="px-4 py-5 sm:px-6 lg:px-5">
+    <aside className={`border-b border-cyan-200/20 ${sidebarSurface} lg:sticky lg:top-0 lg:h-screen lg:w-72 lg:shrink-0 lg:overflow-hidden lg:border-b-0 lg:border-r`}>
+      <div className="flex flex-col px-4 py-5 sm:px-6 lg:h-full lg:px-5">
         <div className="relative flex flex-col items-center gap-3 text-center">
           <button
             type="button"
@@ -169,7 +169,7 @@ export function PublicHomeSidebar({ activeView, isCollapsed, logoUrl, siteName, 
           </div>
         </div>
 
-        <div ref={userPanelRef} className="relative mt-5">
+        <div ref={userPanelRef} className="relative order-3 mt-5 lg:shrink-0 lg:border-t lg:border-white/15 lg:pt-4">
           {isSignedIn ? (
             <>
               <button
@@ -190,7 +190,7 @@ export function PublicHomeSidebar({ activeView, isCollapsed, logoUrl, siteName, 
               </button>
 
               {isUserPanelOpen ? (
-                <div className="absolute left-0 right-0 top-full z-50 mt-2 overflow-hidden rounded-md border border-slate-200 bg-white text-slate-900 shadow-2xl">
+                <div className="absolute bottom-full left-0 right-0 z-50 mb-2 max-h-[min(70vh,34rem)] overflow-y-auto rounded-md border border-slate-200 bg-white text-slate-900 shadow-2xl">
                   <button
                     type="button"
                     onClick={() => {
@@ -239,7 +239,7 @@ export function PublicHomeSidebar({ activeView, isCollapsed, logoUrl, siteName, 
           )}
         </div>
 
-        <nav className="mt-5 space-y-5" aria-label="เมนูคลังข้อมูลด้านยุทธศาสตร์และแผนงาน">
+        <nav className="order-2 mt-5 space-y-5 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:pr-1" aria-label="เมนูคลังข้อมูลด้านยุทธศาสตร์และแผนงาน">
           <div>
             <button
               type="button"
