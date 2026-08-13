@@ -459,11 +459,16 @@ export function PublicUserPlansSection() {
                   />
                 </label>
                 <div className="block">
-                  <span className="text-sm font-medium text-slate-700">สีการ์ดอัตโนมัติ</span>
-                  <div className="mt-1 flex h-10 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-700">
-                    <span className={`h-4 w-4 rounded-full ${selectedCategory?.color || getPublicUserPlanCategoryColor(form.category)}`} aria-hidden="true" />
-                    {selectedCategory?.label || form.category}
-                  </div>
+                  <span className="text-sm font-medium text-slate-700">สถานะ</span>
+                  <button
+                    type="button"
+                    aria-pressed={form.status === 'published'}
+                    onClick={() => updateForm('status', form.status === 'published' ? 'draft' : 'published')}
+                    className={`mt-1 inline-flex h-10 w-full items-center justify-center gap-2 rounded-md border px-3 text-sm font-semibold transition ${form.status === 'published' ? 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-100'}`}
+                  >
+                    <span className={`h-2.5 w-2.5 rounded-full ${form.status === 'published' ? 'bg-emerald-500' : 'bg-slate-400'}`} aria-hidden="true" />
+                    {form.status === 'published' ? 'เผยแพร่แล้ว' : 'ฉบับร่าง'}
+                  </button>
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-2">
