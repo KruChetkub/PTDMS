@@ -95,10 +95,11 @@ export function PublicPerformanceResultsManager() {
   const canUploadPdf = canManagePublicContent;
   const categoryOrder = useMemo(() => new Map(categories.map((category, index) => [category.key, index])), [categories]);
   const compareResults = (first: PublicPerformanceResult, second: PublicPerformanceResult) => {
-    if (first.fiscalYear !== second.fiscalYear) return second.fiscalYear - first.fiscalYear;
     const categoryCompare = (categoryOrder.get(first.category) ?? Number.MAX_SAFE_INTEGER)
       - (categoryOrder.get(second.category) ?? Number.MAX_SAFE_INTEGER);
-    return categoryCompare || first.sortOrder - second.sortOrder || second.updatedAt.localeCompare(first.updatedAt);
+    if (categoryCompare !== 0) return categoryCompare;
+    if (first.fiscalYear !== second.fiscalYear) return second.fiscalYear - first.fiscalYear;
+    return first.sortOrder - second.sortOrder || second.updatedAt.localeCompare(first.updatedAt);
   };
   const myResults = useMemo(
     () => canManagePublicContent ? [...results].sort(compareResults) : [],
@@ -352,7 +353,7 @@ export function PublicPerformanceResultsManager() {
 
         <div className="mt-6 rounded-md border border-slate-200 bg-white p-4">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <div><h2 className="text-lg font-semibold text-slate-950">รายการที่นำเข้าแล้ว</h2><p className="mt-1 text-sm text-slate-500">แสดงครั้งละ 10 รายการ เรียงตามปี หมวดข้อมูล และลำดับการแสดงผล</p></div>
+            <div><h2 className="text-lg font-semibold text-slate-950">รายการที่นำเข้าแล้ว</h2><p className="mt-1 text-sm text-slate-500">แสดงครั้งละ 10 รายการ เรียงตามหมวดข้อมูล ปีงบประมาณ และลำดับการแสดงผล</p></div>
             <p className="text-sm font-semibold text-slate-600">ทั้งหมด {myResults.length} รายการ</p>
           </div>
           {myResults.length ? (

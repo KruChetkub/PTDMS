@@ -132,20 +132,21 @@ function toRow(result: PublicPerformanceResult) {
 }
 
 export function comparePerformanceResults(first: PublicPerformanceResult, second: PublicPerformanceResult) {
-  if (first.fiscalYear !== second.fiscalYear) return second.fiscalYear - first.fiscalYear;
   const categoryIndex = (category: PerformanceResultCategory) => {
     const index = performanceCategoryOptions.findIndex((option) => option.value === category);
     return index < 0 ? Number.MAX_SAFE_INTEGER : index;
   };
   const categoryCompare = categoryIndex(first.category) - categoryIndex(second.category);
-  return categoryCompare || first.sortOrder - second.sortOrder || second.updatedAt.localeCompare(first.updatedAt);
+  if (categoryCompare !== 0) return categoryCompare;
+  if (first.fiscalYear !== second.fiscalYear) return second.fiscalYear - first.fiscalYear;
+  return first.sortOrder - second.sortOrder || second.updatedAt.localeCompare(first.updatedAt);
 }
 
 export async function loadPublicPerformanceResults() {
   const { data } = await runSupabaseQuery<SupabaseDataResult<PerformanceResultRow[]>>(
     performanceResultsTable().select(selectColumns)
-      .order('fiscal_year', { ascending: false })
       .order('category', { ascending: true })
+      .order('fiscal_year', { ascending: false })
       .order('sort_order', { ascending: true }),
     'โหลดผลการดำเนินงานสำคัญจาก Supabase',
   );
