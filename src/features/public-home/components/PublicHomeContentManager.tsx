@@ -3,6 +3,7 @@ import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, Edit3, Save, Settings2, 
 import { ConfirmModal } from '../../../components/ui/ConfirmModal';
 import { useAuthStore } from '../../../stores/auth.store';
 import { AdminHomeLogoUpload } from './AdminHomeLogoUpload';
+import { AdminPublicPdfUpload } from './AdminPublicPdfUpload';
 import {
   createPublicHomeContent,
   loadPublicHomeContent,
@@ -32,6 +33,7 @@ type FormState = {
   iconKey: PublicHomeIconKey;
   colorKey: PublicHomeColorKey;
   logoUrl: string;
+  pdfUrl: string;
   sortOrder: number;
   status: PublicHomeContentStatus;
 };
@@ -47,6 +49,7 @@ const defaultForm: FormState = {
   iconKey: 'file-chart',
   colorKey: 'blue',
   logoUrl: '',
+  pdfUrl: '',
   sortOrder: 10,
   status: 'draft',
 };
@@ -81,6 +84,7 @@ function toForm(item: PublicHomeContentItem): FormState {
     iconKey: item.iconKey,
     colorKey: item.colorKey,
     logoUrl: item.logoUrl,
+    pdfUrl: item.pdfUrl,
     sortOrder: item.sortOrder,
     status: item.status,
   };
@@ -96,6 +100,7 @@ export function PublicHomeContentManager() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isUploadingLogo, setIsUploadingLogo] = useState(false);
+  const [isUploadingPdf, setIsUploadingPdf] = useState(false);
   const [currentPage, setCurrentPage] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -188,6 +193,7 @@ export function PublicHomeContentManager() {
       iconKey: form.iconKey,
       colorKey: form.colorKey,
       logoUrl: form.logoUrl.trim(),
+      pdfUrl: form.pdfUrl.trim(),
       sortOrder: Math.max(1, Math.round(form.sortOrder || 10)),
       status: form.status,
       createdBy: editingItem?.createdBy || user.id,
@@ -290,6 +296,21 @@ export function PublicHomeContentManager() {
               <label className="block text-sm font-medium text-slate-700">รายละเอียด
                 <textarea value={form.description} maxLength={1000} onChange={(event) => updateForm('description', event.target.value)} rows={4} className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2" />
               </label>
+              <div>
+                <label className="block text-sm font-medium text-slate-700">ลิงก์เอกสาร PDF
+                  <input type="url" value={form.pdfUrl} maxLength={2048} onChange={(event) => updateForm('pdfUrl', event.target.value)} placeholder="https://.../document.pdf" className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3" />
+                </label>
+                <div className="mt-2">
+                  <AdminPublicPdfUpload
+                    userId={user.id}
+                    folder="home-content"
+                    disabled={isSaving || isUploadingLogo}
+                    onUploadingChange={setIsUploadingPdf}
+                    onError={setError}
+                    onUploaded={(upload) => updateForm('pdfUrl', upload.pdfUrl)}
+                  />
+                </div>
+              </div>
             </div>
 
             <div className="space-y-4">
@@ -346,7 +367,7 @@ export function PublicHomeContentManager() {
           </div>
 
           {error ? <p className="mt-4 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">{error}</p> : null}
-          <button type="button" onClick={handleSave} disabled={isSaving || isUploadingLogo} className="mt-5 inline-flex h-10 items-center gap-2 rounded-md bg-brand-700 px-4 text-sm font-semibold text-white hover:bg-brand-800 disabled:opacity-50"><Save className="h-4 w-4" />{isUploadingLogo ? 'กำลังอัปโหลดโลโก้...' : isSaving ? 'กำลังบันทึก...' : editingItem ? 'บันทึกการแก้ไข' : 'เพิ่มข้อมูล'}</button>
+          <button type="button" onClick={handleSave} disabled={isSaving || isUploadingLogo || isUploadingPdf} className="mt-5 inline-flex h-10 items-center gap-2 rounded-md bg-brand-700 px-4 text-sm font-semibold text-white hover:bg-brand-800 disabled:opacity-50"><Save className="h-4 w-4" />{isUploadingPdf ? 'กำลังอัปโหลด PDF...' : isUploadingLogo ? 'กำลังอัปโหลดโลโก้...' : isSaving ? 'กำลังบันทึก...' : editingItem ? 'บันทึกการแก้ไข' : 'เพิ่มข้อมูล'}</button>
         </div>
 
         <div className="mt-6 rounded-md border border-slate-200 bg-white p-4">

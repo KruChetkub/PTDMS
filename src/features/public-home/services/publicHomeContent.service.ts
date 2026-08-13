@@ -1,6 +1,7 @@
 import { supabase } from '../../../lib/supabase';
 import { runSupabaseQuery } from '../../../lib/supabase-query';
 import { createUuid } from '../../../utils/uuid';
+import { sanitizeUrlInput } from '../../../utils/inputSecurity';
 
 export type PublicHomeContentSection = string;
 export type PublicHomeTargetView = 'plans' | 'performance' | 'research';
@@ -18,6 +19,7 @@ export type PublicHomeContentItem = {
   iconKey: PublicHomeIconKey;
   colorKey: PublicHomeColorKey;
   logoUrl: string;
+  pdfUrl: string;
   sortOrder: number;
   status: PublicHomeContentStatus;
   createdBy: string | null;
@@ -36,6 +38,7 @@ type PublicHomeContentRow = {
   icon_key: PublicHomeIconKey;
   color_key: PublicHomeColorKey;
   logo_url: string;
+  pdf_url: string;
   sort_order: number;
   status: PublicHomeContentStatus;
   created_by: string | null;
@@ -50,17 +53,17 @@ type SupabaseResult<T> = { data: T; error: unknown | null };
 export const PUBLIC_HOME_CONTENT_UPDATED_EVENT = 'smartdsp-public-home-content-updated';
 
 export const defaultPublicHomeContent: PublicHomeContentItem[] = [
-  { id: 'default-plan-1', section: 'plan', title: 'แผนระดับ 1', description: 'ยุทธศาสตร์ชาติและกรอบทิศทางระดับประเทศ', actionLabel: 'รายละเอียด', targetView: 'plans', iconKey: 'landmark', colorKey: 'blue', logoUrl: '', sortOrder: 10, status: 'published', createdBy: null, updatedBy: null, createdAt: '', updatedAt: '' },
-  { id: 'default-plan-2', section: 'plan', title: 'แผนระดับ 2', description: 'แผนแม่บท แผนปฏิรูปประเทศ และแผนพัฒนาระดับชาติ', actionLabel: 'รายละเอียด', targetView: 'plans', iconKey: 'target', colorKey: 'emerald', logoUrl: '', sortOrder: 20, status: 'published', createdBy: null, updatedBy: null, createdAt: '', updatedAt: '' },
-  { id: 'default-plan-3', section: 'plan', title: 'แผนระดับ 3', description: 'แผนปฏิบัติราชการและแผนเฉพาะด้าน', actionLabel: 'รายละเอียด', targetView: 'plans', iconKey: 'file-chart', colorKey: 'violet', logoUrl: '', sortOrder: 30, status: 'published', createdBy: null, updatedBy: null, createdAt: '', updatedAt: '' },
-  { id: 'default-plan-4', section: 'plan', title: 'นโยบายผู้บริหาร', description: 'กรอบนโยบายและทิศทางการบริหารกรมควบคุมโรค', actionLabel: 'รายละเอียด', targetView: 'plans', iconKey: 'briefcase', colorKey: 'orange', logoUrl: '', sortOrder: 40, status: 'published', createdBy: null, updatedBy: null, createdAt: '', updatedAt: '' },
-  { id: 'default-policy-1', section: 'policy', title: 'แผนงานด้านการป้องกันควบคุมโรคและภัยสุขภาพ', description: 'แผนงานและกรอบดำเนินงานที่เชื่อมโยงนโยบายสู่การปฏิบัติของกรมควบคุมโรค', actionLabel: 'เปิดคลังแผนงาน', targetView: 'plans', iconKey: 'shield', colorKey: 'rose', logoUrl: '', sortOrder: 10, status: 'published', createdBy: null, updatedBy: null, createdAt: '', updatedAt: '' },
-  { id: 'default-policy-2', section: 'policy', title: 'นโยบายผู้บริหาร', description: 'รวบรวมนโยบายสำคัญ แนวทางบริหาร และสารจากผู้บริหารสำหรับใช้ขับเคลื่อนภารกิจ', actionLabel: 'อ่านนโยบาย', targetView: 'plans', iconKey: 'briefcase', colorKey: 'orange', logoUrl: '', sortOrder: 20, status: 'published', createdBy: null, updatedBy: null, createdAt: '', updatedAt: '' },
-  { id: 'default-policy-3', section: 'policy', title: 'แนวทางการดำเนินงานป้องกันควบคุมโรค', description: 'ผลการดำเนินงานสำคัญ รายงานประจำปี และแนวทางสำหรับการติดตามผลการปฏิบัติงาน', actionLabel: 'ดูผลการดำเนินงาน', targetView: 'performance', iconKey: 'clipboard', colorKey: 'blue', logoUrl: '', sortOrder: 30, status: 'published', createdBy: null, updatedBy: null, createdAt: '', updatedAt: '' },
-  { id: 'default-policy-4', section: 'policy', title: 'งบประมาณและแผนปฏิบัติราชการประจำปี', description: 'เอกสารงบประมาณ แผนปฏิบัติราชการ และข้อมูลประกอบการบริหารทรัพยากรประจำปี', actionLabel: 'ดูแผนและเอกสาร', targetView: 'plans', iconKey: 'coins', colorKey: 'teal', logoUrl: '', sortOrder: 40, status: 'published', createdBy: null, updatedBy: null, createdAt: '', updatedAt: '' },
+  { id: 'default-plan-1', section: 'plan', title: 'แผนระดับ 1', description: 'ยุทธศาสตร์ชาติและกรอบทิศทางระดับประเทศ', actionLabel: 'รายละเอียด', targetView: 'plans', iconKey: 'landmark', colorKey: 'blue', logoUrl: '', pdfUrl: '', sortOrder: 10, status: 'published', createdBy: null, updatedBy: null, createdAt: '', updatedAt: '' },
+  { id: 'default-plan-2', section: 'plan', title: 'แผนระดับ 2', description: 'แผนแม่บท แผนปฏิรูปประเทศ และแผนพัฒนาระดับชาติ', actionLabel: 'รายละเอียด', targetView: 'plans', iconKey: 'target', colorKey: 'emerald', logoUrl: '', pdfUrl: '', sortOrder: 20, status: 'published', createdBy: null, updatedBy: null, createdAt: '', updatedAt: '' },
+  { id: 'default-plan-3', section: 'plan', title: 'แผนระดับ 3', description: 'แผนปฏิบัติราชการและแผนเฉพาะด้าน', actionLabel: 'รายละเอียด', targetView: 'plans', iconKey: 'file-chart', colorKey: 'violet', logoUrl: '', pdfUrl: '', sortOrder: 30, status: 'published', createdBy: null, updatedBy: null, createdAt: '', updatedAt: '' },
+  { id: 'default-plan-4', section: 'plan', title: 'นโยบายผู้บริหาร', description: 'กรอบนโยบายและทิศทางการบริหารกรมควบคุมโรค', actionLabel: 'รายละเอียด', targetView: 'plans', iconKey: 'briefcase', colorKey: 'orange', logoUrl: '', pdfUrl: '', sortOrder: 40, status: 'published', createdBy: null, updatedBy: null, createdAt: '', updatedAt: '' },
+  { id: 'default-policy-1', section: 'policy', title: 'แผนงานด้านการป้องกันควบคุมโรคและภัยสุขภาพ', description: 'แผนงานและกรอบดำเนินงานที่เชื่อมโยงนโยบายสู่การปฏิบัติของกรมควบคุมโรค', actionLabel: 'เปิดคลังแผนงาน', targetView: 'plans', iconKey: 'shield', colorKey: 'rose', logoUrl: '', pdfUrl: '', sortOrder: 10, status: 'published', createdBy: null, updatedBy: null, createdAt: '', updatedAt: '' },
+  { id: 'default-policy-2', section: 'policy', title: 'นโยบายผู้บริหาร', description: 'รวบรวมนโยบายสำคัญ แนวทางบริหาร และสารจากผู้บริหารสำหรับใช้ขับเคลื่อนภารกิจ', actionLabel: 'อ่านนโยบาย', targetView: 'plans', iconKey: 'briefcase', colorKey: 'orange', logoUrl: '', pdfUrl: '', sortOrder: 20, status: 'published', createdBy: null, updatedBy: null, createdAt: '', updatedAt: '' },
+  { id: 'default-policy-3', section: 'policy', title: 'แนวทางการดำเนินงานป้องกันควบคุมโรค', description: 'ผลการดำเนินงานสำคัญ รายงานประจำปี และแนวทางสำหรับการติดตามผลการปฏิบัติงาน', actionLabel: 'ดูผลการดำเนินงาน', targetView: 'performance', iconKey: 'clipboard', colorKey: 'blue', logoUrl: '', pdfUrl: '', sortOrder: 30, status: 'published', createdBy: null, updatedBy: null, createdAt: '', updatedAt: '' },
+  { id: 'default-policy-4', section: 'policy', title: 'งบประมาณและแผนปฏิบัติราชการประจำปี', description: 'เอกสารงบประมาณ แผนปฏิบัติราชการ และข้อมูลประกอบการบริหารทรัพยากรประจำปี', actionLabel: 'ดูแผนและเอกสาร', targetView: 'plans', iconKey: 'coins', colorKey: 'teal', logoUrl: '', pdfUrl: '', sortOrder: 40, status: 'published', createdBy: null, updatedBy: null, createdAt: '', updatedAt: '' },
 ];
 
-const selectColumns = 'id, section, title, description, action_label, target_view, icon_key, color_key, logo_url, sort_order, status, created_by, updated_by, created_at, updated_at';
+const selectColumns = 'id, section, title, description, action_label, target_view, icon_key, color_key, logo_url, pdf_url, sort_order, status, created_by, updated_by, created_at, updated_at';
 
 function contentTable() {
   return (supabase.from as unknown as SupabaseFrom)('public_home_content_items');
@@ -77,6 +80,7 @@ function mapRow(row: PublicHomeContentRow): PublicHomeContentItem {
     iconKey: row.icon_key,
     colorKey: row.color_key,
     logoUrl: row.logo_url || '',
+    pdfUrl: row.pdf_url || '',
     sortOrder: row.sort_order,
     status: row.status,
     createdBy: row.created_by,
@@ -97,6 +101,7 @@ function mapToRow(item: PublicHomeContentItem) {
     icon_key: item.iconKey,
     color_key: item.colorKey,
     logo_url: item.logoUrl.trim(),
+    pdf_url: sanitizeUrlInput(item.pdfUrl, { fieldName: 'ลิงก์เอกสาร PDF', maxLength: 2048 }) || '',
     sort_order: Math.max(1, Math.round(item.sortOrder)),
     status: item.status,
     created_by: item.createdBy,
