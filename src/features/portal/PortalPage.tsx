@@ -1,5 +1,5 @@
 ﻿import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowRight, BookOpen, CalendarDays, ChevronDown, ChevronLeft, ChevronRight, ClipboardCheck, Database, ExternalLink, FileText, GraduationCap, Headphones, KeyRound, LogOut, Megaphone, Monitor, ShieldCheck, Sparkles } from 'lucide-react';
+import { ArrowRight, BookOpen, BookOpenText, CalendarDays, ChevronDown, ChevronLeft, ChevronRight, ClipboardCheck, Database, ExternalLink, FileText, GraduationCap, Headphones, KeyRound, LogOut, Megaphone, Monitor, ShieldCheck, Sparkles } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ConfirmModal } from '../../components/ui/ConfirmModal';
 import { useAuditPageAccess } from '../../hooks/useAuditPageAccess';
@@ -99,6 +99,16 @@ const externalSystems: PortalCard[] = [
 ];
 
 const adminSystems: PortalCard[] = [
+  {
+    title: 'คลังข้อมูลด้านยุทธศาสตร์ กองยุทธศาสตร์และแผนงาน',
+    shortTitle: 'คลังข้อมูลด้านยุทธศาสตร์',
+    description: 'จัดการแผน ผลการดำเนินงาน และงานวิจัยที่เผยแพร่ในคลังข้อมูลด้านยุทธศาสตร์',
+    to: '/',
+    icon: BookOpenText,
+    roles: ['super_admin', 'admin'],
+    accent: 'from-blue-700 to-teal-500',
+    meta: 'Strategic Repository',
+  },
   {
     title: 'PTDMS Site Manager',
     shortTitle: 'Site Manager',

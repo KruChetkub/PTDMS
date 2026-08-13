@@ -1,9 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
-import { BarChart3, BookOpenText, ChevronDown, ChevronLeft, ChevronRight, FilePlus, FileText, KeyRound, LogOut, Microscope, ShieldCheck, TrendingUp } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect } from 'react';
+import { BarChart3, BookOpenText, ChevronLeft, ChevronRight, FilePlus, FileText, Microscope, TrendingUp } from 'lucide-react';
 import { useAuthStore } from '../../../stores/auth.store';
-import { roleLabels } from '../../../types/roles';
-import { reportClientError } from '../../../utils/errorHandling';
 import type { PublicHomeView } from '../types/publicHomeView.types';
 
 const dashboardUrl = 'https://strategy-and-planning-dept-bw9o.vercel.app/';
@@ -38,56 +35,14 @@ function getCollapsedItemClass(isActive: boolean) {
 }
 
 export function PublicHomeSidebar({ activeView, isCollapsed, logoUrl, siteName, onToggleCollapsed, onViewChange }: PublicHomeSidebarProps) {
-  const navigate = useNavigate();
-  const userPanelRef = useRef<HTMLDivElement | null>(null);
-  const [isUserPanelOpen, setIsUserPanelOpen] = useState(false);
-  const [isLoggingOut, setIsLoggingOut] = useState(false);
-  const { initialize, initialized, user, profile, signOut } = useAuthStore();
-  const isSignedIn = Boolean(user);
+  const { initialize, initialized, profile } = useAuthStore();
   const canManagePublicContent = profile?.role === 'admin' || profile?.role === 'super_admin';
-  const accountLabel = profile?.full_name || user?.email || 'เข้าสู่ระบบแล้ว';
-  const accountDetail = profile?.work_group || 'เมนูส่วนตัว';
-  const roleLabel = profile?.role ? roleLabels[profile.role] : '-';
-  const workGroupLabel = profile?.work_group || profile?.department || '-';
 
   useEffect(() => {
     if (!initialized) {
       void initialize();
     }
   }, [initialize, initialized]);
-
-  useEffect(() => {
-    if (!isUserPanelOpen) return;
-
-    const handlePointerDown = (event: PointerEvent) => {
-      if (!userPanelRef.current?.contains(event.target as Node)) {
-        setIsUserPanelOpen(false);
-      }
-    };
-
-    document.addEventListener('pointerdown', handlePointerDown);
-
-    return () => document.removeEventListener('pointerdown', handlePointerDown);
-  }, [isUserPanelOpen]);
-
-  const handleOpenPasswordSettings = () => {
-    setIsUserPanelOpen(false);
-    navigate('/settings?tab=password');
-  };
-
-  const handleSignOut = async () => {
-    try {
-      setIsLoggingOut(true);
-      setIsUserPanelOpen(false);
-      await signOut();
-      navigate('/login', { replace: true });
-    } catch (error) {
-      void reportClientError('Public home logout failed:', error);
-      navigate('/login', { replace: true });
-    } finally {
-      setIsLoggingOut(false);
-    }
-  };
 
   if (isCollapsed) {
     return (
@@ -107,15 +62,6 @@ export function PublicHomeSidebar({ activeView, isCollapsed, logoUrl, siteName, 
           </button>
 
           <nav className="flex items-center gap-2 lg:min-h-0 lg:flex-1 lg:flex-col lg:overflow-y-auto" aria-label="เมนูคลังข้อมูลแบบย่อ">
-            {isSignedIn ? (
-              <button type="button" onClick={() => setIsUserPanelOpen((current) => !current)} className={`${getCollapsedItemClass(false)} lg:order-last lg:mt-auto`} title="บัญชีผู้ใช้" aria-label="บัญชีผู้ใช้">
-                <ShieldCheck className="h-5 w-5" aria-hidden="true" />
-              </button>
-            ) : (
-              <button type="button" onClick={() => navigate('/login')} className={`${getCollapsedItemClass(false)} lg:order-last lg:mt-auto`} title="เข้าสู่ระบบ" aria-label="เข้าสู่ระบบ">
-                <ShieldCheck className="h-5 w-5" aria-hidden="true" />
-              </button>
-            )}
             {canManagePublicContent ? (
               <button type="button" onClick={() => onViewChange('my-plans')} className={getCollapsedItemClass(activeView === 'my-plans')} title="เพิ่มแผนของฉัน" aria-label="เพิ่มแผนของฉัน">
                 <FilePlus className="h-5 w-5" aria-hidden="true" />
@@ -167,76 +113,6 @@ export function PublicHomeSidebar({ activeView, isCollapsed, logoUrl, siteName, 
             <p className="text-xs font-semibold uppercase tracking-normal text-cyan-100">คลังข้อมูล</p>
             <h2 className="mt-1 text-sm font-bold leading-5 tracking-normal text-white">กองยุทธศาสตร์และแผนงาน กรมควบคุมโรค</h2>
           </div>
-        </div>
-
-        <div ref={userPanelRef} className="relative order-3 mt-5 lg:shrink-0 lg:border-t lg:border-white/15 lg:pt-4">
-          {isSignedIn ? (
-            <>
-              <button
-                type="button"
-                onClick={() => setIsUserPanelOpen((current) => !current)}
-                className="flex w-full items-center gap-3 rounded-md border border-white/25 bg-white/12 px-3 py-3 text-left text-white transition hover:bg-white/18"
-                aria-expanded={isUserPanelOpen}
-                aria-label={`บัญชีผู้ใช้ ${accountLabel}`}
-              >
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-cyan-900">
-                  <ShieldCheck className="h-5 w-5" aria-hidden="true" />
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-semibold">บัญชีผู้ใช้</span>
-                  <span className="block truncate text-xs font-medium text-cyan-100/85">{accountDetail}</span>
-                </span>
-                <ChevronDown className={`h-4 w-4 shrink-0 text-cyan-100 transition ${isUserPanelOpen ? 'rotate-180' : ''}`} aria-hidden="true" />
-              </button>
-
-              {isUserPanelOpen ? (
-                <div className="absolute bottom-full left-0 right-0 z-50 mb-2 max-h-[min(70vh,34rem)] overflow-y-auto rounded-md border border-slate-200 bg-white text-slate-900 shadow-2xl">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsUserPanelOpen(false);
-                      navigate(profile?.status === 'pending' ? '/pending-approval' : '/portal');
-                    }}
-                    className="flex w-full items-center gap-3 border-b border-slate-100 bg-slate-50 px-4 py-4 text-left transition hover:bg-slate-100"
-                  >
-                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-600 text-white shadow-sm">
-                      <ShieldCheck className="h-5 w-5" aria-hidden="true" />
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-semibold text-slate-950">ข้อมูลผู้ใช้งาน</span>
-                      <span className="mt-0.5 block truncate text-xs text-slate-500">จัดการบัญชีและเมนูส่วนตัว</span>
-                    </span>
-                    <ChevronRight className="h-4 w-4 shrink-0 text-slate-400" aria-hidden="true" />
-                  </button>
-
-                  <div className="grid gap-1 p-2">
-                    <div className="rounded-md bg-slate-50 px-3 py-3 ring-1 ring-slate-100">
-                      <div className="grid gap-2">
-                        <p className="truncate text-sm font-semibold text-slate-900">{accountLabel}</p>
-                        <p className="truncate text-sm font-semibold text-slate-900">{roleLabel}</p>
-                        <p className="whitespace-normal break-words text-sm font-semibold leading-5 text-slate-900">{workGroupLabel}</p>
-                      </div>
-                    </div>
-
-                    <div className="my-1 border-t border-slate-100" />
-
-                    <button type="button" onClick={handleOpenPasswordSettings} className="flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-left text-sm font-semibold text-slate-700 transition hover:bg-slate-50">
-                      <KeyRound className="h-4 w-4 text-slate-500" aria-hidden="true" />
-                      ตั้งค่ารหัสผ่านใหม่
-                    </button>
-                    <button type="button" onClick={() => void handleSignOut()} disabled={isLoggingOut} className="flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-left text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60">
-                      <LogOut className="h-4 w-4 text-slate-500" aria-hidden="true" />
-                      {isLoggingOut ? 'กำลังออกจากระบบ...' : 'Logout'}
-                    </button>
-                  </div>
-                </div>
-              ) : null}
-            </>
-          ) : (
-            <button type="button" onClick={() => navigate('/login')} className="w-full rounded-md bg-white px-3 py-2.5 text-sm font-semibold text-cyan-900 shadow-sm transition hover:bg-cyan-50">
-              เข้าสู่ระบบ
-            </button>
-          )}
         </div>
 
         <nav className="order-2 mt-5 space-y-5 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:pr-1" aria-label="เมนูคลังข้อมูลด้านยุทธศาสตร์และแผนงาน">
