@@ -2,17 +2,17 @@ import { useEffect, useMemo, useState } from 'react';
 import { FileText } from 'lucide-react';
 import { HomePlanSections } from '../components/HomePlanSections';
 import {
-  getResearchCategory,
   loadPublicResearchItems,
-  researchCategoryOptions,
   type PublicResearchItem,
 } from '../services/publicResearchItems.service';
+import { getDefaultRepositoryCategories, loadPublicRepositoryCategories, type PublicRepositoryCategory } from '../services/publicRepositoryCategories.service';
 import type { HomePlanSection } from '../types/publicHome.types';
 
 type Props = { logoUrl: string };
 
 export function PublicResearchRepositoryView({ logoUrl }: Props) {
   const [researchItems, setResearchItems] = useState<PublicResearchItem[]>([]);
+  const [categories, setCategories] = useState<PublicRepositoryCategory[]>(() => getDefaultRepositoryCategories('research'));
   const [hasLoadError, setHasLoadError] = useState(false);
 
   useEffect(() => {
@@ -20,29 +20,32 @@ export function PublicResearchRepositoryView({ logoUrl }: Props) {
     loadPublicResearchItems()
       .then((items) => { if (mounted) setResearchItems(items); })
       .catch(() => { if (mounted) setHasLoadError(true); });
+    loadPublicRepositoryCategories('research')
+      .then((loadedCategories) => { if (mounted) setCategories(loadedCategories.filter((category) => category.isActive)); })
+      .catch(() => undefined);
     return () => { mounted = false; };
   }, []);
 
   const publishedItems = useMemo(() => researchItems.filter((item) => item.status === 'published'), [researchItems]);
   const sections = useMemo<HomePlanSection[]>(() => {
-    return researchCategoryOptions.map((category, index) => ({
-      id: `research-${category.value}`,
+    return categories.map((category, index) => ({
+      id: `research-${category.key}`,
       number: String(index + 1),
       title: category.label,
       tone: category.tone,
-      cards: publishedItems.filter((item) => item.category === category.value).map((item) => ({
+      cards: publishedItems.filter((item) => item.category === category.key).map((item) => ({
         title: item.title,
         subtitle: item.researcherNames,
         description: [item.organization, item.abstract].filter(Boolean).join(' — '),
         icon: FileText,
-        color: getResearchCategory(item.category).color,
+        color: category.color,
         actionLabel: item.actionLabel,
         pdfUrl: item.pdfUrl,
         coverImageUrl: item.coverImageUrl,
         coverImageLayout: item.coverImageLayout,
       })),
     })).filter((section) => section.cards.length > 0);
-  }, [publishedItems]);
+  }, [categories, publishedItems]);
 
   const publishedCount = publishedItems.length;
   const yearCount = new Set(publishedItems.map((item) => item.publicationYear)).size;

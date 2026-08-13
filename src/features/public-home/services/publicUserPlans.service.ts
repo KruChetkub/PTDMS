@@ -3,14 +3,7 @@ import { runSupabaseQuery } from '../../../lib/supabase-query';
 import { createUuid } from '../../../utils/uuid';
 import type { SiteContentPlanCard } from '../../site-content/types/siteContent.types';
 
-export type PublicUserPlanCategory =
-  | 'plan-level-1'
-  | 'plan-level-2'
-  | 'plan-level-3'
-  | 'annual-budget-document'
-  | 'action-plan'
-  | 'executive-policy'
-  | 'other';
+export type PublicUserPlanCategory = string;
 
 export type PublicUserPlan = {
   id: string;
@@ -52,7 +45,7 @@ type PublicUserPlanRow = {
 const PUBLIC_USER_PLANS_STORAGE_KEY = 'ptdms.publicUserPlans.v2';
 export const PUBLIC_USER_PLANS_UPDATED_EVENT = 'ptdms-public-user-plans-updated';
 
-const categoryColorMap: Record<PublicUserPlanCategory, string> = {
+const categoryColorMap: Record<string, string> = {
   'plan-level-1': 'bg-blue-600',
   'plan-level-2': 'bg-emerald-600',
   'plan-level-3': 'bg-violet-600',
@@ -62,7 +55,7 @@ const categoryColorMap: Record<PublicUserPlanCategory, string> = {
   other: 'bg-rose-500',
 };
 
-const categorySortIndexMap: Record<PublicUserPlanCategory, number> = {
+const categorySortIndexMap: Record<string, number> = {
   'plan-level-1': 0,
   'plan-level-2': 1,
   'plan-level-3': 2,
@@ -80,19 +73,15 @@ type SupabaseDataResult<T> = {
 };
 
 export function getPublicUserPlanCategoryColor(category: PublicUserPlanCategory) {
-  return categoryColorMap[category];
+  return categoryColorMap[category] || 'bg-blue-600';
 }
 
 export function getPublicUserPlanCategorySortIndex(category: PublicUserPlanCategory) {
-  return categorySortIndexMap[category];
+  return categorySortIndexMap[category] ?? Number.MAX_SAFE_INTEGER;
 }
 
 export function normalizePublicUserPlanCategory(category: string | null | undefined): PublicUserPlanCategory {
-  if (category === 'plan-level-1' || category === 'plan-level-2' || category === 'plan-level-3' || category === 'annual-budget-document' || category === 'action-plan' || category === 'executive-policy' || category === 'other') {
-    return category;
-  }
-
-  return 'other';
+  return category?.trim() || 'other';
 }
 
 export function comparePublicUserPlans(first: PublicUserPlan, second: PublicUserPlan) {
@@ -135,7 +124,7 @@ function normalizePlan(plan: PublicUserPlan): PublicUserPlan {
       subtitle: plan.card.subtitle || '',
       description: plan.card.description || '',
       iconKey: plan.card.iconKey || 'file',
-      color: getPublicUserPlanCategoryColor(category),
+      color: plan.card.color || getPublicUserPlanCategoryColor(category),
       actionLabel: plan.card.actionLabel || 'รายละเอียด',
       pdfUrl: plan.card.pdfUrl || '',
       coverImageUrl: plan.card.coverImageUrl || '',
@@ -196,7 +185,7 @@ function mapPlanToRow(plan: PublicUserPlan) {
     subtitle: normalized.card.subtitle,
     description: normalized.card.description || '',
     icon_key: normalized.card.iconKey,
-    color: getPublicUserPlanCategoryColor(normalized.category),
+    color: normalized.card.color || getPublicUserPlanCategoryColor(normalized.category),
     action_label: normalized.card.actionLabel,
     pdf_url: normalized.card.pdfUrl,
     cover_image_url: normalized.card.coverImageUrl || '',
@@ -246,15 +235,29 @@ async function loadPublicUserPlansFromSupabase() {
 }
 
 async function savePublicUserPlanToSupabase(plan: PublicUserPlan) {
-  const { data } = await runSupabaseQuery<SupabaseDataResult<PublicUserPlanRow>>(
+  const row = mapPlanToRow(plan);
+  const { data: updatedData } = await runSupabaseQuery<SupabaseDataResult<PublicUserPlanRow | null>>(
     publicUserPlansTable()
-      .upsert(mapPlanToRow(plan), { onConflict: 'id' })
+      .update(row)
+      .eq('id', plan.id)
       .select(selectColumns)
-      .single(),
-    'บันทึกแผนของผู้ใช้ไป Supabase',
+      .maybeSingle(),
+    'แก้ไขแผนของผู้ใช้ใน Supabase',
   );
 
-  return mapRowToPlan(data as unknown as PublicUserPlanRow);
+  if (updatedData) {
+    return mapRowToPlan(updatedData);
+  }
+
+  const { data: insertedData } = await runSupabaseQuery<SupabaseDataResult<PublicUserPlanRow>>(
+    publicUserPlansTable()
+      .insert(row)
+      .select(selectColumns)
+      .single(),
+    'เพิ่มแผนของผู้ใช้ไป Supabase',
+  );
+
+  return mapRowToPlan(insertedData);
 }
 
 async function updatePublicUserPlanStatusInSupabase(planId: string, status: 'published' | 'draft') {

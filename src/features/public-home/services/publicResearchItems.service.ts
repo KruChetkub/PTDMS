@@ -3,7 +3,7 @@ import { runSupabaseQuery } from '../../../lib/supabase-query';
 import { createUuid } from '../../../utils/uuid';
 import type { SiteContentPlanCoverLayout, SiteContentStatus } from '../../site-content/types/siteContent.types';
 
-export type ResearchCategory = 'r2r' | 'innovation' | 'evaluation' | 'other';
+export type ResearchCategory = string;
 
 export type PublicResearchItem = {
   id: string;
@@ -71,7 +71,7 @@ function researchItemsTable() {
 }
 
 function normalizeCategory(value: string): ResearchCategory {
-  return researchCategoryOptions.some((option) => option.value === value) ? value as ResearchCategory : 'other';
+  return value?.trim() || 'other';
 }
 
 export function getResearchCategory(category: ResearchCategory) {
@@ -116,7 +116,7 @@ function toRow(item: PublicResearchItem) {
     organization: item.organization.trim(),
     abstract: item.abstract.trim(),
     icon_key: 'file',
-    color: getResearchCategory(item.category).color,
+    color: item.color || getResearchCategory(item.category).color,
     action_label: item.actionLabel.trim() || 'เปิดเอกสารงานวิจัย',
     pdf_url: item.pdfUrl.trim(),
     cover_image_url: item.coverImageUrl.trim(),
@@ -127,7 +127,10 @@ function toRow(item: PublicResearchItem) {
 
 export function compareResearchItems(first: PublicResearchItem, second: PublicResearchItem) {
   if (first.publicationYear !== second.publicationYear) return second.publicationYear - first.publicationYear;
-  const categoryIndex = (category: ResearchCategory) => researchCategoryOptions.findIndex((option) => option.value === category);
+  const categoryIndex = (category: ResearchCategory) => {
+    const index = researchCategoryOptions.findIndex((option) => option.value === category);
+    return index < 0 ? Number.MAX_SAFE_INTEGER : index;
+  };
   return categoryIndex(first.category) - categoryIndex(second.category)
     || first.sortOrder - second.sortOrder
     || second.updatedAt.localeCompare(first.updatedAt);
@@ -145,11 +148,19 @@ export async function loadPublicResearchItems() {
 }
 
 export async function savePublicResearchItem(item: PublicResearchItem) {
-  const { data } = await runSupabaseQuery<SupabaseDataResult<ResearchRow>>(
-    researchItemsTable().upsert(toRow(item), { onConflict: 'id' }).select(selectColumns).single(),
-    'บันทึกงานวิจัยไป Supabase',
+  const row = toRow(item);
+  const { data: updatedData } = await runSupabaseQuery<SupabaseDataResult<ResearchRow | null>>(
+    researchItemsTable().update(row).eq('id', item.id).select(selectColumns).maybeSingle(),
+    'แก้ไขงานวิจัยใน Supabase',
   );
-  return mapRow(data as ResearchRow);
+
+  if (updatedData) return mapRow(updatedData);
+
+  const { data: insertedData } = await runSupabaseQuery<SupabaseDataResult<ResearchRow>>(
+    researchItemsTable().insert(row).select(selectColumns).single(),
+    'เพิ่มงานวิจัยไป Supabase',
+  );
+  return mapRow(insertedData);
 }
 
 export async function updatePublicResearchItemStatus(id: string, status: 'published' | 'draft') {

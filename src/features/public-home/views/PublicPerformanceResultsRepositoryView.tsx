@@ -2,11 +2,10 @@ import { useEffect, useMemo, useState } from 'react';
 import { FileText, Gauge, Target, TrendingUp } from 'lucide-react';
 import { HomePlanSections } from '../components/HomePlanSections';
 import {
-  getPerformanceCategory,
   loadPublicPerformanceResults,
-  performanceCategoryOptions,
   type PublicPerformanceResult,
 } from '../services/publicPerformanceResults.service';
+import { getDefaultRepositoryCategories, loadPublicRepositoryCategories, type PublicRepositoryCategory } from '../services/publicRepositoryCategories.service';
 import type { HomePlanSection } from '../types/publicHome.types';
 
 const iconMap = {
@@ -18,12 +17,11 @@ const iconMap = {
   other: Target,
 };
 
-const repositoryCategoryOptions = performanceCategoryOptions;
-
 type Props = { logoUrl: string };
 
 export function PublicPerformanceResultsRepositoryView({ logoUrl }: Props) {
   const [results, setResults] = useState<PublicPerformanceResult[]>([]);
+  const [categories, setCategories] = useState<PublicRepositoryCategory[]>(() => getDefaultRepositoryCategories('performance'));
   const [hasLoadError, setHasLoadError] = useState(false);
 
   useEffect(() => {
@@ -31,27 +29,30 @@ export function PublicPerformanceResultsRepositoryView({ logoUrl }: Props) {
     loadPublicPerformanceResults()
       .then((items) => { if (mounted) setResults(items); })
       .catch(() => { if (mounted) setHasLoadError(true); });
+    loadPublicRepositoryCategories('performance')
+      .then((loadedCategories) => { if (mounted) setCategories(loadedCategories.filter((category) => category.isActive)); })
+      .catch(() => undefined);
     return () => { mounted = false; };
   }, []);
 
   const publishedResults = useMemo(() => results.filter((result) => result.status === 'published'), [results]);
-  const sections = useMemo<HomePlanSection[]>(() => repositoryCategoryOptions.map((category, index) => ({
-    id: `performance-${category.value}`,
+  const sections = useMemo<HomePlanSection[]>(() => categories.map((category, index) => ({
+    id: `performance-${category.key}`,
     number: String(index + 1),
     title: category.label,
     tone: category.tone,
-    cards: publishedResults.filter((result) => result.category === category.value).map((result) => ({
+    cards: publishedResults.filter((result) => result.category === category.key).map((result) => ({
       title: result.title,
       subtitle: result.subtitle || `ปีงบประมาณ พ.ศ. ${result.fiscalYear}`,
       description: result.description,
-      icon: iconMap[result.category],
-      color: getPerformanceCategory(result.category).color,
+      icon: iconMap[result.category as keyof typeof iconMap] || FileText,
+      color: category.color,
       actionLabel: result.actionLabel,
       pdfUrl: result.pdfUrl,
       coverImageUrl: result.coverImageUrl,
       coverImageLayout: result.coverImageLayout,
     })),
-  })).filter((section) => section.cards.length > 0), [publishedResults]);
+  })).filter((section) => section.cards.length > 0), [categories, publishedResults]);
 
   const fiscalYearCount = new Set(publishedResults.map((result) => result.fiscalYear)).size;
 

@@ -13,6 +13,7 @@ type ConfirmModalProps = {
   isLoading?: boolean;
   variant?: 'danger' | 'warning' | 'info' | 'success';
   showCancelButton?: boolean;
+  zIndexClassName?: string;
 };
 
 export function ConfirmModal({
@@ -26,6 +27,7 @@ export function ConfirmModal({
   isLoading = false,
   variant = 'danger',
   showCancelButton = true,
+  zIndexClassName = 'z-50',
 }: ConfirmModalProps) {
   if (!isOpen) return null;
 
@@ -55,7 +57,7 @@ export function ConfirmModal({
   const activeVariant = variants[variant];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className={cn('fixed inset-0 flex items-center justify-center p-4', zIndexClassName)}>
       {/* Backdrop */}
       <div 
         className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm transition-opacity" 

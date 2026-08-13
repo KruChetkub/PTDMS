@@ -7,12 +7,17 @@ import { AdminCoverImageUpload } from './AdminCoverImageUpload';
 import { AdminPublicPdfUpload } from './AdminPublicPdfUpload';
 import { CoverImagePreview } from './CoverImagePreview';
 import { PublicRepositoryEditModal } from './PublicRepositoryEditModal';
+import { PublicRepositoryCategoryManager } from './PublicRepositoryCategoryManager';
+import {
+  findPublicRepositoryCategory,
+  getDefaultRepositoryCategories,
+  loadPublicRepositoryCategories,
+  type PublicRepositoryCategory,
+} from '../services/publicRepositoryCategories.service';
 import {
   createPublicPerformanceResult,
-  comparePerformanceResults,
   getPerformanceCategory,
   loadPublicPerformanceResults,
-  performanceCategoryOptions,
   savePublicPerformanceResult,
   updatePublicPerformanceResultStatus,
   type PerformanceResultCategory,
@@ -77,6 +82,7 @@ function isSafeOptionalUrl(value: string) {
 export function PublicPerformanceResultsManager() {
   const { user, profile } = useAuthStore();
   const [results, setResults] = useState<PublicPerformanceResult[]>([]);
+  const [categories, setCategories] = useState<PublicRepositoryCategory[]>(() => getDefaultRepositoryCategories('performance'));
   const [form, setForm] = useState<FormState>(defaultForm);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(0);
@@ -87,10 +93,20 @@ export function PublicPerformanceResultsManager() {
   const [error, setError] = useState<string | null>(null);
   const canManagePublicContent = profile?.role === 'admin' || profile?.role === 'super_admin';
   const canUploadPdf = canManagePublicContent;
+  const categoryOrder = useMemo(() => new Map(categories.map((category, index) => [category.key, index])), [categories]);
+  const compareResults = (first: PublicPerformanceResult, second: PublicPerformanceResult) => {
+    if (first.fiscalYear !== second.fiscalYear) return second.fiscalYear - first.fiscalYear;
+    const categoryCompare = (categoryOrder.get(first.category) ?? Number.MAX_SAFE_INTEGER)
+      - (categoryOrder.get(second.category) ?? Number.MAX_SAFE_INTEGER);
+    return categoryCompare || first.sortOrder - second.sortOrder || second.updatedAt.localeCompare(first.updatedAt);
+  };
   const myResults = useMemo(
-    () => canManagePublicContent ? [...results].sort(comparePerformanceResults) : [],
-    [canManagePublicContent, results],
+    () => canManagePublicContent ? [...results].sort(compareResults) : [],
+    [canManagePublicContent, results, categoryOrder],
   );
+  const activeCategories = categories.filter((category) => category.isActive || category.key === form.category);
+  const selectedCategory = findPublicRepositoryCategory(categories, form.category);
+  const currentCategory = selectedCategory || getPerformanceCategory(form.category);
   const totalPages = Math.max(1, Math.ceil(myResults.length / PAGE_SIZE));
   const safeCurrentPage = Math.min(currentPage, totalPages - 1);
   const pagedResults = myResults.slice(safeCurrentPage * PAGE_SIZE, safeCurrentPage * PAGE_SIZE + PAGE_SIZE);
@@ -103,8 +119,14 @@ export function PublicPerformanceResultsManager() {
     }
 
     let mounted = true;
-    loadPublicPerformanceResults()
-      .then((items) => { if (mounted) setResults(items); })
+    Promise.all([loadPublicPerformanceResults(), loadPublicRepositoryCategories('performance')])
+      .then(([items, loadedCategories]) => { if (mounted) {
+        setResults(items);
+        setCategories(loadedCategories);
+        setForm((current) => loadedCategories.some((category) => category.key === current.category && category.isActive)
+          ? current
+          : { ...current, category: loadedCategories.find((category) => category.isActive)?.key || current.category });
+      } })
       .catch(() => { if (mounted) setError('ไม่สามารถโหลดข้อมูลจาก Supabase ได้ กรุณาตรวจสอบ migration และการเชื่อมต่อ'); });
     return () => { mounted = false; };
   }, [canManagePublicContent]);
@@ -133,6 +155,13 @@ export function PublicPerformanceResultsManager() {
     setError(null);
   };
 
+  const handleCategoriesChange = (nextCategories: PublicRepositoryCategory[]) => {
+    setCategories(nextCategories);
+    setForm((current) => nextCategories.some((category) => category.key === current.category && (category.isActive || Boolean(editingId)))
+      ? current
+      : { ...current, category: nextCategories.find((category) => category.isActive)?.key || 'other' });
+  };
+
   const handleSave = async () => {
     if (!user || !canManagePublicContent) return;
     if (!form.title.trim()) {
@@ -148,7 +177,7 @@ export function PublicPerformanceResultsManager() {
       return;
     }
 
-    const category = getPerformanceCategory(form.category);
+    const category = currentCategory;
     const nextResult = editingResult
       ? {
           ...editingResult,
@@ -171,10 +200,10 @@ export function PublicPerformanceResultsManager() {
       setIsSaving(true);
       setError(null);
       const saved = await savePublicPerformanceResult(nextResult);
-      setResults((current) => [saved, ...current.filter((item) => item.id !== saved.id)].sort(comparePerformanceResults));
+      setResults((current) => [saved, ...current.filter((item) => item.id !== saved.id)].sort(compareResults));
       setForm(defaultForm);
       setEditingId(null);
-      setCurrentPage(0);
+      if (!editingResult) setCurrentPage(0);
       setMessage(editingResult ? 'แก้ไขข้อมูลเรียบร้อย และบันทึกประวัติไว้แล้ว' : 'เพิ่มผลการดำเนินงานลง Supabase เรียบร้อย');
     } catch {
       setError('บันทึกไม่สำเร็จ ข้อมูลยังไม่ถูกยืนยันลง Supabase กรุณาลองใหม่');
@@ -188,7 +217,7 @@ export function PublicPerformanceResultsManager() {
     const nextStatus = result.status === 'published' ? 'draft' : 'published';
     try {
       const saved = await updatePublicPerformanceResultStatus(result.id, nextStatus);
-      setResults((current) => current.map((item) => item.id === saved.id ? saved : item).sort(comparePerformanceResults));
+      setResults((current) => current.map((item) => item.id === saved.id ? saved : item).sort(compareResults));
       setMessage(nextStatus === 'published' ? 'เผยแพร่รายการเรียบร้อย' : 'เปลี่ยนรายการเป็นฉบับร่างแล้ว');
     } catch {
       setError('ไม่สามารถเปลี่ยนสถานะได้');
@@ -224,7 +253,7 @@ export function PublicPerformanceResultsManager() {
         updatedAt: new Date().toISOString(),
       })));
       const savedById = new Map(savedItems.map((item) => [item.id, item]));
-      setResults((current) => current.map((item) => savedById.get(item.id) || item).sort(comparePerformanceResults));
+      setResults((current) => current.map((item) => savedById.get(item.id) || item).sort(compareResults));
       setMessage('ย้ายลำดับผลการดำเนินงานเรียบร้อย');
     } catch {
       setError('ไม่สามารถย้ายลำดับผลการดำเนินงานได้');
@@ -253,7 +282,7 @@ export function PublicPerformanceResultsManager() {
           <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
             <div className="grid gap-3">
               <div className="grid gap-3 sm:grid-cols-2">
-                <label className="block sm:col-span-1"><span className="text-sm font-medium text-slate-700">หมวดข้อมูล</span><select value={form.category} onChange={(event) => updateForm('category', event.target.value as PerformanceResultCategory)} className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm">{performanceCategoryOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
+                <div className="grid gap-2 sm:col-span-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end"><label className="block"><span className="text-sm font-medium text-slate-700">หมวดข้อมูล</span><select value={form.category} onChange={(event) => updateForm('category', event.target.value as PerformanceResultCategory)} className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm">{activeCategories.map((category) => <option key={category.id} value={category.key}>{category.label}</option>)}</select></label>{user ? <PublicRepositoryCategoryManager repositoryType="performance" title="หมวดข้อมูล" userId={user.id} categories={categories} onCategoriesChange={handleCategoriesChange} /> : null}</div>
                 <label className="block"><span className="text-sm font-medium text-slate-700">ปีงบประมาณ</span><input type="number" min={2500} max={2700} value={form.fiscalYear} onChange={(event) => updateForm('fiscalYear', Number(event.target.value))} className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm" /></label>
               </div>
               <label className="block"><span className="text-sm font-medium text-slate-700">ชื่อผลการดำเนินงาน</span><input value={form.title} onChange={(event) => updateForm('title', event.target.value)} className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm" /></label>
@@ -299,7 +328,7 @@ export function PublicPerformanceResultsManager() {
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
                 <label className="block"><span className="text-sm font-medium text-slate-700">ลำดับการแสดงผล</span><input type="number" min={1} value={form.sortOrder} onChange={(event) => updateForm('sortOrder', Math.max(1, Number(event.target.value)))} className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm" /></label>
-                <div className="block"><span className="text-sm font-medium text-slate-700">สีการ์ดอัตโนมัติ</span><div className="mt-1 flex h-10 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-700"><span className={`h-4 w-4 rounded-full ${getPerformanceCategory(form.category).color}`} aria-hidden="true" />{getPerformanceCategory(form.category).label}</div></div>
+                <div className="block"><span className="text-sm font-medium text-slate-700">สีการ์ดอัตโนมัติ</span><div className="mt-1 flex h-10 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-700"><span className={`h-4 w-4 rounded-full ${currentCategory.color}`} aria-hidden="true" />{currentCategory.label}</div></div>
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <button type="button" onClick={() => updateForm('coverImageLayout', 'portrait')} className={`rounded-md border px-3 py-2 text-xs font-semibold transition ${form.coverImageLayout === 'portrait' ? 'border-cyan-600 bg-cyan-50 text-cyan-800' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}><span className="block text-sm font-semibold">360 x 640 px</span><span className="mt-1 block text-xs font-medium text-current/70">ภาพแนวตั้ง</span></button>
@@ -335,8 +364,8 @@ export function PublicPerformanceResultsManager() {
                     {pagedResults.map((result, index) => (
                       <tr key={result.id} className={editingId === result.id ? 'bg-brand-50/70' : undefined}>
                         <td className="px-3 py-3 font-semibold text-slate-700">{safeCurrentPage * PAGE_SIZE + index + 1}</td>
-                        <td className="px-3 py-3"><div className="flex min-w-0 items-center gap-3"><span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-white ${getPerformanceCategory(result.category).color}`}><FileText className="h-4 w-4" /></span><div className="min-w-0"><p className="max-w-md truncate font-semibold text-slate-950">{result.title}</p><p className="mt-1 max-w-md truncate text-xs text-slate-500">{result.subtitle || '-'}</p></div></div></td>
-                        <td className="px-3 py-3 text-slate-600">{getPerformanceCategory(result.category).label}</td>
+                        <td className="px-3 py-3"><div className="flex min-w-0 items-center gap-3"><span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-white ${findPublicRepositoryCategory(categories, result.category)?.color || result.color}`}><FileText className="h-4 w-4" /></span><div className="min-w-0"><p className="max-w-md truncate font-semibold text-slate-950">{result.title}</p><p className="mt-1 max-w-md truncate text-xs text-slate-500">{result.subtitle || '-'}</p></div></div></td>
+                        <td className="px-3 py-3 text-slate-600">{findPublicRepositoryCategory(categories, result.category)?.label || result.category}</td>
                         <td className="px-3 py-3 text-slate-600">{result.fiscalYear}</td>
                         <td className="px-3 py-3 font-semibold text-slate-700">{result.sortOrder}</td>
                         <td className="px-3 py-3"><button type="button" onClick={() => void toggleStatus(result)} className={`inline-flex items-center justify-center rounded-full border px-3 py-1.5 text-xs font-semibold ${result.status === 'published' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-slate-50 text-slate-600'}`}>{result.status === 'published' ? 'เผยแพร่แล้ว' : 'ฉบับร่าง'}</button></td>
@@ -363,7 +392,7 @@ export function PublicPerformanceResultsManager() {
         <div className="grid gap-4 lg:grid-cols-2">
           <div className="grid content-start gap-3">
             <div className="grid gap-3 sm:grid-cols-2">
-              <label className="block"><span className="text-sm font-medium text-slate-700">หมวดข้อมูล</span><select value={form.category} onChange={(event) => updateForm('category', event.target.value as PerformanceResultCategory)} className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm">{performanceCategoryOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
+              <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end"><label className="block"><span className="text-sm font-medium text-slate-700">หมวดข้อมูล</span><select value={form.category} onChange={(event) => updateForm('category', event.target.value as PerformanceResultCategory)} className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm">{activeCategories.map((category) => <option key={category.id} value={category.key}>{category.label}</option>)}</select></label>{user ? <PublicRepositoryCategoryManager repositoryType="performance" title="หมวดข้อมูล" userId={user.id} categories={categories} onCategoriesChange={handleCategoriesChange} /> : null}</div>
               <label className="block"><span className="text-sm font-medium text-slate-700">ปีงบประมาณ</span><input type="number" min={2500} max={2700} value={form.fiscalYear} onChange={(event) => updateForm('fiscalYear', Number(event.target.value))} className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm" /></label>
             </div>
             <label className="block"><span className="text-sm font-medium text-slate-700">ชื่อผลการดำเนินงาน</span><input value={form.title} onChange={(event) => updateForm('title', event.target.value)} className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm" /></label>

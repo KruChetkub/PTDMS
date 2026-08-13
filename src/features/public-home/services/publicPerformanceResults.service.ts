@@ -3,13 +3,7 @@ import { runSupabaseQuery } from '../../../lib/supabase-query';
 import { createUuid } from '../../../utils/uuid';
 import type { SiteContentPlanCoverLayout, SiteContentPlanIconKey, SiteContentStatus } from '../../site-content/types/siteContent.types';
 
-export type PerformanceResultCategory =
-  | 'key-result'
-  | 'annual-report'
-  | 'achievement-report'
-  | 'risk-management-report'
-  | 'indicator-report'
-  | 'other';
+export type PerformanceResultCategory = string;
 
 export type PublicPerformanceResult = {
   id: string;
@@ -83,7 +77,7 @@ function performanceResultsTable() {
 }
 
 function normalizeCategory(value: string): PerformanceResultCategory {
-  return performanceCategoryOptions.some((option) => option.value === value) ? value as PerformanceResultCategory : 'other';
+  return value?.trim() || 'other';
 }
 
 export function getPerformanceCategory(category: PerformanceResultCategory) {
@@ -128,7 +122,7 @@ function toRow(result: PublicPerformanceResult) {
     subtitle: result.subtitle.trim(),
     description: result.description.trim(),
     icon_key: result.iconKey,
-    color: getPerformanceCategory(result.category).color,
+    color: result.color || getPerformanceCategory(result.category).color,
     action_label: result.actionLabel.trim() || 'ดูผลการดำเนินงาน',
     pdf_url: result.pdfUrl.trim(),
     cover_image_url: result.coverImageUrl.trim(),
@@ -139,7 +133,10 @@ function toRow(result: PublicPerformanceResult) {
 
 export function comparePerformanceResults(first: PublicPerformanceResult, second: PublicPerformanceResult) {
   if (first.fiscalYear !== second.fiscalYear) return second.fiscalYear - first.fiscalYear;
-  const categoryIndex = (category: PerformanceResultCategory) => performanceCategoryOptions.findIndex((option) => option.value === category);
+  const categoryIndex = (category: PerformanceResultCategory) => {
+    const index = performanceCategoryOptions.findIndex((option) => option.value === category);
+    return index < 0 ? Number.MAX_SAFE_INTEGER : index;
+  };
   const categoryCompare = categoryIndex(first.category) - categoryIndex(second.category);
   return categoryCompare || first.sortOrder - second.sortOrder || second.updatedAt.localeCompare(first.updatedAt);
 }
@@ -156,11 +153,19 @@ export async function loadPublicPerformanceResults() {
 }
 
 export async function savePublicPerformanceResult(result: PublicPerformanceResult) {
-  const { data } = await runSupabaseQuery<SupabaseDataResult<PerformanceResultRow>>(
-    performanceResultsTable().upsert(toRow(result), { onConflict: 'id' }).select(selectColumns).single(),
-    'บันทึกผลการดำเนินงานสำคัญไป Supabase',
+  const row = toRow(result);
+  const { data: updatedData } = await runSupabaseQuery<SupabaseDataResult<PerformanceResultRow | null>>(
+    performanceResultsTable().update(row).eq('id', result.id).select(selectColumns).maybeSingle(),
+    'แก้ไขผลการดำเนินงานสำคัญใน Supabase',
   );
-  return mapRow(data as PerformanceResultRow);
+
+  if (updatedData) return mapRow(updatedData);
+
+  const { data: insertedData } = await runSupabaseQuery<SupabaseDataResult<PerformanceResultRow>>(
+    performanceResultsTable().insert(row).select(selectColumns).single(),
+    'เพิ่มผลการดำเนินงานสำคัญไป Supabase',
+  );
+  return mapRow(insertedData);
 }
 
 export async function updatePublicPerformanceResultStatus(id: string, status: 'published' | 'draft') {

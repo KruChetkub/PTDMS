@@ -7,12 +7,17 @@ import { AdminCoverImageUpload } from './AdminCoverImageUpload';
 import { AdminPublicPdfUpload } from './AdminPublicPdfUpload';
 import { CoverImagePreview } from './CoverImagePreview';
 import { PublicRepositoryEditModal } from './PublicRepositoryEditModal';
+import { PublicRepositoryCategoryManager } from './PublicRepositoryCategoryManager';
+import {
+  findPublicRepositoryCategory,
+  getDefaultRepositoryCategories,
+  loadPublicRepositoryCategories,
+  type PublicRepositoryCategory,
+} from '../services/publicRepositoryCategories.service';
 import {
   createPublicResearchItem,
-  compareResearchItems,
   getResearchCategory,
   loadPublicResearchItems,
-  researchCategoryOptions,
   savePublicResearchItem,
   updatePublicResearchItemStatus,
   type PublicResearchItem,
@@ -79,6 +84,7 @@ function isSafeOptionalUrl(value: string) {
 export function PublicResearchItemsManager() {
   const { user, profile } = useAuthStore();
   const [items, setItems] = useState<PublicResearchItem[]>([]);
+  const [categories, setCategories] = useState<PublicRepositoryCategory[]>(() => getDefaultRepositoryCategories('research'));
   const [form, setForm] = useState<FormState>(defaultForm);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(0);
@@ -89,10 +95,20 @@ export function PublicResearchItemsManager() {
   const [error, setError] = useState<string | null>(null);
   const canManagePublicContent = profile?.role === 'admin' || profile?.role === 'super_admin';
   const canUploadPdf = canManagePublicContent;
+  const categoryOrder = useMemo(() => new Map(categories.map((category, index) => [category.key, index])), [categories]);
+  const compareItems = (first: PublicResearchItem, second: PublicResearchItem) => {
+    if (first.publicationYear !== second.publicationYear) return second.publicationYear - first.publicationYear;
+    const categoryCompare = (categoryOrder.get(first.category) ?? Number.MAX_SAFE_INTEGER)
+      - (categoryOrder.get(second.category) ?? Number.MAX_SAFE_INTEGER);
+    return categoryCompare || first.sortOrder - second.sortOrder || second.updatedAt.localeCompare(first.updatedAt);
+  };
   const myItems = useMemo(
-    () => canManagePublicContent ? [...items].sort(compareResearchItems) : [],
-    [canManagePublicContent, items],
+    () => canManagePublicContent ? [...items].sort(compareItems) : [],
+    [canManagePublicContent, items, categoryOrder],
   );
+  const activeCategories = categories.filter((category) => category.isActive || category.key === form.category);
+  const selectedCategory = findPublicRepositoryCategory(categories, form.category);
+  const currentCategory = selectedCategory || getResearchCategory(form.category);
   const totalPages = Math.max(1, Math.ceil(myItems.length / PAGE_SIZE));
   const safeCurrentPage = Math.min(currentPage, totalPages - 1);
   const pagedItems = myItems.slice(safeCurrentPage * PAGE_SIZE, safeCurrentPage * PAGE_SIZE + PAGE_SIZE);
@@ -105,8 +121,14 @@ export function PublicResearchItemsManager() {
     }
 
     let mounted = true;
-    loadPublicResearchItems()
-      .then((loadedItems) => { if (mounted) setItems(loadedItems); })
+    Promise.all([loadPublicResearchItems(), loadPublicRepositoryCategories('research')])
+      .then(([loadedItems, loadedCategories]) => { if (mounted) {
+        setItems(loadedItems);
+        setCategories(loadedCategories);
+        setForm((current) => loadedCategories.some((category) => category.key === current.category && category.isActive)
+          ? current
+          : { ...current, category: loadedCategories.find((category) => category.isActive)?.key || current.category });
+      } })
       .catch(() => { if (mounted) setError('ไม่สามารถโหลดข้อมูลงานวิจัยจาก Supabase ได้ กรุณาตรวจสอบ migration และการเชื่อมต่อ'); });
     return () => { mounted = false; };
   }, [canManagePublicContent]);
@@ -135,6 +157,13 @@ export function PublicResearchItemsManager() {
     setError(null);
   };
 
+  const handleCategoriesChange = (nextCategories: PublicRepositoryCategory[]) => {
+    setCategories(nextCategories);
+    setForm((current) => nextCategories.some((category) => category.key === current.category && (category.isActive || Boolean(editingId)))
+      ? current
+      : { ...current, category: nextCategories.find((category) => category.isActive)?.key || 'other' });
+  };
+
   const handleSave = async () => {
     if (!user || !canManagePublicContent) return;
     if (!form.title.trim()) {
@@ -150,7 +179,7 @@ export function PublicResearchItemsManager() {
       return;
     }
 
-    const category = getResearchCategory(form.category);
+    const category = currentCategory;
     const nextItem = editingItem
       ? {
           ...editingItem,
@@ -171,10 +200,10 @@ export function PublicResearchItemsManager() {
       setIsSaving(true);
       setError(null);
       const saved = await savePublicResearchItem(nextItem);
-      setItems((current) => [saved, ...current.filter((item) => item.id !== saved.id)].sort(compareResearchItems));
+      setItems((current) => [saved, ...current.filter((item) => item.id !== saved.id)].sort(compareItems));
       setForm(defaultForm);
       setEditingId(null);
-      setCurrentPage(0);
+      if (!editingItem) setCurrentPage(0);
       setMessage(editingItem ? 'แก้ไขงานวิจัยเรียบร้อย และบันทึกประวัติไว้แล้ว' : 'เพิ่มงานวิจัยลง Supabase เรียบร้อย');
     } catch {
       setError('บันทึกไม่สำเร็จ ข้อมูลยังไม่ถูกยืนยันลง Supabase กรุณาลองใหม่');
@@ -188,7 +217,7 @@ export function PublicResearchItemsManager() {
     const nextStatus = item.status === 'published' ? 'draft' : 'published';
     try {
       const saved = await updatePublicResearchItemStatus(item.id, nextStatus);
-      setItems((current) => current.map((currentItem) => currentItem.id === saved.id ? saved : currentItem).sort(compareResearchItems));
+      setItems((current) => current.map((currentItem) => currentItem.id === saved.id ? saved : currentItem).sort(compareItems));
       setMessage(nextStatus === 'published' ? 'เผยแพร่งานวิจัยเรียบร้อย' : 'เปลี่ยนงานวิจัยเป็นฉบับร่างแล้ว');
     } catch {
       setError('ไม่สามารถเปลี่ยนสถานะงานวิจัยได้');
@@ -224,7 +253,7 @@ export function PublicResearchItemsManager() {
         updatedAt: new Date().toISOString(),
       })));
       const savedById = new Map(savedItems.map((currentItem) => [currentItem.id, currentItem]));
-      setItems((current) => current.map((currentItem) => savedById.get(currentItem.id) || currentItem).sort(compareResearchItems));
+      setItems((current) => current.map((currentItem) => savedById.get(currentItem.id) || currentItem).sort(compareItems));
       setMessage('ย้ายลำดับงานวิจัยเรียบร้อย');
     } catch {
       setError('ไม่สามารถย้ายลำดับงานวิจัยได้');
@@ -252,7 +281,7 @@ export function PublicResearchItemsManager() {
           <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
             <div className="grid content-start gap-3">
               <div className="grid gap-3 sm:grid-cols-2">
-                <label className="block"><span className="text-sm font-medium text-slate-700">ประเภทงานวิจัย</span><select value={form.category} onChange={(event) => updateForm('category', event.target.value as ResearchCategory)} className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm">{researchCategoryOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
+                <div className="grid gap-2 sm:col-span-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end"><label className="block"><span className="text-sm font-medium text-slate-700">ประเภทงานวิจัย</span><select value={form.category} onChange={(event) => updateForm('category', event.target.value as ResearchCategory)} className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm">{activeCategories.map((category) => <option key={category.id} value={category.key}>{category.label}</option>)}</select></label>{user ? <PublicRepositoryCategoryManager repositoryType="research" title="ประเภทงานวิจัย" userId={user.id} categories={categories} onCategoriesChange={handleCategoriesChange} /> : null}</div>
                 <label className="block"><span className="text-sm font-medium text-slate-700">ปีที่เผยแพร่</span><input type="number" min={2400} max={2700} value={form.publicationYear} onChange={(event) => updateForm('publicationYear', Number(event.target.value))} className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm" /></label>
               </div>
               <label className="block"><span className="text-sm font-medium text-slate-700">ชื่องานวิจัย</span><input value={form.title} onChange={(event) => updateForm('title', event.target.value)} className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm" /></label>
@@ -300,7 +329,7 @@ export function PublicResearchItemsManager() {
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
                 <label className="block"><span className="text-sm font-medium text-slate-700">ลำดับการแสดงผล</span><input type="number" min={1} value={form.sortOrder} onChange={(event) => updateForm('sortOrder', Math.max(1, Number(event.target.value)))} className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm" /></label>
-                <div className="block"><span className="text-sm font-medium text-slate-700">สีการ์ดอัตโนมัติ</span><div className="mt-1 flex h-10 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-700"><span className={`h-4 w-4 rounded-full ${getResearchCategory(form.category).color}`} aria-hidden="true" />{getResearchCategory(form.category).label}</div></div>
+                <div className="block"><span className="text-sm font-medium text-slate-700">สีการ์ดอัตโนมัติ</span><div className="mt-1 flex h-10 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-700"><span className={`h-4 w-4 rounded-full ${currentCategory.color}`} aria-hidden="true" />{currentCategory.label}</div></div>
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <button type="button" onClick={() => updateForm('coverImageLayout', 'portrait')} className={`rounded-md border px-3 py-2 text-xs font-semibold transition ${form.coverImageLayout === 'portrait' ? 'border-emerald-600 bg-emerald-50 text-emerald-800' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}><span className="block text-sm font-semibold">360 x 640 px</span><span className="mt-1 block text-xs font-medium text-current/70">ภาพแนวตั้ง</span></button>
@@ -336,8 +365,8 @@ export function PublicResearchItemsManager() {
                     {pagedItems.map((item, index) => (
                       <tr key={item.id} className={editingId === item.id ? 'bg-brand-50/70' : undefined}>
                         <td className="px-3 py-3 font-semibold text-slate-700">{safeCurrentPage * PAGE_SIZE + index + 1}</td>
-                        <td className="px-3 py-3"><div className="flex min-w-0 items-center gap-3"><span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-white ${getResearchCategory(item.category).color}`}><FileText className="h-4 w-4" /></span><div className="min-w-0"><p className="max-w-md truncate font-semibold text-slate-950">{item.title}</p><p className="mt-1 max-w-md truncate text-xs text-slate-500">{item.researcherNames || item.organization || '-'}</p></div></div></td>
-                        <td className="px-3 py-3 text-slate-600">{getResearchCategory(item.category).label}</td>
+                        <td className="px-3 py-3"><div className="flex min-w-0 items-center gap-3"><span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-white ${findPublicRepositoryCategory(categories, item.category)?.color || item.color}`}><FileText className="h-4 w-4" /></span><div className="min-w-0"><p className="max-w-md truncate font-semibold text-slate-950">{item.title}</p><p className="mt-1 max-w-md truncate text-xs text-slate-500">{item.researcherNames || item.organization || '-'}</p></div></div></td>
+                        <td className="px-3 py-3 text-slate-600">{findPublicRepositoryCategory(categories, item.category)?.label || item.category}</td>
                         <td className="px-3 py-3 text-slate-600">{item.publicationYear}</td>
                         <td className="px-3 py-3 font-semibold text-slate-700">{item.sortOrder}</td>
                         <td className="px-3 py-3"><button type="button" onClick={() => void toggleStatus(item)} className={`inline-flex items-center justify-center rounded-full border px-3 py-1.5 text-xs font-semibold ${item.status === 'published' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-slate-50 text-slate-600'}`}>{item.status === 'published' ? 'เผยแพร่แล้ว' : 'ฉบับร่าง'}</button></td>
@@ -364,7 +393,7 @@ export function PublicResearchItemsManager() {
         <div className="grid gap-4 lg:grid-cols-2">
           <div className="grid content-start gap-3">
             <div className="grid gap-3 sm:grid-cols-2">
-              <label className="block"><span className="text-sm font-medium text-slate-700">ประเภทงานวิจัย</span><select value={form.category} onChange={(event) => updateForm('category', event.target.value as ResearchCategory)} className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm">{researchCategoryOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
+              <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end"><label className="block"><span className="text-sm font-medium text-slate-700">ประเภทงานวิจัย</span><select value={form.category} onChange={(event) => updateForm('category', event.target.value as ResearchCategory)} className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm">{activeCategories.map((category) => <option key={category.id} value={category.key}>{category.label}</option>)}</select></label>{user ? <PublicRepositoryCategoryManager repositoryType="research" title="ประเภทงานวิจัย" userId={user.id} categories={categories} onCategoriesChange={handleCategoriesChange} /> : null}</div>
               <label className="block"><span className="text-sm font-medium text-slate-700">ปีที่เผยแพร่</span><input type="number" min={2400} max={2700} value={form.publicationYear} onChange={(event) => updateForm('publicationYear', Number(event.target.value))} className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm" /></label>
             </div>
             <label className="block"><span className="text-sm font-medium text-slate-700">ชื่องานวิจัย</span><input value={form.title} onChange={(event) => updateForm('title', event.target.value)} className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm" /></label>

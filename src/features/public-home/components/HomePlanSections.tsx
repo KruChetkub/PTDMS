@@ -213,18 +213,15 @@ export function HomePlanSections({
   };
 
   const handleShelfPointerDown = (sectionKey: string, event: React.PointerEvent<HTMLDivElement>) => {
-    if (event.button !== 0) return;
+    if (event.pointerType !== 'mouse' || event.button !== 0) return;
     if ((event.target as HTMLElement).closest('a, button')) return;
 
-    event.preventDefault();
-    document.body.style.userSelect = 'none';
     dragStateRef.current[sectionKey] = {
       pointerId: event.pointerId,
       startX: event.clientX,
       scrollLeft: event.currentTarget.scrollLeft,
       moved: false,
     };
-    event.currentTarget.setPointerCapture(event.pointerId);
   };
 
   const handleShelfPointerMove = (sectionKey: string, event: React.PointerEvent<HTMLDivElement>) => {
@@ -233,10 +230,16 @@ export function HomePlanSections({
 
     const deltaX = event.clientX - dragState.startX;
     if (Math.abs(deltaX) > 4) {
+      if (!dragState.moved) {
+        document.body.style.userSelect = 'none';
+        event.currentTarget.setPointerCapture(event.pointerId);
+      }
       dragState.moved = true;
       event.preventDefault();
     }
-    event.currentTarget.scrollLeft = dragState.scrollLeft - deltaX;
+    if (dragState.moved) {
+      event.currentTarget.scrollLeft = dragState.scrollLeft - deltaX;
+    }
   };
 
   const finishShelfDrag = (sectionKey: string, event: React.PointerEvent<HTMLDivElement>) => {
@@ -349,10 +352,10 @@ export function HomePlanSections({
     const ActionElement = card.pdfUrl ? 'a' : 'button';
     const isLandscapeCover = card.coverImageLayout === 'landscape';
     const compactCardClassName = isLandscapeCover
-      ? 'flex w-[clamp(30rem,38vw,44rem)] shrink-0 snap-start gap-4 rounded-md bg-white/95 p-3 text-left text-slate-900 shadow-sm ring-1 ring-cyan-100/80 backdrop-blur transition hover:-translate-y-0.5 hover:shadow-lg'
-      : 'flex w-[clamp(23rem,29vw,33rem)] shrink-0 snap-start gap-4 rounded-md bg-white/95 p-3 text-left text-slate-900 shadow-sm ring-1 ring-cyan-100/80 backdrop-blur transition hover:-translate-y-0.5 hover:shadow-lg';
+      ? 'flex w-[88vw] shrink-0 gap-3 rounded-md bg-white/95 p-3 text-left text-slate-900 shadow-sm ring-1 ring-cyan-100/80 backdrop-blur transition hover:shadow-lg sm:w-[clamp(30rem,38vw,44rem)] sm:gap-4 sm:hover:-translate-y-0.5'
+      : 'flex w-[84vw] shrink-0 gap-3 rounded-md bg-white/95 p-3 text-left text-slate-900 shadow-sm ring-1 ring-cyan-100/80 backdrop-blur transition hover:shadow-lg sm:w-[clamp(23rem,29vw,33rem)] sm:gap-4 sm:hover:-translate-y-0.5';
     const compactCoverClassName = isLandscapeCover
-      ? 'group/media relative h-36 w-56 shrink-0 overflow-hidden rounded-md border border-slate-200 bg-slate-100 shadow-sm focus:outline-none focus:ring-2 focus:ring-cyan-300'
+      ? 'group/media relative h-28 w-40 shrink-0 overflow-hidden rounded-md border border-slate-200 bg-slate-100 shadow-sm focus:outline-none focus:ring-2 focus:ring-cyan-300 sm:h-36 sm:w-56'
       : 'group/media relative h-44 w-28 shrink-0 overflow-hidden rounded-md border border-slate-200 bg-slate-100 shadow-sm focus:outline-none focus:ring-2 focus:ring-cyan-300';
     const actionProps = card.pdfUrl
       ? { href: card.pdfUrl, target: '_blank', rel: 'noopener noreferrer' }
@@ -434,7 +437,8 @@ export function HomePlanSections({
                 <article id={section.id} className="scroll-mt-24">
                   <div className="relative">
                     <div
-                      className="flex cursor-grab select-none snap-x gap-4 overflow-x-auto overscroll-x-contain pb-5 active:cursor-grabbing 2xl:gap-5 [touch-action:pan-y]"
+                      className="flex cursor-grab select-none gap-4 overflow-x-auto overscroll-x-contain pb-5 active:cursor-grabbing 2xl:gap-5"
+                      style={{ touchAction: 'pan-x pan-y', WebkitOverflowScrolling: 'touch' }}
                       onPointerDown={(event) => handleShelfPointerDown(section.id, event)}
                       onPointerMove={(event) => handleShelfPointerMove(section.id, event)}
                       onPointerUp={(event) => finishShelfDrag(section.id, event)}

@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Activity, FileText, HeartPulse, Landmark, Puzzle, ShieldCheck, Target, TrendingUp, UsersRound } from 'lucide-react';
 import { HomePlanSections } from '../components/HomePlanSections';
-import { comparePublicUserPlans, loadPublicUserPlans, PUBLIC_USER_PLANS_UPDATED_EVENT, type PublicUserPlan, type PublicUserPlanCategory } from '../services/publicUserPlans.service';
+import { comparePublicUserPlans, loadPublicUserPlans, PUBLIC_USER_PLANS_UPDATED_EVENT, type PublicUserPlan } from '../services/publicUserPlans.service';
+import { getDefaultRepositoryCategories, loadPublicRepositoryCategories, type PublicRepositoryCategory } from '../services/publicRepositoryCategories.service';
 import type { HomePlanSection } from '../types/publicHome.types';
 import type { SiteContentPlanIconKey } from '../../site-content/types/siteContent.types';
 
@@ -15,16 +16,6 @@ const planIconMap = {
   'shield-users': ShieldCheck,
   file: FileText,
 } satisfies Record<SiteContentPlanIconKey, typeof Landmark>;
-
-const categorySections: Array<Pick<HomePlanSection, 'id' | 'number' | 'title' | 'tone'> & { category: PublicUserPlanCategory }> = [
-  { id: 'plan-level-1', category: 'plan-level-1', number: '1', title: 'แผนระดับ 1', tone: 'blue' },
-  { id: 'plan-level-2', category: 'plan-level-2', number: '2', title: 'แผนระดับ 2', tone: 'emerald' },
-  { id: 'plan-level-3', category: 'plan-level-3', number: '3', title: 'แผนระดับ 3', tone: 'violet' },
-  { id: 'executive-policy', category: 'executive-policy', number: '4', title: 'นโยบายผู้บริหาร', tone: 'orange' },
-  { id: 'annual-budget-document', category: 'annual-budget-document', number: '5', title: 'เอกสารงบประมาณรายจ่ายประจำปี', tone: 'blue' },
-  { id: 'action-plan', category: 'action-plan', number: '6', title: 'แผนปฏิบัติราชการ', tone: 'emerald' },
-  { id: 'other', category: 'other', number: '7', title: 'อื่นๆ', tone: 'rose' },
-];
 
 const heroSectionClassName = 'relative isolate overflow-hidden bg-[#073B74] px-3 py-1.5 text-white sm:px-4 sm:py-2 lg:px-5';
 
@@ -48,6 +39,7 @@ function mapPlanToCard(plan: PublicUserPlan) {
 
 export function PublicOfficialPlansView({ logoUrl }: PublicOfficialPlansViewProps) {
   const [plans, setPlans] = useState<PublicUserPlan[]>([]);
+  const [categories, setCategories] = useState<PublicRepositoryCategory[]>(() => getDefaultRepositoryCategories('plan'));
 
   useEffect(() => {
     let isMounted = true;
@@ -66,6 +58,9 @@ export function PublicOfficialPlansView({ logoUrl }: PublicOfficialPlansViewProp
 
     window.addEventListener(PUBLIC_USER_PLANS_UPDATED_EVENT, handlePlansUpdated);
     void loadPlans();
+    void loadPublicRepositoryCategories('plan').then((loadedCategories) => {
+      if (isMounted) setCategories(loadedCategories.filter((category) => category.isActive));
+    }).catch(() => undefined);
 
     return () => {
       isMounted = false;
@@ -76,16 +71,17 @@ export function PublicOfficialPlansView({ logoUrl }: PublicOfficialPlansViewProp
   const publishedPlans = useMemo(() => plans.filter((plan) => plan.card.status === 'published').sort(comparePublicUserPlans), [plans]);
   const sections = useMemo(
     () =>
-      categorySections
-        .map((section) => ({
-          id: section.id,
-          number: section.number,
-          title: section.title,
-          tone: section.tone,
-          cards: publishedPlans.filter((plan) => plan.category === section.category).sort(comparePublicUserPlans).map(mapPlanToCard),
+      categories
+        .filter((category) => category.isActive)
+        .map((category, index) => ({
+          id: category.key,
+          number: String(index + 1),
+          title: category.label,
+          tone: category.tone,
+          cards: publishedPlans.filter((plan) => plan.category === category.key).sort(comparePublicUserPlans).map((plan) => ({ ...mapPlanToCard(plan), color: category.color })),
         }))
         .filter((section) => section.cards.length > 0),
-    [publishedPlans],
+    [categories, publishedPlans],
   );
   const visibleCategoryCount = sections.length;
 

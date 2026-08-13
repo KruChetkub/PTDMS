@@ -23,8 +23,14 @@ import { AdminCoverImageUpload } from './AdminCoverImageUpload';
 import { AdminPublicPdfUpload } from './AdminPublicPdfUpload';
 import { CoverImagePreview } from './CoverImagePreview';
 import { PublicRepositoryEditModal } from './PublicRepositoryEditModal';
+import { PublicRepositoryCategoryManager } from './PublicRepositoryCategoryManager';
 import {
-  comparePublicUserPlans,
+  findPublicRepositoryCategory,
+  getDefaultRepositoryCategories,
+  loadPublicRepositoryCategories,
+  type PublicRepositoryCategory,
+} from '../services/publicRepositoryCategories.service';
+import {
   createPublicUserPlan,
   loadPublicUserPlans,
   PUBLIC_USER_PLANS_UPDATED_EVENT,
@@ -47,17 +53,6 @@ const planIconMap = {
   'shield-users': ShieldCheck,
   file: FileText,
 } satisfies Record<SiteContentPlanIconKey, typeof Landmark>;
-
-const categoryOptions: Array<{ value: PublicUserPlanCategory; label: string; colorLabel: string }> = [
-  { value: 'plan-level-1', label: 'แผนระดับ 1', colorLabel: 'น้ำเงิน' },
-  { value: 'plan-level-2', label: 'แผนระดับ 2', colorLabel: 'เขียว' },
-  { value: 'plan-level-3', label: 'แผนระดับ 3', colorLabel: 'ม่วง' },
-  { value: 'executive-policy', label: 'นโยบายผู้บริหาร', colorLabel: 'ส้ม' },
-  { value: 'annual-budget-document', label: 'เอกสารงบประมาณรายจ่ายประจำปี', colorLabel: 'ฟ้า' },
-  { value: 'action-plan', label: 'แผนปฏิบัติราชการ', colorLabel: 'เขียวอมฟ้า' },
-  { value: 'other', label: 'อื่นๆ', colorLabel: 'ชมพู' },
-];
-
 
 type PublicUserPlanFormState = {
   category: PublicUserPlanCategory;
@@ -87,21 +82,17 @@ const defaultFormState: PublicUserPlanFormState = {
   status: 'draft',
 };
 
-function getCategoryLabel(category: PublicUserPlanCategory) {
-  return categoryOptions.find((option) => option.value === category)?.label || category;
-}
-
 function normalizeSortOrder(value: number) {
   return Number.isFinite(value) ? Math.max(1, Math.round(value)) : 10;
 }
 
-function toPlanCard(form: PublicUserPlanFormState): SiteContentPlanCard {
+function toPlanCard(form: PublicUserPlanFormState, categoryColor: string): SiteContentPlanCard {
   return {
     title: form.title.trim(),
     subtitle: form.subtitle.trim(),
     description: form.description.trim(),
     iconKey: form.iconKey,
-    color: getPublicUserPlanCategoryColor(form.category),
+    color: categoryColor,
     actionLabel: form.actionLabel.trim() || 'รายละเอียด',
     pdfUrl: form.pdfUrl.trim(),
     coverImageUrl: form.coverImageUrl.trim(),
@@ -130,6 +121,7 @@ function toFormState(plan: PublicUserPlan): PublicUserPlanFormState {
 export function PublicUserPlansSection() {
   const { user, profile } = useAuthStore();
   const [plans, setPlans] = useState<PublicUserPlan[]>([]);
+  const [categories, setCategories] = useState<PublicRepositoryCategory[]>(() => getDefaultRepositoryCategories('plan'));
   const [form, setForm] = useState<PublicUserPlanFormState>(defaultFormState);
   const [editingPlanId, setEditingPlanId] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(0);
@@ -140,10 +132,18 @@ export function PublicUserPlansSection() {
   const [error, setError] = useState<string | null>(null);
   const canManagePublicContent = profile?.role === 'admin' || profile?.role === 'super_admin';
   const canUploadPdf = canManagePublicContent;
+  const categoryOrder = useMemo(() => new Map(categories.map((category, index) => [category.key, index])), [categories]);
+  const comparePlans = (first: PublicUserPlan, second: PublicUserPlan) => {
+    const categoryCompare = (categoryOrder.get(first.category) ?? Number.MAX_SAFE_INTEGER)
+      - (categoryOrder.get(second.category) ?? Number.MAX_SAFE_INTEGER);
+    return categoryCompare || first.sortOrder - second.sortOrder || second.updatedAt.localeCompare(first.updatedAt);
+  };
   const myPlans = useMemo(
-    () => canManagePublicContent ? [...plans].sort(comparePublicUserPlans) : [],
-    [canManagePublicContent, plans],
+    () => canManagePublicContent ? [...plans].sort(comparePlans) : [],
+    [canManagePublicContent, plans, categoryOrder],
   );
+  const activeCategories = categories.filter((category) => category.isActive || category.key === form.category);
+  const selectedCategory = findPublicRepositoryCategory(categories, form.category);
   const totalPages = Math.max(1, Math.ceil(myPlans.length / PAGE_SIZE));
   const safeCurrentPage = Math.min(currentPage, totalPages - 1);
   const pagedMyPlans = myPlans.slice(safeCurrentPage * PAGE_SIZE, safeCurrentPage * PAGE_SIZE + PAGE_SIZE);
@@ -158,9 +158,16 @@ export function PublicUserPlansSection() {
     let isMounted = true;
 
     const loadPlans = async () => {
-      const document = await loadPublicUserPlans();
+      const [document, loadedCategories] = await Promise.all([
+        loadPublicUserPlans(),
+        loadPublicRepositoryCategories('plan'),
+      ]);
       if (isMounted) {
         setPlans(document.plans);
+        setCategories(loadedCategories);
+        setForm((current) => loadedCategories.some((category) => category.key === current.category && category.isActive)
+          ? current
+          : { ...current, category: loadedCategories.find((category) => category.isActive)?.key || current.category });
       }
     };
 
@@ -196,7 +203,14 @@ export function PublicUserPlansSection() {
     return maxSortOrder + 10;
   };
 
-  const getPlansInCategory = (category: PublicUserPlanCategory) => myPlans.filter((plan) => plan.category === category).sort(comparePublicUserPlans);
+  const getPlansInCategory = (category: PublicUserPlanCategory) => myPlans.filter((plan) => plan.category === category).sort(comparePlans);
+
+  const handleCategoriesChange = (nextCategories: PublicRepositoryCategory[]) => {
+    setCategories(nextCategories);
+    setForm((current) => nextCategories.some((category) => category.key === current.category && (category.isActive || Boolean(editingPlanId)))
+      ? current
+      : { ...current, category: nextCategories.find((category) => category.isActive)?.key || 'other' });
+  };
 
   const resetForm = () => {
     setForm(defaultFormState);
@@ -228,12 +242,13 @@ export function PublicUserPlansSection() {
     try {
       setIsSaving(true);
       setError(null);
+      const categoryColor = selectedCategory?.color || getPublicUserPlanCategoryColor(form.category);
       const plan = editingPlan
         ? {
             ...editingPlan,
             category: form.category,
             sortOrder: nextSortOrder,
-            card: toPlanCard(form),
+            card: toPlanCard(form, categoryColor),
             updatedAt: new Date().toISOString(),
           }
         : createPublicUserPlan({
@@ -242,14 +257,14 @@ export function PublicUserPlansSection() {
             ownerWorkGroup: profile?.work_group || profile?.department || null,
             category: form.category,
             sortOrder: nextSortOrder,
-            card: toPlanCard(form),
+            card: toPlanCard(form, categoryColor),
           });
       const result = await savePublicUserPlan(plan);
       const savedPlan = result.plan;
-      setPlans((currentPlans) => [savedPlan, ...currentPlans.filter((currentPlan) => currentPlan.id !== savedPlan.id)].sort(comparePublicUserPlans));
+      setPlans((currentPlans) => [savedPlan, ...currentPlans.filter((currentPlan) => currentPlan.id !== savedPlan.id)].sort(comparePlans));
       setForm(defaultFormState);
       setEditingPlanId(null);
-      setCurrentPage(0);
+      if (!editingPlan) setCurrentPage(0);
       const actionLabel = editingPlan ? 'แก้ไขรายการเรียบร้อย' : 'บันทึกแผนของฉันเรียบร้อย';
       setMessage(result.source === 'supabase' ? actionLabel : `${actionLabel}ในเครื่อง หากต้องการให้ทุกคนเห็น กรุณาตรวจสอบสิทธิ์ Supabase`);
     } catch {
@@ -271,7 +286,7 @@ export function PublicUserPlansSection() {
             ? result.plan || { ...currentPlan, updatedAt: new Date().toISOString(), card: { ...currentPlan.card, status: nextStatus } }
             : currentPlan,
         )
-        .sort(comparePublicUserPlans),
+        .sort(comparePlans),
     );
   };
 
@@ -298,7 +313,7 @@ export function PublicUserPlansSection() {
       setPlans((currentPlans) =>
         currentPlans
           .map((currentPlan) => movedPlans.find((movedPlan) => movedPlan.id === currentPlan.id) || currentPlan)
-          .sort(comparePublicUserPlans),
+          .sort(comparePlans),
       );
       setMessage('ปรับลำดับการแสดงผลเรียบร้อย');
     } catch {
@@ -352,15 +367,16 @@ export function PublicUserPlansSection() {
 
           <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
             <div className="grid gap-3">
-              <div className="block">
+              <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
                 <label className="block">
                   <span className="text-sm font-medium text-slate-700">หัวข้อแผน</span>
                   <select className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm" value={form.category} onChange={(event) => updateForm('category', event.target.value as PublicUserPlanCategory)}>
-                    {categoryOptions.map((option) => (
-                      <option key={option.value} value={option.value}>{option.label}</option>
+                    {activeCategories.map((category) => (
+                      <option key={category.id} value={category.key}>{category.label}</option>
                     ))}
                   </select>
                 </label>
+                {user ? <PublicRepositoryCategoryManager repositoryType="plan" title="หัวข้อแผน" userId={user.id} categories={categories} onCategoriesChange={handleCategoriesChange} /> : null}
               </div>
 
               <div className="hidden">
@@ -374,7 +390,7 @@ export function PublicUserPlansSection() {
                 <div className="block">
                   <span className="text-sm font-medium text-slate-700">ตัวอย่างการเรียง</span>
                   <div className="mt-1 flex h-10 items-center rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-600">
-                    {getCategoryLabel(form.category)} / ลำดับ {form.sortOrder || getNextSortOrder(form.category)}
+                    {selectedCategory?.label || form.category} / ลำดับ {form.sortOrder || getNextSortOrder(form.category)}
                   </div>
                 </div>
               </div>
@@ -445,8 +461,8 @@ export function PublicUserPlansSection() {
                 <div className="block">
                   <span className="text-sm font-medium text-slate-700">สีการ์ดอัตโนมัติ</span>
                   <div className="mt-1 flex h-10 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-700">
-                    <span className={`h-4 w-4 rounded-full ${getPublicUserPlanCategoryColor(form.category)}`} aria-hidden="true" />
-                    {categoryOptions.find((option) => option.value === form.category)?.colorLabel}
+                    <span className={`h-4 w-4 rounded-full ${selectedCategory?.color || getPublicUserPlanCategoryColor(form.category)}`} aria-hidden="true" />
+                    {selectedCategory?.label || form.category}
                   </div>
                 </div>
               </div>
@@ -521,7 +537,7 @@ export function PublicUserPlansSection() {
                               </div>
                             </div>
                           </td>
-                          <td className="px-3 py-3 text-slate-600">{getCategoryLabel(plan.category)}</td>
+                          <td className="px-3 py-3 text-slate-600">{findPublicRepositoryCategory(categories, plan.category)?.label || plan.category}</td>
                           <td className="px-3 py-3 font-semibold text-slate-700">{plan.sortOrder}</td>
                           <td className="px-3 py-3">
                             <button type="button" onClick={() => void handleToggleMyPlan(plan)} className={`inline-flex items-center justify-center rounded-full border px-3 py-1.5 text-xs font-semibold transition ${plan.card.status === 'published' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-slate-50 text-slate-600'}`}>
@@ -583,7 +599,7 @@ export function PublicUserPlansSection() {
       >
         <div className="grid gap-4 lg:grid-cols-2">
           <div className="grid content-start gap-3">
-            <label className="block"><span className="text-sm font-medium text-slate-700">หัวข้อแผน</span><select className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm" value={form.category} onChange={(event) => updateForm('category', event.target.value as PublicUserPlanCategory)}>{categoryOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
+            <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end"><label className="block"><span className="text-sm font-medium text-slate-700">หัวข้อแผน</span><select className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm" value={form.category} onChange={(event) => updateForm('category', event.target.value as PublicUserPlanCategory)}>{activeCategories.map((category) => <option key={category.id} value={category.key}>{category.label}</option>)}</select></label>{user ? <PublicRepositoryCategoryManager repositoryType="plan" title="หัวข้อแผน" userId={user.id} categories={categories} onCategoriesChange={handleCategoriesChange} /> : null}</div>
             <label className="block"><span className="text-sm font-medium text-slate-700">ชื่อแผน</span><input className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm" value={form.title} onChange={(event) => updateForm('title', event.target.value)} /></label>
             <label className="block"><span className="text-sm font-medium text-slate-700">รายละเอียด</span><textarea rows={5} className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm" value={form.description} onChange={(event) => updateForm('description', event.target.value)} /></label>
           </div>
