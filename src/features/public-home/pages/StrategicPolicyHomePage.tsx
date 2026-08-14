@@ -175,7 +175,7 @@ export function StrategicPolicyHomePage() {
           </div>
         </section>
 
-        {visibleSections.map((section, sectionIndex) => {
+        {visibleSections.map((section) => {
           const items = displayItems(section.key);
           const isPrimaryPlanSection = section.key === 'plan';
           return (
@@ -183,7 +183,6 @@ export function StrategicPolicyHomePage() {
               <div className="mx-auto max-w-[1600px] px-4 sm:px-6 lg:px-8">
                 {isPrimaryPlanSection ? (
                   <div className="flex items-center gap-3">
-                    <span className={`flex h-11 w-11 items-center justify-center rounded-full text-xl font-bold text-white ${section.color}`}>{sectionIndex + 1}</span>
                     <h2 className="text-xl font-bold text-slate-900">{section.label}</h2>
                   </div>
                 ) : null}
@@ -210,11 +209,10 @@ export function StrategicPolicyHomePage() {
                   </div>
                 ) : (
                   <div className="grid gap-x-4 gap-y-6 lg:grid-cols-2">
-                    {items.map((item, itemIndex) => {
+                    {items.map((item) => {
                       const Icon = item.icon;
                       return <div key={item.id} className="flex min-w-0 flex-col">
                         <div className="mb-3 flex items-center gap-3 px-1">
-                          <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-xl font-bold text-white ${item.color}`}>{itemIndex + 2}</span>
                           <h2 className="min-w-0 text-lg font-bold leading-7 text-slate-950">{item.title}</h2>
                         </div>
                         <article className={`flex-1 rounded-md border p-5 ${item.tone}`}>
