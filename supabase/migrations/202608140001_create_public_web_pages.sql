@@ -5,7 +5,7 @@ alter table public.public_repository_categories
 
 alter table public.public_repository_categories
   add constraint public_repository_categories_type_valid
-  check (repository_type in ('plan', 'performance', 'research', 'home', 'web-page'));
+  check (repository_type in ('plan', 'performance', 'research', 'home', 'web-page', 'web-page-item'));
 
 create table if not exists public.public_web_pages (
   id uuid primary key default gen_random_uuid(),
@@ -95,6 +95,72 @@ $$;
 create index if not exists idx_public_web_pages_public_listing
 on public.public_web_pages (status, category, sort_order, updated_at desc);
 
+create table if not exists public.public_web_page_items (
+  id uuid primary key default gen_random_uuid(),
+  page_id uuid not null references public.public_web_pages(id) on delete cascade,
+  category text not null default 'general',
+  title text not null,
+  description text not null default '',
+  pdf_url text not null default '',
+  cover_image_url text not null default '',
+  cover_image_layout text not null default 'portrait',
+  sort_order integer not null default 10,
+  status text not null default 'draft',
+  created_by uuid references public.profiles(user_id) on delete set null,
+  updated_by uuid references public.profiles(user_id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint public_web_page_items_title_valid check (length(trim(title)) between 1 and 160),
+  constraint public_web_page_items_description_valid check (length(description) <= 4000),
+  constraint public_web_page_items_pdf_url_safe check (pdf_url = '' or pdf_url ~* '^https?://'),
+  constraint public_web_page_items_cover_url_safe check (cover_image_url = '' or cover_image_url ~* '^https?://'),
+  constraint public_web_page_items_cover_layout_valid check (cover_image_layout in ('portrait', 'landscape')),
+  constraint public_web_page_items_sort_order_valid check (sort_order > 0),
+  constraint public_web_page_items_status_valid check (status in ('draft', 'published'))
+);
+
+alter table public.public_web_page_items
+  add column if not exists page_id uuid references public.public_web_pages(id) on delete cascade,
+  add column if not exists category text not null default 'general',
+  add column if not exists title text,
+  add column if not exists description text not null default '',
+  add column if not exists pdf_url text not null default '',
+  add column if not exists cover_image_url text not null default '',
+  add column if not exists cover_image_layout text not null default 'portrait',
+  add column if not exists sort_order integer not null default 10,
+  add column if not exists status text not null default 'draft',
+  add column if not exists created_by uuid references public.profiles(user_id) on delete set null,
+  add column if not exists updated_by uuid references public.profiles(user_id) on delete set null,
+  add column if not exists created_at timestamptz not null default now(),
+  add column if not exists updated_at timestamptz not null default now();
+
+create index if not exists idx_public_web_page_items_listing
+on public.public_web_page_items (page_id, status, category, sort_order, updated_at desc);
+
+insert into public.public_web_page_items
+  (page_id, category, title, description, pdf_url, cover_image_url, cover_image_layout, sort_order, status, created_by, updated_by, created_at, updated_at)
+select
+  page.id,
+  'general',
+  page.title,
+  page.description,
+  coalesce(page.pdf_url, ''),
+  coalesce(page.cover_image_url, ''),
+  coalesce(page.cover_image_layout, 'portrait'),
+  coalesce(page.sort_order, 10),
+  page.status,
+  page.created_by,
+  page.updated_by,
+  page.created_at,
+  page.updated_at
+from public.public_web_pages page
+where (coalesce(page.pdf_url, '') <> '' or coalesce(page.cover_image_url, '') <> '')
+  and not exists (
+    select 1
+    from public.public_web_page_items item
+    where item.page_id = page.id
+  );
+
 insert into public.public_repository_categories
   (id, repository_type, category_key, label, color, tone, sort_order, is_active)
 values
@@ -103,10 +169,24 @@ values
   ('53000000-0000-4000-8000-000000000003', 'web-page', 'document', 'เอกสารเผยแพร่', 'bg-violet-600', 'violet', 30, true)
 on conflict (repository_type, category_key) do nothing;
 
+insert into public.public_repository_categories
+  (id, repository_type, category_key, label, color, tone, sort_order, is_active)
+values
+  ('54000000-0000-4000-8000-000000000001', 'web-page-item', 'general', 'รายการทั่วไป', 'bg-blue-600', 'blue', 10, true),
+  ('54000000-0000-4000-8000-000000000002', 'web-page-item', 'year-2568', 'ปี 2568', 'bg-emerald-600', 'emerald', 20, true),
+  ('54000000-0000-4000-8000-000000000003', 'web-page-item', 'year-2567', 'ปี 2567', 'bg-violet-600', 'violet', 30, true),
+  ('54000000-0000-4000-8000-000000000004', 'web-page-item', 'other', 'อื่น ๆ', 'bg-rose-500', 'rose', 40, true)
+on conflict (repository_type, category_key) do nothing;
+
 drop trigger if exists validate_public_web_page_category on public.public_web_pages;
 create trigger validate_public_web_page_category
 before insert or update of category on public.public_web_pages
 for each row execute function public.validate_public_repository_category('web-page');
+
+drop trigger if exists validate_public_web_page_item_category on public.public_web_page_items;
+create trigger validate_public_web_page_item_category
+before insert or update of category on public.public_web_page_items
+for each row execute function public.validate_public_repository_category('web-page-item');
 
 create or replace function public.prevent_used_public_repository_category_delete()
 returns trigger
@@ -125,6 +205,8 @@ begin
     select exists(select 1 from public.public_home_content_items where section = old.category_key) into category_is_used;
   elsif old.repository_type = 'web-page' then
     select exists(select 1 from public.public_web_pages where category = old.category_key) into category_is_used;
+  elsif old.repository_type = 'web-page-item' then
+    select exists(select 1 from public.public_web_page_items where category = old.category_key) into category_is_used;
   end if;
 
   if category_is_used then
@@ -152,6 +234,11 @@ create trigger set_public_web_pages_updated_at
 before update on public.public_web_pages
 for each row execute function public.set_public_web_pages_updated_at();
 
+drop trigger if exists set_public_web_page_items_updated_at on public.public_web_page_items;
+create trigger set_public_web_page_items_updated_at
+before update on public.public_web_page_items
+for each row execute function public.set_updated_at();
+
 create or replace function public.increment_public_web_page_view_count(p_page_id uuid)
 returns void
 language sql
@@ -165,6 +252,7 @@ as $$
 $$;
 
 alter table public.public_web_pages enable row level security;
+alter table public.public_web_page_items enable row level security;
 
 drop policy if exists "public web pages read published or admin" on public.public_web_pages;
 create policy "public web pages read published or admin"
@@ -205,8 +293,57 @@ for delete
 to authenticated
 using (public.is_privileged_role(array['super_admin', 'admin']::public.user_role[]));
 
+drop policy if exists "public web page items read published or admin" on public.public_web_page_items;
+create policy "public web page items read published or admin"
+on public.public_web_page_items
+for select
+to anon, authenticated
+using (
+  (
+    status = 'published'
+    and exists (
+      select 1
+      from public.public_web_pages page
+      where page.id = public_web_page_items.page_id
+        and page.status = 'published'
+    )
+  )
+  or public.is_privileged_role(array['super_admin', 'admin']::public.user_role[])
+);
+
+drop policy if exists "public web page items admin insert" on public.public_web_page_items;
+create policy "public web page items admin insert"
+on public.public_web_page_items
+for insert
+to authenticated
+with check (
+  public.is_privileged_role(array['super_admin', 'admin']::public.user_role[])
+  and created_by = auth.uid()
+  and updated_by = auth.uid()
+);
+
+drop policy if exists "public web page items admin update" on public.public_web_page_items;
+create policy "public web page items admin update"
+on public.public_web_page_items
+for update
+to authenticated
+using (public.is_privileged_role(array['super_admin', 'admin']::public.user_role[]))
+with check (
+  public.is_privileged_role(array['super_admin', 'admin']::public.user_role[])
+  and updated_by = auth.uid()
+);
+
+drop policy if exists "public web page items admin delete" on public.public_web_page_items;
+create policy "public web page items admin delete"
+on public.public_web_page_items
+for delete
+to authenticated
+using (public.is_privileged_role(array['super_admin', 'admin']::public.user_role[]));
+
 grant select on public.public_web_pages to anon;
 grant select, insert, update, delete on public.public_web_pages to authenticated;
+grant select on public.public_web_page_items to anon;
+grant select, insert, update, delete on public.public_web_page_items to authenticated;
 grant execute on function public.increment_public_web_page_view_count(uuid) to anon, authenticated;
 
 notify pgrst, 'reload schema';

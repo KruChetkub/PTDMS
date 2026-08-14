@@ -2,7 +2,7 @@ import { supabase } from '../../../lib/supabase';
 import { runSupabaseQuery } from '../../../lib/supabase-query';
 import { createUuid } from '../../../utils/uuid';
 
-export type PublicRepositoryType = 'plan' | 'performance' | 'research' | 'home' | 'web-page';
+export type PublicRepositoryType = 'plan' | 'performance' | 'research' | 'home' | 'web-page' | 'web-page-item';
 export type PublicRepositoryCategoryTone = 'blue' | 'emerald' | 'violet' | 'orange' | 'rose';
 
 export type PublicRepositoryCategory = {
@@ -77,6 +77,12 @@ const defaultCategoryRows: Record<PublicRepositoryType, ReadonlyArray<readonly [
     ['general', 'หน้าเว็บไซต์ทั่วไป', 'bg-blue-600', 'blue'],
     ['policy', 'นโยบายและประกาศ', 'bg-emerald-600', 'emerald'],
     ['document', 'เอกสารเผยแพร่', 'bg-violet-600', 'violet'],
+  ],
+  'web-page-item': [
+    ['general', 'รายการทั่วไป', 'bg-blue-600', 'blue'],
+    ['year-2568', 'ปี 2568', 'bg-emerald-600', 'emerald'],
+    ['year-2567', 'ปี 2567', 'bg-violet-600', 'violet'],
+    ['other', 'อื่น ๆ', 'bg-rose-500', 'rose'],
   ],
 };
 

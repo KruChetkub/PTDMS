@@ -323,8 +323,10 @@ export function HomePlanSections({
             <PdfFirstPageCover pdfUrl={card.pdfUrl} title={card.title} />
           </a>
         ) : (
-          <div className="mx-auto flex h-20 w-20 shrink-0 items-center justify-center rounded-md bg-[linear-gradient(135deg,#0878D8,#12B8B1)] text-white shadow-sm">
-            <Icon className="h-9 w-9" aria-hidden="true" />
+          <div className="flex w-full justify-center">
+            <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-md bg-[linear-gradient(135deg,#0878D8,#12B8B1)] text-white shadow-sm">
+              <Icon className="h-9 w-9" aria-hidden="true" />
+            </div>
           </div>
         )}
 

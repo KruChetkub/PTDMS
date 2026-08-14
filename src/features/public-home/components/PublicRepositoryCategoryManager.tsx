@@ -14,6 +14,7 @@ import {
 type Props = {
   repositoryType: PublicRepositoryType;
   title: string;
+  buttonLabel?: string;
   userId: string;
   categories: PublicRepositoryCategory[];
   onCategoriesChange: (categories: PublicRepositoryCategory[]) => void;
@@ -41,6 +42,7 @@ function sortCategories(categories: PublicRepositoryCategory[]) {
 export function PublicRepositoryCategoryManager({
   repositoryType,
   title,
+  buttonLabel,
   userId,
   categories,
   onCategoriesChange,
@@ -171,7 +173,7 @@ export function PublicRepositoryCategoryManager({
         className="inline-flex h-10 items-center justify-center gap-2 whitespace-nowrap rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
       >
         <Settings2 className="h-4 w-4" aria-hidden="true" />
-        จัดการ{title}
+        {buttonLabel || `จัดการ${title}`}
       </button>
 
       {isOpen ? (

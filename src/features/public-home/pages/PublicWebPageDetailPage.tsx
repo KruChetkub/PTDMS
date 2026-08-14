@@ -1,21 +1,50 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ArrowLeft, FileQuestion, FileText } from 'lucide-react';
 import { CookieConsentBanner } from '../components/CookieConsentBanner';
 import { HomeFooter } from '../components/HomeFooter';
 import { HomePlanSections } from '../components/HomePlanSections';
-import { incrementPublicWebPageViewCount, loadPublishedPublicWebPage, type PublicWebPage } from '../services/publicWebPages.service';
+import { incrementPublicWebPageViewCount, loadPublishedPublicWebPageWithItems, type PublicWebPageWithItems } from '../services/publicWebPages.service';
+import { findPublicRepositoryCategory, getDefaultRepositoryCategories, loadPublicRepositoryCategories, type PublicRepositoryCategory } from '../services/publicRepositoryCategories.service';
 
 export function PublicWebPageDetailPage() {
   const { slug = '' } = useParams();
-  const [page, setPage] = useState<PublicWebPage | null>(null);
+  const [page, setPage] = useState<PublicWebPageWithItems | null>(null);
+  const [itemCategories, setItemCategories] = useState<PublicRepositoryCategory[]>(() => getDefaultRepositoryCategories('web-page-item'));
   const [isLoading, setIsLoading] = useState(true);
+
+  const sections = useMemo(() => {
+    if (!page) return [];
+    const categoryMap = new Map(itemCategories.map((category) => [category.key, category]));
+    const categories = itemCategories.filter((category) => category.isActive && page.items.some((item) => item.category === category.key));
+    const missingCategories = Array.from(new Set(page.items.map((item) => item.category)))
+      .filter((category) => !categoryMap.has(category))
+      .map((category) => ({ key: category, label: category, color: 'bg-brand-600', tone: 'blue' as const }));
+    return [...categories, ...missingCategories].map((category, index) => ({
+      id: `web-page-${page.id}-${category.key}`,
+      number: String(index + 1),
+      title: category.label,
+      tone: category.tone,
+      cards: page.items.filter((item) => item.category === category.key).map((item) => ({
+        title: item.title,
+        subtitle: item.description || '-',
+        description: item.description,
+        icon: FileText,
+        color: findPublicRepositoryCategory(itemCategories, item.category)?.color || category.color,
+        actionLabel: item.pdfUrl ? 'เปิดเอกสาร' : 'รายละเอียด',
+        pdfUrl: item.pdfUrl,
+        coverImageUrl: item.coverImageUrl,
+        coverImageLayout: item.coverImageLayout,
+      })),
+    }));
+  }, [page, itemCategories]);
 
   useEffect(() => {
     let isMounted = true;
-    void loadPublishedPublicWebPage(slug)
-      .then((loadedPage) => {
+    void Promise.all([loadPublishedPublicWebPageWithItems(slug), loadPublicRepositoryCategories('web-page-item')])
+      .then(([loadedPage, loadedCategories]) => {
         if (isMounted) {
+          setItemCategories(loadedCategories.length ? loadedCategories : getDefaultRepositoryCategories('web-page-item'));
           setPage(loadedPage);
           document.title = loadedPage ? `${loadedPage.title} | SmartDSP` : 'ไม่พบหน้าเว็บไซต์ | SmartDSP';
           if (loadedPage) void incrementPublicWebPageViewCount(loadedPage.id);
@@ -64,30 +93,14 @@ export function PublicWebPageDetailPage() {
                   {page.description ? <p className="mt-1 line-clamp-2 text-xs font-medium leading-5 text-cyan-50 sm:text-sm">{page.description}</p> : null}
                 </div>
                 <div className="grid grid-cols-2 gap-1.5 rounded-md border border-white/25 bg-white/15 p-1.5 shadow-2xl backdrop-blur-md">
-                  <div className="rounded-md bg-white/95 px-2.5 py-1 text-slate-900"><div className="text-base font-bold text-[#075DA8]">1</div><div className="text-[10px] font-semibold text-slate-600">รายการเผยแพร่</div></div>
-                  <div className="rounded-md bg-white/95 px-2.5 py-1 text-slate-900"><div className="text-base font-bold text-[#008B8B]">{page.pdfUrl ? 'PDF' : '-'}</div><div className="text-[10px] font-semibold text-slate-600">เอกสาร</div></div>
+                  <div className="rounded-md bg-white/95 px-2.5 py-1 text-slate-900"><div className="text-base font-bold text-[#075DA8]">{page.items.length}</div><div className="text-[10px] font-semibold text-slate-600">รายการเผยแพร่</div></div>
+                  <div className="rounded-md bg-white/95 px-2.5 py-1 text-slate-900"><div className="text-base font-bold text-[#008B8B]">{page.items.filter((item) => item.pdfUrl).length}</div><div className="text-[10px] font-semibold text-slate-600">เอกสาร PDF</div></div>
                 </div>
               </div>
             </section>
 
             <HomePlanSections
-              sections={[{
-                id: `web-page-${page.id}`,
-                number: '1',
-                title: page.title,
-                tone: 'blue',
-                cards: [{
-                  title: page.title,
-                  subtitle: page.description || '-',
-                  description: page.description,
-                  icon: FileText,
-                  color: 'bg-brand-600',
-                  actionLabel: page.pdfUrl ? 'เปิดเอกสาร' : 'รายละเอียด',
-                  pdfUrl: page.pdfUrl,
-                  coverImageUrl: page.coverImageUrl,
-                  coverImageLayout: page.coverImageLayout,
-                }],
-              }]}
+              sections={sections}
               logoUrl=""
               displayMode="shelf"
               showPlanBanner={false}

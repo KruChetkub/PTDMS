@@ -189,13 +189,15 @@ export function StrategicPolicyHomePage() {
                 ) : null}
                 {isPrimaryPlanSection ? (
                   <div
-                    className="mt-5 flex snap-x snap-mandatory gap-3 overflow-x-auto overscroll-x-contain pb-4"
+                    className="mt-5 flex snap-x snap-mandatory gap-3 overflow-x-auto overscroll-x-contain pb-4 lg:justify-center"
                     style={{ touchAction: 'pan-x pan-y', WebkitOverflowScrolling: 'touch' }}
                   >
                     {items.map((item) => {
                       const Icon = item.icon;
                       const cardContent = <>
-                        {item.logoUrl ? <img src={item.logoUrl} alt={`โลโก้ ${item.title}`} className="h-16 w-16 rounded-full border-2 border-white object-cover shadow-md ring-1 ring-slate-200" /> : <span className={`flex h-14 w-14 items-center justify-center rounded-full text-white ${item.color}`}><Icon className="h-7 w-7" aria-hidden="true" /></span>}
+                        <div className="flex w-full justify-center">
+                          {item.logoUrl ? <img src={item.logoUrl} alt={`โลโก้ ${item.title}`} className="h-16 w-16 rounded-full border-2 border-white bg-white object-contain p-1 shadow-md ring-1 ring-slate-200" /> : <span className={`flex h-14 w-14 items-center justify-center rounded-full text-white ${item.color}`}><Icon className="h-7 w-7" aria-hidden="true" /></span>}
+                        </div>
                         <h3 className="mt-3 line-clamp-3 text-xs font-bold leading-4 text-slate-950">{item.title}</h3>
                         <p className="mt-1 line-clamp-3 text-[10px] leading-4 text-slate-600">{item.description}</p>
                         <span className="mt-auto inline-flex items-center justify-center gap-1 pt-3 text-[10px] font-semibold text-emerald-700">{item.actionLabel}<ArrowRight className="h-3 w-3 transition group-hover:translate-x-1" /></span>
