@@ -1,1 +1,1 @@
-export type PublicHomeView = 'plans' | 'my-plans' | 'performance' | 'my-performance' | 'research' | 'my-research' | 'home-settings';
+export type PublicHomeView = 'plans' | 'my-plans' | 'performance' | 'my-performance' | 'research' | 'my-research' | 'home-settings' | 'web-pages';

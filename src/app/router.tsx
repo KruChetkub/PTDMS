@@ -10,6 +10,7 @@ import { SetNewPasswordPage } from '../features/auth/pages/SetNewPasswordPage';
 import { AuthCallbackPage } from '../features/auth/pages/AuthCallbackPage';
 import { PendingApprovalPage } from '../features/auth/pages/PendingApprovalPage';
 import { PublicHomePage } from '../features/public-home/pages/PublicHomePage';
+import { PublicWebPageDetailPage } from '../features/public-home/pages/PublicWebPageDetailPage';
 import { StrategicPolicyHomePage } from '../features/public-home/pages/StrategicPolicyHomePage';
 import { PortalPage } from '../features/portal/PortalPage';
 import { SatisfactionSurveyPage } from '../features/surveys/SatisfactionSurveyPage';
@@ -52,6 +53,10 @@ export const router = createBrowserRouter([
   {
     path: '/strategic-repository',
     element: <PublicHomePage />,
+  },
+  {
+    path: '/strategic-repository/pages/:slug',
+    element: <PublicWebPageDetailPage />,
   },
   {
     path: '/privacy-notice',

@@ -7,7 +7,7 @@ const ASSETS_BUCKET = 'site-content-assets';
 const MAX_PDF_SIZE_BYTES = 50 * 1024 * 1024;
 const PDF_WORKER_URL = `${pdfWorkerUrl}?v=20260810-1`;
 
-export type AdminPublicPdfFolder = 'plans' | 'performance-results' | 'research' | 'home-content';
+export type AdminPublicPdfFolder = 'plans' | 'performance-results' | 'research' | 'home-content' | 'web-pages';
 
 export type AdminPublicPdfUploadResult = {
   pdfUrl: string;

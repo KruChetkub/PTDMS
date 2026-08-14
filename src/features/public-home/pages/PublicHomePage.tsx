@@ -7,6 +7,7 @@ import { PublicPerformanceResultsManager } from '../components/PublicPerformance
 import { PublicResearchItemsManager } from '../components/PublicResearchItemsManager';
 import { PublicUserPlansSection } from '../components/PublicUserPlansSection';
 import { PublicHomeContentManager } from '../components/PublicHomeContentManager';
+import { PublicWebPagesManager } from '../components/PublicWebPagesManager';
 import { PublicOfficialPlansView } from '../views/PublicOfficialPlansView';
 import { PublicPerformanceResultsRepositoryView } from '../views/PublicPerformanceResultsRepositoryView';
 import { PublicResearchRepositoryView } from '../views/PublicResearchRepositoryView';
@@ -18,7 +19,7 @@ import type { PublicHomeView } from '../types/publicHomeView.types';
 export function PublicHomePage() {
   const [searchParams] = useSearchParams();
   const requestedView = searchParams.get('view');
-  const initialView: PublicHomeView = requestedView === 'performance' || requestedView === 'research' ? requestedView : 'plans';
+  const initialView: PublicHomeView = requestedView === 'performance' || requestedView === 'research' || requestedView === 'web-pages' ? requestedView : 'plans';
   const [activeView, setActiveView] = useState<PublicHomeView>(initialView);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const profile = useAuthStore((state) => state.profile);
@@ -33,13 +34,13 @@ export function PublicHomePage() {
   }, []);
 
   useEffect(() => {
-    if (requestedView === 'plans' || requestedView === 'performance' || requestedView === 'research') {
+    if (requestedView === 'plans' || requestedView === 'performance' || requestedView === 'research' || requestedView === 'web-pages') {
       setActiveView(requestedView);
     }
   }, [requestedView]);
 
   useEffect(() => {
-    if (!canManagePublicContent && (activeView === 'my-plans' || activeView === 'my-performance' || activeView === 'my-research' || activeView === 'home-settings')) {
+    if (!canManagePublicContent && (activeView === 'my-plans' || activeView === 'my-performance' || activeView === 'my-research' || activeView === 'home-settings' || activeView === 'web-pages')) {
       setActiveView('plans');
     }
   }, [activeView, canManagePublicContent]);
@@ -66,6 +67,7 @@ export function PublicHomePage() {
             {activeView === 'research' ? <PublicResearchRepositoryView logoUrl={siteContent.brandSettings.logoUrl} /> : null}
             {activeView === 'my-research' && canManagePublicContent ? <PublicResearchItemsManager /> : null}
             {activeView === 'home-settings' && canManagePublicContent ? <PublicHomeContentManager /> : null}
+            {activeView === 'web-pages' && canManagePublicContent ? <PublicWebPagesManager /> : null}
           </div>
         </div>
       </main>

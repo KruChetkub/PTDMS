@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { ArrowLeft, BarChart3, BookOpenText, ChevronLeft, ChevronRight, FilePlus, FileText, Microscope, Settings2, TrendingUp } from 'lucide-react';
+import { ArrowLeft, BarChart3, BookOpenText, ChevronLeft, ChevronRight, FilePlus, FileText, Globe2, Microscope, Settings2, TrendingUp } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../../stores/auth.store';
 import type { PublicHomeView } from '../types/publicHomeView.types';
@@ -95,6 +95,11 @@ export function PublicHomeSidebar({ activeView, isCollapsed, logoUrl, siteName, 
             {canManagePublicContent ? (
               <button type="button" onClick={() => onViewChange('home-settings')} className={getCollapsedItemClass(activeView === 'home-settings')} title="ตั้งค่าหน้า Home" aria-label="ตั้งค่าหน้า Home">
                 <Settings2 className="h-5 w-5" aria-hidden="true" />
+              </button>
+            ) : null}
+            {canManagePublicContent ? (
+              <button type="button" onClick={() => onViewChange('web-pages')} className={getCollapsedItemClass(activeView === 'web-pages')} title="หน้าเว็บไซต์เพิ่มเติม" aria-label="หน้าเว็บไซต์เพิ่มเติม">
+                <Globe2 className="h-5 w-5" aria-hidden="true" />
               </button>
             ) : null}
           </nav>
@@ -193,6 +198,12 @@ export function PublicHomeSidebar({ activeView, isCollapsed, logoUrl, siteName, 
             <button type="button" onClick={() => onViewChange('home-settings')} className={getMainItemClass(activeView === 'home-settings', 'bg-white text-cyan-950 shadow-sm ring-1 ring-white/70 hover:bg-cyan-50')}>
               <Settings2 className="h-5 w-5 shrink-0" aria-hidden="true" />
               <span>ตั้งค่าหน้า Home</span>
+            </button>
+          ) : null}
+          {canManagePublicContent ? (
+            <button type="button" onClick={() => onViewChange('web-pages')} className={getMainItemClass(activeView === 'web-pages', 'bg-white text-cyan-950 shadow-sm ring-1 ring-white/70 hover:bg-cyan-50')}>
+              <Globe2 className="h-5 w-5 shrink-0" aria-hidden="true" />
+              <span>หน้าเว็บไซต์เพิ่มเติม</span>
             </button>
           ) : null}
         </nav>
