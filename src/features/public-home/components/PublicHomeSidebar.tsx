@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { ArrowLeft, BarChart3, BookOpenText, ChevronLeft, ChevronRight, FilePlus, FileText, Globe2, Microscope, Settings2, TrendingUp } from 'lucide-react';
+import { ArrowLeft, BarChart3, BookOpenText, ChevronLeft, ChevronRight, FilePlus, FileText, Globe2, Home, Microscope, Settings2, TrendingUp } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../../stores/auth.store';
 import type { PublicHomeView } from '../types/publicHomeView.types';
@@ -65,6 +65,9 @@ export function PublicHomeSidebar({ activeView, isCollapsed, logoUrl, siteName, 
           </button>
 
           <nav className="flex items-center gap-2 lg:min-h-0 lg:flex-1 lg:flex-col lg:overflow-y-auto" aria-label="เมนูคลังข้อมูลแบบย่อ">
+            <button type="button" onClick={() => navigate('/')} className={getCollapsedItemClass(false)} title="Home" aria-label="Home">
+              <Home className="h-5 w-5" aria-hidden="true" />
+            </button>
             {canManagePublicContent ? (
               <button type="button" onClick={() => onViewChange('my-plans')} className={getCollapsedItemClass(activeView === 'my-plans')} title="เพิ่มแผนของฉัน" aria-label="เพิ่มแผนของฉัน">
                 <FilePlus className="h-5 w-5" aria-hidden="true" />
@@ -136,6 +139,11 @@ export function PublicHomeSidebar({ activeView, isCollapsed, logoUrl, siteName, 
         </div>
 
         <nav className="order-2 mt-5 space-y-5 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:pr-1" aria-label="เมนูคลังข้อมูลด้านยุทธศาสตร์และแผนงาน">
+          <button type="button" onClick={() => navigate('/')} className={getMainItemClass(false, 'bg-white text-cyan-950 shadow-sm ring-1 ring-white/70 hover:bg-cyan-50')}>
+            <Home className="mt-0.5 h-5 w-5 shrink-0" aria-hidden="true" />
+            <span>Home</span>
+          </button>
+
           <div>
             <button
               type="button"
