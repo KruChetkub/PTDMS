@@ -13,7 +13,7 @@ import type {
 import { optionalPlainTextInput, sanitizePlainTextInput } from '../../utils/inputSecurity';
 
 export const SMARTDSP_SURVEY_CODE = 'smartdsp-satisfaction';
-export const SMARTDSP_SURVEY_LONG_TEXT_MAX_LENGTH = 4000;
+export const SMARTDSP_SURVEY_LONG_TEXT_MAX_LENGTH = 8000;
 export const SMARTDSP_SURVEY_PDPA_ACKNOWLEDGEMENT = 'ข้าพเจ้าได้อ่านและรับทราบคำชี้แจงการคุ้มครองข้อมูลส่วนบุคคลฉบับนี้แล้ว';
 export const SMARTDSP_SURVEY_PDPA_CONSENT = 'ข้าพเจ้ายินยอมให้กองยุทธศาสตร์และแผนงาน กรมควบคุมโรค เก็บรวบรวม ใช้ หรือเปิดเผยข้อมูลส่วนบุคคลเพื่อวัตถุประสงค์ที่ระบุไว้ข้างต้น';
 
@@ -285,7 +285,6 @@ export async function loadSurveyDashboard(): Promise<SatisfactionSurveyDashboard
 export async function saveSurveySettings(draft: SatisfactionSurveyDraft) {
   const title = sanitizePlainTextInput(draft.title, { fieldName: 'ชื่อแบบสำรวจ', maxLength: 300, allowNewlines: false });
   const description = optionalPlainTextInput(draft.description, { fieldName: 'รายละเอียดแบบสำรวจ', maxLength: SMARTDSP_SURVEY_LONG_TEXT_MAX_LENGTH, allowNewlines: true }) || '';
-  const instructions = optionalPlainTextInput(draft.instructions, { fieldName: 'คำชี้แจง', maxLength: SMARTDSP_SURVEY_LONG_TEXT_MAX_LENGTH, allowNewlines: true }) || '';
 
   if (!title) throw new Error('กรุณากรอกชื่อแบบสำรวจ');
   if (draft.starts_at && draft.ends_at && new Date(draft.ends_at) <= new Date(draft.starts_at)) {
@@ -297,7 +296,7 @@ export async function saveSurveySettings(draft: SatisfactionSurveyDraft) {
     .update({
       title,
       description,
-      instructions,
+      instructions: '',
       status: draft.status,
       is_enabled: draft.is_enabled,
       starts_at: draft.starts_at,

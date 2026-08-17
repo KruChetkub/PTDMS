@@ -74,6 +74,15 @@ function safeExcelText(value: string | null | undefined) {
   return /^[=+\-@]/.test(text) ? `'${text}` : text;
 }
 
+function mergeSurveyDetails(description: string, instructions: string) {
+  const details = description.trim();
+  const guidance = instructions.trim();
+  if (!guidance) return details;
+  if (!details) return guidance;
+  if (details.includes(guidance)) return details;
+  return `${details}\n\n${guidance}`;
+}
+
 function countLabels(values: string[], labelOrder: string[]) {
   const counts = new Map<string, number>();
   for (const value of values) counts.set(value, (counts.get(value) || 0) + 1);
@@ -193,7 +202,14 @@ export function SiteManagerSatisfactionSurveyEditor() {
       setSurveys(surveyList);
       setDashboardData(nextDashboardData);
       setSelectedId(nextBundle?.survey.id || '');
-      setBundle(nextBundle);
+      setBundle(nextBundle ? {
+        ...nextBundle,
+        survey: {
+          ...nextBundle.survey,
+          description: mergeSurveyDetails(nextBundle.survey.description, nextBundle.survey.instructions),
+          instructions: '',
+        },
+      } : null);
       setQuestions(nextBundle?.questions || []);
       setOptions(nextBundle?.ratingOptions || []);
       setResponsePage(0);
@@ -577,13 +593,8 @@ export function SiteManagerSatisfactionSurveyEditor() {
             <label className="text-sm font-medium text-slate-700 md:col-span-2">ชื่อแบบสำรวจ<input value={bundle.survey.title} onChange={(event) => setBundle({ ...bundle, survey: { ...bundle.survey, title: event.target.value } })} className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2" /></label>
             <label className="text-sm font-medium text-slate-700 md:col-span-2">
               รายละเอียด
-              <textarea rows={3} maxLength={SMARTDSP_SURVEY_LONG_TEXT_MAX_LENGTH} value={bundle.survey.description} onChange={(event) => setBundle({ ...bundle, survey: { ...bundle.survey, description: event.target.value } })} className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2" />
+              <textarea rows={6} maxLength={SMARTDSP_SURVEY_LONG_TEXT_MAX_LENGTH} value={bundle.survey.description} onChange={(event) => setBundle({ ...bundle, survey: { ...bundle.survey, description: event.target.value, instructions: '' } })} className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2" />
               <CharacterCounter value={bundle.survey.description} />
-            </label>
-            <label className="text-sm font-medium text-slate-700 md:col-span-2">
-              คำชี้แจง
-              <textarea rows={3} maxLength={SMARTDSP_SURVEY_LONG_TEXT_MAX_LENGTH} value={bundle.survey.instructions} onChange={(event) => setBundle({ ...bundle, survey: { ...bundle.survey, instructions: event.target.value } })} className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2" />
-              <CharacterCounter value={bundle.survey.instructions} />
             </label>
             <label className="text-sm font-medium text-slate-700">สถานะ<select value={bundle.survey.status} onChange={(event) => setBundle({ ...bundle, survey: { ...bundle.survey, status: event.target.value as SmartDspSurveyStatus } })} className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2">{Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
             <label className="flex items-center gap-3 self-end rounded-md border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700"><input type="checkbox" checked={bundle.survey.is_enabled} onChange={(event) => setBundle({ ...bundle, survey: { ...bundle.survey, is_enabled: event.target.checked } })} className="h-4 w-4" /> แสดงแบบสำรวจที่หน้า Portal</label>

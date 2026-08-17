@@ -20,6 +20,15 @@ function formatThaiDate(value: string) {
   return new Intl.DateTimeFormat('th-TH', { dateStyle: 'long', timeStyle: 'short' }).format(new Date(value));
 }
 
+function mergeSurveyDetails(description: string, instructions: string) {
+  const details = description.trim();
+  const guidance = instructions.trim();
+  if (!guidance) return details;
+  if (!details) return guidance;
+  if (details.includes(guidance)) return details;
+  return `${details}\n\n${guidance}`;
+}
+
 export function SatisfactionSurveyPage() {
   const user = useAuthStore((state) => state.user);
   const [bundle, setBundle] = useState<SatisfactionSurveyBundle | null>(null);
@@ -379,11 +388,7 @@ export function SatisfactionSurveyPage() {
             <div className="overflow-y-auto px-5 py-4 sm:px-6">
               <section>
                 <h3 className="text-sm font-semibold text-slate-900">รายละเอียด</h3>
-                <p className="mt-2 whitespace-pre-line text-sm leading-6 text-slate-700">{bundle.survey.description || 'ไม่มีรายละเอียดเพิ่มเติม'}</p>
-              </section>
-              <section className="mt-5 border-t border-slate-100 pt-5">
-                <h3 className="text-sm font-semibold text-slate-900">คำชี้แจง</h3>
-                <p className="mt-2 whitespace-pre-line text-sm leading-6 text-slate-700">{bundle.survey.instructions || 'ไม่มีคำชี้แจงเพิ่มเติม'}</p>
+                <p className="mt-2 whitespace-pre-line text-sm leading-6 text-slate-700">{mergeSurveyDetails(bundle.survey.description, bundle.survey.instructions) || 'ไม่มีรายละเอียดเพิ่มเติม'}</p>
               </section>
 
               <div className="mt-6 space-y-3 border-t border-slate-200 pt-5">
