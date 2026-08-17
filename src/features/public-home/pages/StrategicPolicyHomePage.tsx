@@ -108,18 +108,18 @@ export function StrategicPolicyHomePage() {
     <div className="min-h-screen bg-white text-slate-900">
       <header className="relative isolate overflow-hidden border-b border-emerald-200 bg-[url('/SmartDSP.png')] bg-cover bg-[position:center_82%] bg-no-repeat sm:bg-[length:100%_auto]">
         <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(90deg,rgba(255,255,255,0.72)_0%,rgba(255,255,255,0.90)_28%,rgba(255,255,255,0.90)_72%,rgba(255,255,255,0.72)_100%)]" aria-hidden="true" />
-        <div className="relative mx-auto grid min-h-48 max-w-[1600px] gap-5 px-4 py-6 sm:min-h-52 sm:px-6 lg:grid-cols-[11rem_minmax(0,1fr)_11rem] lg:items-center lg:px-8">
+        <div className="relative mx-auto grid min-h-32 max-w-[1600px] gap-3 px-4 py-2 sm:min-h-36 sm:px-6 lg:grid-cols-[10rem_minmax(0,1fr)_10rem] lg:items-center lg:px-8">
           <div className="flex items-center gap-3 lg:block">
-            <div className="inline-flex rounded-md bg-white/75 p-2 shadow-sm backdrop-blur-sm lg:block">
-              <img src="/DDC_0.png" alt="ตราสัญลักษณ์กรมควบคุมโรค" className="h-20 w-auto object-contain lg:mx-auto lg:h-24" />
+            <div className="inline-flex rounded-md border border-emerald-100 bg-white/70 p-1.5 shadow-sm backdrop-blur-sm lg:block lg:w-fit lg:mx-auto">
+              <img src="/DDC_0.png" alt="ตราสัญลักษณ์กรมควบคุมโรค" className="h-[4.5rem] w-auto object-contain lg:h-[5.5rem]" />
             </div>
           </div>
-          <div className="text-center lg:px-4">
+          <div className="text-center lg:px-3">
             <p className="text-sm font-semibold text-emerald-700">ศูนย์รวมนโยบายและยุทธศาสตร์</p>
-            <h1 className="mt-1 text-3xl font-bold leading-tight tracking-normal text-[#12326b] sm:text-4xl lg:text-5xl">
+            <h1 className="mt-1 text-3xl font-bold leading-tight tracking-normal text-[#12326b] sm:text-4xl lg:text-[2.75rem]">
               นโยบายและยุทธศาสตร์
             </h1>
-            <p className="mt-2 text-lg font-bold leading-7 text-emerald-800 sm:text-2xl">
+            <p className="mt-1.5 text-lg font-bold leading-7 text-emerald-800 sm:text-2xl">
               ด้านการป้องกันควบคุมโรคและภัยสุขภาพของประเทศ
             </p>
           </div>
@@ -131,25 +131,25 @@ export function StrategicPolicyHomePage() {
         <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(115deg,rgba(8,120,216,0.10),rgba(18,184,177,0.12)_48%,rgba(255,255,255,0)_72%)]" aria-hidden="true" />
         <div className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-[linear-gradient(170deg,rgba(6,59,120,0.10)_0%,rgba(255,255,255,0)_58%)]" aria-hidden="true" />
         <div className="relative">
-        <section className="border-b border-slate-200/80 bg-white/65 py-5">
-          <div className="mx-auto max-w-[1600px] px-4 sm:px-6 lg:px-8">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
-              <div className="flex shrink-0 justify-center lg:w-48 lg:justify-start">
+        <section className="border-b border-slate-200/80 bg-white/65 py-2">
+          <div className="mx-auto max-w-[1760px] px-3 sm:px-5 lg:px-6">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+              <div className="flex shrink-0 justify-center lg:w-40 lg:justify-start xl:w-44">
                 <img
                   src="/sdg/E_SDG_logo_without_UN_emblem_square_RGB-1024x606-1.webp"
                   alt="Sustainable Development Goals เป้าหมายการพัฒนาที่ยั่งยืน"
-                  className="h-auto w-44 object-contain sm:w-48"
+                  className="h-auto w-32 object-contain sm:w-36 lg:w-36 xl:w-40"
                 />
               </div>
-              <div className="flex flex-1 gap-2 overflow-x-auto px-1 py-3 lg:grid lg:grid-cols-[repeat(17,minmax(0,1fr))] lg:overflow-visible">
+              <div className="flex flex-1 gap-2 overflow-x-auto px-1 py-1.5 lg:grid lg:grid-cols-[repeat(17,minmax(0,1fr))] lg:gap-2 lg:overflow-visible xl:gap-2.5">
                 {sdgGoals.map((goal) => {
                   const isActive = activeSdgGoals.has(goal.number);
 
                   return (
                     <div
                       key={goal.number}
-                      className={`block w-20 shrink-0 overflow-hidden rounded-sm shadow-sm transition hover:-translate-y-0.5 hover:shadow-md lg:w-auto ${
-                        isActive ? 'sdg-active-goal relative z-10 scale-[1.14]' : ''
+                      className={`block w-24 shrink-0 overflow-hidden rounded-sm shadow-sm transition hover:-translate-y-0.5 hover:shadow-md sm:w-28 lg:w-auto ${
+                        isActive ? 'sdg-active-goal relative z-10 origin-center scale-[1.18]' : ''
                       }`}
                       title={isActive
                         ? `เป้าหมายการพัฒนาที่ยั่งยืนที่ ${goal.number} ซึ่งกรมควบคุมโรคกำลังขับเคลื่อน`
@@ -169,7 +169,7 @@ export function StrategicPolicyHomePage() {
                 })}
               </div>
             </div>
-            <p className="mt-4 text-center text-m font-medium leading-6 text-slate-1000">
+            <p className="mt-1 text-center text-m font-medium leading-5 text-slate-1000">
               การดำเนินงานของกรมควบคุมโรคเชื่อมโยงเป้าหมายการพัฒนาที่ยั่งยืน เพื่อสุขภาพที่ดีและการพัฒนาที่ยั่งยืนของประเทศ
             </p>
           </div>
@@ -179,7 +179,7 @@ export function StrategicPolicyHomePage() {
           const items = displayItems(section.key);
           const isPrimaryPlanSection = section.key === 'plan';
           return (
-            <section key={section.id} className="border-b border-slate-200/60 bg-transparent py-7">
+            <section key={section.id} className="border-b border-slate-200/60 bg-transparent py-3">
               <div className="mx-auto max-w-[1600px] px-4 sm:px-6 lg:px-8">
                 {isPrimaryPlanSection ? (
                   <div className="flex items-center gap-3">
@@ -188,14 +188,14 @@ export function StrategicPolicyHomePage() {
                 ) : null}
                 {isPrimaryPlanSection ? (
                   <div
-                    className="mt-5 flex snap-x snap-mandatory gap-3 overflow-x-auto overscroll-x-contain pb-4 lg:justify-center"
+                    className="mt-3 flex snap-x snap-mandatory gap-3 overflow-x-auto overscroll-x-contain pb-2 lg:justify-center"
                     style={{ touchAction: 'pan-x pan-y', WebkitOverflowScrolling: 'touch' }}
                   >
                     {items.map((item) => {
                       const Icon = item.icon;
                       const cardContent = <>
                         <div className="flex w-full justify-center">
-                          {item.logoUrl ? <img src={item.logoUrl} alt={`โลโก้ ${item.title}`} className="h-16 w-16 rounded-full border-2 border-white bg-white object-contain p-1 shadow-md ring-1 ring-slate-200" /> : <span className={`flex h-14 w-14 items-center justify-center rounded-full text-white ${item.color}`}><Icon className="h-7 w-7" aria-hidden="true" /></span>}
+                          {item.logoUrl ? <img src={item.logoUrl} alt={`โลโก้ ${item.title}`} className="h-20 w-20 rounded-full border-2 border-white bg-white object-contain p-0.5 shadow-md ring-1 ring-slate-200" /> : <span className={`flex h-[4.5rem] w-[4.5rem] items-center justify-center rounded-full text-white ${item.color}`}><Icon className="h-8 w-8" aria-hidden="true" /></span>}
                         </div>
                         <h3 className="mt-3 line-clamp-3 text-xs font-bold leading-4 text-slate-950">{item.title}</h3>
                         <p className="mt-1 line-clamp-3 text-[10px] leading-4 text-slate-600">{item.description}</p>
@@ -216,8 +216,8 @@ export function StrategicPolicyHomePage() {
                           <h2 className="min-w-0 text-lg font-bold leading-7 text-slate-950">{item.title}</h2>
                         </div>
                         <article className={`flex-1 rounded-md border p-5 ${item.tone}`}>
-                          <div className="flex items-start gap-4">
-                            {item.logoUrl ? <img src={item.logoUrl} alt={`โลโก้ ${item.title}`} className="h-12 w-12 shrink-0 rounded-full border-2 border-white object-cover shadow-sm ring-1 ring-current/20" /> : <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white ${item.color}`}><Icon className="h-6 w-6" /></span>}
+                          <div className="flex items-start gap-5">
+                            {item.logoUrl ? <img src={item.logoUrl} alt={`โลโก้ ${item.title}`} className="h-20 w-20 shrink-0 rounded-full border-2 border-white bg-white object-contain p-0.5 shadow-md ring-1 ring-current/20" /> : <span className={`flex h-20 w-20 shrink-0 items-center justify-center rounded-full text-white shadow-md ${item.color}`}><Icon className="h-9 w-9" /></span>}
                             <div className="min-w-0 flex-1"><p className="text-sm leading-6 text-slate-700">{item.description}</p>{item.pdfUrl ? <a href={item.pdfUrl} target="_blank" rel="noopener noreferrer" className="mt-4 inline-flex h-9 items-center gap-2 rounded-md border border-current bg-white px-3 text-sm font-semibold hover:bg-white/60">{item.actionLabel}<ArrowRight className="h-4 w-4" /></a> : <Link to={item.to} className="mt-4 inline-flex h-9 items-center gap-2 rounded-md border border-current bg-white px-3 text-sm font-semibold hover:bg-white/60">{item.actionLabel}<ArrowRight className="h-4 w-4" /></Link>}</div>
                           </div>
                         </article>
