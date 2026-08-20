@@ -1,5 +1,5 @@
 ﻿import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowRight, BookOpen, BookOpenText, CalendarDays, ChevronDown, ChevronLeft, ChevronRight, ClipboardCheck, Database, ExternalLink, FileText, GraduationCap, Headphones, KeyRound, LogOut, Megaphone, Monitor, ShieldCheck, Sparkles } from 'lucide-react';
+import { ArrowRight, BookOpen, BookOpenText, CalendarDays, ChevronDown, ChevronLeft, ChevronRight, ClipboardCheck, Coins, Database, ExternalLink, FileText, GraduationCap, Headphones, KeyRound, LogOut, Megaphone, Monitor, ShieldCheck, Sparkles } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ConfirmModal } from '../../components/ui/ConfirmModal';
 import { useAuditPageAccess } from '../../hooks/useAuditPageAccess';
@@ -46,6 +46,16 @@ const coreSystems: PortalCard[] = [
     roles: ['super_admin', 'admin', 'executive', 'hr', 'personnel'],
     accent: 'from-emerald-600 to-amber-500',
     meta: 'Internal Activities',
+  },
+  {
+    title: 'Budget Utilization Dashboard',
+    shortTitle: 'Budget Utilization',
+    description: 'แดชบอร์ดติดตามการใช้จ่ายงบประมาณ กองยุทธศาสตร์และแผนงาน',
+    to: '/budget-utilization',
+    icon: Coins,
+    roles: ['super_admin', 'admin', 'executive', 'hr', 'personnel'],
+    accent: 'from-teal-700 to-amber-500',
+    meta: 'Budget Intelligence',
   },
 ];
 

@@ -1,0 +1,155 @@
+import type { BudgetUtilizationAmount, BudgetUtilizationItemWithAmount } from '../types/budgetUtilization.types';
+
+export const emptyBudgetAmount: BudgetUtilizationAmount = {
+  id: '',
+  item_id: '',
+  planned_budget_amount: 0,
+  allocation_tranche_1_amount: 0,
+  allocation_tranche_1_date: null,
+  allocation_tranche_2_amount: 0,
+  allocation_tranche_2_date: null,
+  allocation_tranche_3_amount: 0,
+  allocation_tranche_3_date: null,
+  net_budget_after_transfer_amount: 0,
+  central_transfer_in_amount: 0,
+  central_transfer_out_amount: 0,
+  division_transfer_in_amount: 0,
+  division_transfer_out_amount: 0,
+  committed_po_amount: 0,
+  committed_without_po_amount: 0,
+  committed_total_amount: 0,
+  disbursed_general_amount: 0,
+  disbursed_advance_amount: 0,
+  disbursed_total_amount: 0,
+  utilization_total_amount: 0,
+  remaining_amount: 0,
+  disbursement_rate: 0,
+  utilization_with_po_rate: 0,
+  created_at: '',
+  updated_at: '',
+};
+
+export function toNumber(value: unknown) {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : 0;
+  }
+
+  const text = String(value ?? '')
+    .replace(/,/g, '')
+    .replace(/[^\d.-]/g, '')
+    .trim();
+
+  if (!text || text === '-' || text === '.') {
+    return 0;
+  }
+
+  const parsed = Number(text);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+export function percent(numerator: number, denominator: number) {
+  if (!denominator) {
+    return 0;
+  }
+
+  return Math.round((numerator / denominator) * 10000) / 100;
+}
+
+export function formatBudgetAmount(value: number, digits = 2) {
+  return value.toLocaleString('th-TH', {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  });
+}
+
+export function formatMillionBaht(value: number) {
+  return `${formatBudgetAmount(value / 1_000_000)} ล้านบาท`;
+}
+
+export function getNetAllocationTotal(amount: Partial<BudgetUtilizationAmount>) {
+  return (
+    toNumber(amount.allocation_tranche_1_amount) +
+    toNumber(amount.allocation_tranche_2_amount) +
+    toNumber(amount.allocation_tranche_3_amount) +
+    toNumber(amount.central_transfer_in_amount) -
+    toNumber(amount.central_transfer_out_amount)
+  );
+}
+
+export function normalizeAmount(raw?: Partial<BudgetUtilizationAmount> | null): BudgetUtilizationAmount {
+  const source = raw ?? {};
+  const planned = toNumber(source.planned_budget_amount);
+  const allocationTranche1 = toNumber(source.allocation_tranche_1_amount);
+  const allocationTranche2 = toNumber(source.allocation_tranche_2_amount);
+  const allocationTranche3 = toNumber(source.allocation_tranche_3_amount);
+  const centralTransferIn = toNumber(source.central_transfer_in_amount);
+  const centralTransferOut = toNumber(source.central_transfer_out_amount);
+  const netBudgetAfterTransfer = planned + centralTransferIn - centralTransferOut;
+  const allocationTotal = getNetAllocationTotal({
+    allocation_tranche_1_amount: allocationTranche1,
+    allocation_tranche_2_amount: allocationTranche2,
+    allocation_tranche_3_amount: allocationTranche3,
+    central_transfer_in_amount: centralTransferIn,
+    central_transfer_out_amount: centralTransferOut,
+  });
+  const committedTotal = toNumber(source.committed_total_amount) || toNumber(source.committed_po_amount) + toNumber(source.committed_without_po_amount);
+  const disbursedTotal = toNumber(source.disbursed_total_amount) || toNumber(source.disbursed_general_amount) + toNumber(source.disbursed_advance_amount);
+  const utilizationTotal = toNumber(source.utilization_total_amount) || committedTotal + disbursedTotal;
+  const remaining = Math.max(0, netBudgetAfterTransfer - utilizationTotal);
+
+  return {
+    ...emptyBudgetAmount,
+    ...source,
+    planned_budget_amount: planned,
+    allocation_tranche_1_amount: allocationTranche1,
+    allocation_tranche_2_amount: allocationTranche2,
+    allocation_tranche_3_amount: allocationTranche3,
+    net_budget_after_transfer_amount: netBudgetAfterTransfer,
+    central_transfer_in_amount: centralTransferIn,
+    central_transfer_out_amount: centralTransferOut,
+    division_transfer_in_amount: toNumber(source.division_transfer_in_amount),
+    division_transfer_out_amount: toNumber(source.division_transfer_out_amount),
+    committed_po_amount: toNumber(source.committed_po_amount),
+    committed_without_po_amount: toNumber(source.committed_without_po_amount),
+    committed_total_amount: committedTotal,
+    disbursed_general_amount: toNumber(source.disbursed_general_amount),
+    disbursed_advance_amount: toNumber(source.disbursed_advance_amount),
+    disbursed_total_amount: disbursedTotal,
+    utilization_total_amount: utilizationTotal,
+    remaining_amount: remaining,
+    disbursement_rate: percent(disbursedTotal, allocationTotal),
+    utilization_with_po_rate: percent(utilizationTotal, allocationTotal),
+  };
+}
+
+export function sumBudgetAmounts(amounts: BudgetUtilizationAmount[]) {
+  return normalizeAmount(amounts.reduce<BudgetUtilizationAmount>(
+    (sum, amount) => ({
+      ...sum,
+      planned_budget_amount: sum.planned_budget_amount + amount.planned_budget_amount,
+      allocation_tranche_1_amount: sum.allocation_tranche_1_amount + amount.allocation_tranche_1_amount,
+      allocation_tranche_2_amount: sum.allocation_tranche_2_amount + amount.allocation_tranche_2_amount,
+      allocation_tranche_3_amount: sum.allocation_tranche_3_amount + amount.allocation_tranche_3_amount,
+      central_transfer_in_amount: sum.central_transfer_in_amount + amount.central_transfer_in_amount,
+      central_transfer_out_amount: sum.central_transfer_out_amount + amount.central_transfer_out_amount,
+      division_transfer_in_amount: sum.division_transfer_in_amount + amount.division_transfer_in_amount,
+      division_transfer_out_amount: sum.division_transfer_out_amount + amount.division_transfer_out_amount,
+      committed_po_amount: sum.committed_po_amount + amount.committed_po_amount,
+      committed_without_po_amount: sum.committed_without_po_amount + amount.committed_without_po_amount,
+      committed_total_amount: sum.committed_total_amount + amount.committed_total_amount,
+      disbursed_general_amount: sum.disbursed_general_amount + amount.disbursed_general_amount,
+      disbursed_advance_amount: sum.disbursed_advance_amount + amount.disbursed_advance_amount,
+      disbursed_total_amount: sum.disbursed_total_amount + amount.disbursed_total_amount,
+      utilization_total_amount: sum.utilization_total_amount + amount.utilization_total_amount,
+      remaining_amount: sum.remaining_amount + amount.remaining_amount,
+    }),
+    { ...emptyBudgetAmount },
+  ));
+}
+
+export function summarizeBudgetItems(items: BudgetUtilizationItemWithAmount[]) {
+  const totalItem = items.find((item) => item.row_type === 'total') ?? null;
+  const totals = totalItem?.amount ?? sumBudgetAmounts(items.map((item) => item.amount));
+
+  return normalizeAmount(totals);
+}

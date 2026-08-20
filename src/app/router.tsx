@@ -2,6 +2,7 @@ import { createBrowserRouter } from 'react-router-dom';
 import { ProtectedRoute } from '../components/auth/ProtectedRoute';
 import { AppLayout } from '../components/layout/AppLayout';
 import { CalendarLayout } from '../components/layout/CalendarLayout';
+import { BudgetUtilizationLayout } from '../features/budget-utilization-dashboard/BudgetUtilizationLayout';
 import { LoginPage } from '../features/auth/pages/LoginPage';
 import { PrivacyNoticePage } from '../features/legal/PrivacyNoticePage';
 import { ForgotPasswordPage } from '../features/auth/pages/ForgotPasswordPage';
@@ -30,6 +31,11 @@ import { UserManagementPage } from '../features/admin/UserManagementPage';
 import { SecurityPage } from '../features/admin/SecurityPage';
 import { StrategyCalendarPage } from '../features/strategy-calendar/StrategyCalendarPage';
 import { MeetingRoomBookingPage } from '../features/strategy-calendar/MeetingRoomBookingPage';
+import { BudgetUtilizationDashboardPage } from '../features/budget-utilization-dashboard/pages/BudgetUtilizationDashboardPage';
+import { BudgetUtilizationItemsPage } from '../features/budget-utilization-dashboard/pages/BudgetUtilizationItemsPage';
+import { BudgetUtilizationImportPage } from '../features/budget-utilization-dashboard/pages/BudgetUtilizationImportPage';
+import { BudgetUtilizationImportDetailPage } from '../features/budget-utilization-dashboard/pages/BudgetUtilizationImportDetailPage';
+import { BudgetUtilizationManagePage } from '../features/budget-utilization-dashboard/pages/BudgetUtilizationManagePage';
 import { ItAssetsPage } from '../features/it-assets/ItAssetsPage';
 import { ItAssetsManagePage } from '../features/it-assets/ItAssetsManagePage';
 import { SiteManagerPage } from '../features/site-manager/pages/SiteManagerPage';
@@ -125,6 +131,19 @@ export const router = createBrowserRouter([
           {
             path: '/strategy-calendar/meeting-room-booking',
             element: <MeetingRoomBookingPage />,
+          },
+        ],
+      },
+      {
+        element: <BudgetUtilizationLayout />,
+        children: [
+          {
+            path: '/budget-utilization',
+            element: <BudgetUtilizationDashboardPage />,
+          },
+          {
+            path: '/budget-utilization/items',
+            element: <BudgetUtilizationItemsPage />,
           },
         ],
       },
@@ -230,6 +249,23 @@ export const router = createBrowserRouter([
       {
         path: '/it-assets/manage',
         element: <ItAssetsManagePage />,
+      },
+      {
+        element: <BudgetUtilizationLayout />,
+        children: [
+          {
+            path: '/budget-utilization/import',
+            element: <BudgetUtilizationImportPage />,
+          },
+          {
+            path: '/budget-utilization/import/:batchId',
+            element: <BudgetUtilizationImportDetailPage />,
+          },
+          {
+            path: '/budget-utilization/manage',
+            element: <BudgetUtilizationManagePage />,
+          },
+        ],
       },
       {
         element: <AppLayout />,
