@@ -17,10 +17,10 @@ type BudgetNavItem = {
 
 const baseNavItems: BudgetNavItem[] = [
   { to: '/budget-utilization', label: 'Dashboard', icon: BarChart3, end: true },
-  { to: '/budget-utilization/items', label: 'รายการงบประมาณ', icon: ListTree },
 ];
 
 const adminNavItems: BudgetNavItem[] = [
+  { to: '/budget-utilization/items', label: 'รายการงบประมาณ', icon: ListTree },
   { to: '/budget-utilization/import', label: 'นำเข้าข้อมูล', icon: FileSpreadsheet },
   { to: '/budget-utilization/manage', label: 'จัดการรอบรายงาน', icon: DatabaseZap },
 ];

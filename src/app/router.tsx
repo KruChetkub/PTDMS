@@ -141,10 +141,6 @@ export const router = createBrowserRouter([
             path: '/budget-utilization',
             element: <BudgetUtilizationDashboardPage />,
           },
-          {
-            path: '/budget-utilization/items',
-            element: <BudgetUtilizationItemsPage />,
-          },
         ],
       },
       {
@@ -253,6 +249,10 @@ export const router = createBrowserRouter([
       {
         element: <BudgetUtilizationLayout />,
         children: [
+          {
+            path: '/budget-utilization/items',
+            element: <BudgetUtilizationItemsPage />,
+          },
           {
             path: '/budget-utilization/import',
             element: <BudgetUtilizationImportPage />,
