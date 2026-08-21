@@ -89,7 +89,7 @@ const targetToneByGroup: Record<AssessmentGroupKey, TargetTone> = {
 const plannedBudgetCategoryDefinitions = [
   { key: "personnel", label: "งบบุคลากร", matcher: /งบบุคลากร/, color: "#2563eb" },
   { key: "investment", label: "งบลงทุน", matcher: /งบลงทุน/, color: "#f59e0b" },
-  { key: "operations_total", label: "งบดำเนินงาน (รวม)", matcher: /งบดำเนินงาน\(รวม\)/, color: "#0f766e" },
+  { key: "operations_total", label: "งบดำเนินงาน", matcher: /งบดำเนินงาน\(รวม\)/, color: "#0f766e" },
   { key: "operations", label: "งบดำเนินงาน (ดำเนินงานปกติ)", matcher: /^งบดำเนินงาน$/, color: "#0d9488" },
   { key: "project", label: "งบโครงการ (รวม)", matcher: /งบโครงการ/, color: "#8b5cf6" },
 ];
@@ -672,9 +672,9 @@ export function BudgetUtilizationDashboardPage() {
                     <PieChart>
                       <Pie
                         data={[
-                          { name: 'งบบุคลากร (รวม)', value: rawPlanCategoryData.find(item => item.key === 'personnel')?.planned ?? 0 },
-                          { name: 'งบลงทุน (รวม)', value: rawPlanCategoryData.find(item => item.key === 'investment')?.planned ?? 0 },
-                          { name: 'งบดำเนินงาน (รวม)', value: rawPlanCategoryData.find(item => item.key === 'operations_total')?.planned ?? 0 },
+                          { name: 'งบบุคลากร', value: rawPlanCategoryData.find(item => item.key === 'personnel')?.planned ?? 0 },
+                          { name: 'งบลงทุน', value: rawPlanCategoryData.find(item => item.key === 'investment')?.planned ?? 0 },
+                          { name: 'งบดำเนินงาน', value: rawPlanCategoryData.find(item => item.key === 'operations_total')?.planned ?? 0 },
                         ].filter((item) => item.value > 0)}
                         dataKey="value"
                         nameKey="name"
@@ -709,9 +709,9 @@ export function BudgetUtilizationDashboardPage() {
                 </div>
                 <div className="space-y-2">
                   {[
-                    { name: 'งบบุคลากร (รวม)', value: rawPlanCategoryData.find(item => item.key === 'personnel')?.planned ?? 0 },
-                    { name: 'งบลงทุน (รวม)', value: rawPlanCategoryData.find(item => item.key === 'investment')?.planned ?? 0 },
-                    { name: 'งบดำเนินงาน (รวม)', value: rawPlanCategoryData.find(item => item.key === 'operations_total')?.planned ?? 0 },
+                    { name: 'งบบุคลากร', value: rawPlanCategoryData.find(item => item.key === 'personnel')?.planned ?? 0 },
+                    { name: 'งบลงทุน', value: rawPlanCategoryData.find(item => item.key === 'investment')?.planned ?? 0 },
+                    { name: 'งบดำเนินงาน', value: rawPlanCategoryData.find(item => item.key === 'operations_total')?.planned ?? 0 },
                   ].map((item) => (
                     <div key={item.name} className="flex items-center justify-between gap-3 text-xs">
                       <span className="min-w-0 truncate text-slate-900">{item.name}</span>
@@ -1015,9 +1015,9 @@ export function BudgetUtilizationDashboardPage() {
                     <PieChart>
                       <Pie
                         data={[
-                          { name: 'งบบุคลากร (รวม)', value: dbPersonnelPlanned },
-                          { name: 'งบลงทุน (รวม)', value: dbInvestmentPlanned },
-                          { name: 'งบดำเนินงาน (รวม)', value: dbOperationsPlanned },
+                          { name: 'งบบุคลากร', value: dbPersonnelPlanned },
+                          { name: 'งบลงทุน', value: dbInvestmentPlanned },
+                          { name: 'งบดำเนินงาน', value: dbOperationsPlanned },
                         ].filter((item) => item.value > 0)}
                         dataKey="value"
                         nameKey="name"
@@ -1051,9 +1051,9 @@ export function BudgetUtilizationDashboardPage() {
                 </div>
                 <div className="space-y-2">
                   {[
-                    { name: 'งบบุคลากร (รวม)', value: dbPersonnelPlanned },
-                    { name: 'งบลงทุน (รวม)', value: dbInvestmentPlanned },
-                    { name: 'งบดำเนินงาน (รวม)', value: dbOperationsPlanned },
+                    { name: 'งบบุคลากร', value: dbPersonnelPlanned },
+                    { name: 'งบลงทุน', value: dbInvestmentPlanned },
+                    { name: 'งบดำเนินงาน', value: dbOperationsPlanned },
                   ].map((item) => (
                     <div key={item.name} className="flex items-center justify-between gap-3 text-sm">
                       <span className="min-w-0 truncate text-slate-600">{item.name}</span>
