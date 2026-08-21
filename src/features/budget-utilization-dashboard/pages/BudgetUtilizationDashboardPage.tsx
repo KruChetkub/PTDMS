@@ -5,7 +5,7 @@ import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer,
 import { PageHeader } from '../../../components/ui/PageHeader';
 import { useAuditPageAccess } from '../../../hooks/useAuditPageAccess';
 import { getBudgetDashboardSummary, getBudgetImportFileDetail, listBudgetDatasetOptions } from '../services/budgetUtilization.service';
-import { formatBudgetAmount, formatMillionBaht, getNetAllocationTotal, percent, sumBudgetAmounts, toNumber } from '../utils/budgetUtilizationCalculations';
+import { formatBudgetAmount, getNetAllocationTotal, percent, sumBudgetAmounts, toNumber } from '../utils/budgetUtilizationCalculations';
 import type { BudgetUtilizationAmount, BudgetUtilizationDashboardSummary, BudgetUtilizationDatasetOption, BudgetUtilizationImportFileDetail, BudgetUtilizationItemWithAmount, BudgetUtilizationRawWorkbook } from '../types/budgetUtilization.types';
 import { getSafeUserErrorMessage } from '../../../utils/errorHandling';
 
@@ -86,14 +86,30 @@ const targetToneByGroup: Record<AssessmentGroupKey, TargetTone> = {
   investment: 'emerald',
 };
 
-function StatCard({ title, value, subtext, icon: Icon, tone }: { title: string; value: string; subtext: string; icon: typeof Coins; tone: string }) {
+const plannedBudgetCategoryDefinitions = [
+  { key: "personnel", label: "งบบุคลากร", matcher: /งบบุคลากร/, color: "#2563eb" },
+  { key: "investment", label: "งบลงทุน", matcher: /งบลงทุน/, color: "#f59e0b" },
+  { key: "operations_total", label: "งบดำเนินงาน (รวม)", matcher: /งบดำเนินงาน\(รวม\)/, color: "#0f766e" },
+  { key: "operations", label: "งบดำเนินงาน (ดำเนินงานปกติ)", matcher: /^งบดำเนินงาน$/, color: "#0d9488" },
+  { key: "project", label: "งบโครงการ (รวม)", matcher: /งบโครงการ/, color: "#8b5cf6" },
+];
+
+function formatExactBaht(value: number) {
+  return `${formatBudgetAmount(value, Number.isInteger(value) ? 0 : 2)} บาท`;
+}
+
+function isProjectBudgetCategory(name: string) {
+  return /งบโครงการ/.test(name);
+}
+
+function StatCard({ title, value, subtext = '', icon: Icon, tone }: { title: string; value: string; subtext?: string; icon: typeof Coins; tone: string }) {
   return (
     <div className="rounded-md border border-slate-200 bg-white p-4 shadow-sm">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-sm font-medium text-slate-500">{title}</p>
           <p className="mt-2 break-words text-2xl font-semibold text-slate-950">{value}</p>
-          <p className="mt-1 text-xs text-slate-500">{subtext}</p>
+          {subtext ? <p className="mt-1 text-xs text-slate-500">{subtext}</p> : null}
         </div>
         <span className={`rounded-md p-2 ring-1 ${tone}`}>
           <Icon className="h-5 w-5" aria-hidden="true" />
@@ -196,34 +212,34 @@ function getRawCell(row: string[], index: number) {
 }
 
 function mapRawBudgetRow(row: string[], index: number): RawBudgetRow {
-  const name = getRawCell(row, 4) || getRawCell(row, 1) || getRawCell(row, 0) || `แถวที่ ${index + 1}`;
-  const committedTotal = toNumber(row[18]) || toNumber(row[16]) + toNumber(row[17]);
-  const disbursedTotal = toNumber(row[21]) || toNumber(row[19]) + toNumber(row[20]);
-  const utilizationTotal = toNumber(row[22]) || committedTotal + disbursedTotal;
-  const netTotal = toNumber(row[11]) || toNumber(row[8]) + toNumber(row[9]) + toNumber(row[10]) + toNumber(row[12]) - toNumber(row[13]);
+  const name = getRawCell(row, 5) || getRawCell(row, 1) || getRawCell(row, 0) || `แถวที่ ${index + 1}`;
+  const committedTotal = toNumber(row[19]) || toNumber(row[17]) + toNumber(row[18]);
+  const disbursedTotal = toNumber(row[22]) || toNumber(row[20]) + toNumber(row[21]);
+  const utilizationTotal = toNumber(row[23]) || committedTotal + disbursedTotal;
+  const netTotal = toNumber(row[12]) || toNumber(row[9]) + toNumber(row[10]) + toNumber(row[11]) + toNumber(row[13]) - toNumber(row[14]);
 
   return {
     id: `raw-${index}`,
     name,
-    planned: toNumber(row[7]),
-    allocation1: toNumber(row[8]),
-    allocation2: toNumber(row[9]),
-    allocation3: toNumber(row[10]),
+    planned: toNumber(row[8]),
+    allocation1: toNumber(row[9]),
+    allocation2: toNumber(row[10]),
+    allocation3: toNumber(row[11]),
     netTotal,
-    centralIn: toNumber(row[12]),
-    centralOut: toNumber(row[13]),
-    divisionIn: toNumber(row[14]),
-    divisionOut: toNumber(row[15]),
-    committedPo: toNumber(row[16]),
-    committedWithoutPo: toNumber(row[17]),
+    centralIn: toNumber(row[13]),
+    centralOut: toNumber(row[14]),
+    divisionIn: toNumber(row[15]),
+    divisionOut: toNumber(row[16]),
+    committedPo: toNumber(row[17]),
+    committedWithoutPo: toNumber(row[18]),
     committedTotal,
-    disbursedGeneral: toNumber(row[19]),
-    disbursedAdvance: toNumber(row[20]),
+    disbursedGeneral: toNumber(row[20]),
+    disbursedAdvance: toNumber(row[21]),
     disbursedTotal,
     utilizationTotal,
-    remaining: toNumber(row[23]),
-    disbursementRate: toNumber(row[24]) || percent(disbursedTotal, netTotal),
-    utilizationWithPoRate: toNumber(row[25]) || percent(utilizationTotal, netTotal),
+    remaining: toNumber(row[24]),
+    disbursementRate: toNumber(row[25]) || percent(disbursedTotal, netTotal),
+    utilizationWithPoRate: toNumber(row[26]) || percent(utilizationTotal, netTotal),
   };
 }
 
@@ -237,7 +253,10 @@ function getRawDashboardRows(rawWorkbook: BudgetUtilizationRawWorkbook | null | 
     .filter(({ mapped }) => mapped.netTotal || mapped.planned || mapped.disbursedTotal || mapped.utilizationTotal);
   const total = mappedRows.find(({ row }) => row.some((cell) => /รวมทั้งสิ้น/.test(cell)))?.mapped ?? mappedRows[0]?.mapped ?? null;
   const categories = mappedRows
-    .filter(({ row }) => /\(รวม\)/.test(getRawCell(row, 1)))
+    .filter(({ row }) => {
+      const cell0 = getRawCell(row, 0);
+      return (/\(รวม\)/.test(cell0) || cell0 === "งบดำเนินงาน") && !/รวมทั้งสิ้น/.test(cell0);
+    })
     .map(({ mapped }) => mapped);
 
   return { total, categories };
@@ -294,7 +313,58 @@ function sumRawBudgetRows(rows: RawBudgetRow[]): RawBudgetRow {
   };
 }
 
+function getRawPlanCategoryData(categories: RawBudgetRow[]) {
+  return plannedBudgetCategoryDefinitions.map((definition) => {
+    const rows = categories.filter((category) => definition.matcher.test(category.name));
+    const totals = sumRawBudgetRows(rows);
+
+    return {
+      ...totals,
+      key: definition.key,
+      name: definition.label,
+      color: definition.color,
+      planned: rows.reduce((sum, category) => sum + category.planned, 0),
+    };
+  });
+}
+
+function getRawPlanDetailRows(rawWorkbook: BudgetUtilizationRawWorkbook | null | undefined, categoryKey: string) {
+  if (!rawWorkbook) return [];
+
+  const definition = plannedBudgetCategoryDefinitions.find((item) => item.key === categoryKey);
+  if (!definition) return [];
+
+  return rawWorkbook.rows
+    .map((row, index) => ({ row, mapped: mapRawBudgetRow(row, index) }))
+    .filter(({ row, mapped }) => {
+      const categoryName = getRawCell(row, 2);
+      const itemName = getRawCell(row, 5);
+      const hasMoney = mapped.planned || mapped.netTotal || mapped.utilizationTotal || mapped.remaining || mapped.disbursedTotal;
+
+      if (!definition.matcher.test(categoryName) || /\(รวม\)|ดึงมา/.test(categoryName) || !itemName || !hasMoney) {
+        return false;
+      }
+
+      if (categoryKey === "project") {
+        const output = getRawCell(row, 3);
+        const activity = getRawCell(row, 4);
+        const isTargetMatch = 
+          (output === "2" && activity === "2.2") ||
+          (output === "7" && (activity === "7.2" || activity === "7.4"));
+        return isTargetMatch && itemName.includes("โครงการใหญ่");
+      }
+
+      return true;
+    })
+    .map(({ row, mapped }) => ({
+      ...mapped,
+      output: getRawCell(row, 3),
+      activity: getRawCell(row, 4),
+    }));
+}
+
 function getRawActualByGroup(group: AssessmentGroupKey, total: RawBudgetRow | null, categories: RawBudgetRow[]) {
+  if (!total) return null;
   if (group === 'overall') {
     return total;
   }
@@ -369,6 +439,9 @@ export function BudgetUtilizationDashboardPage() {
   const [datasetOptions, setDatasetOptions] = useState<BudgetUtilizationDatasetOption[]>([]);
   const [selectedReportPeriodId, setSelectedReportPeriodId] = useState(searchParams.get('reportPeriodId') ?? '');
   const [selectedQuarter, setSelectedQuarter] = useState<QuarterKey>('q4');
+  const [selectedRawPlanCategoryKey, setSelectedRawPlanCategoryKey] = useState('personnel');
+  const [showProjectBar, setShowProjectBar] = useState<boolean>(false);
+  const [showBottomTable, setShowBottomTable] = useState<boolean>(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -376,6 +449,9 @@ export function BudgetUtilizationDashboardPage() {
     try {
       setLoading(true);
       setError(null);
+      setShowProjectBar(false);
+      setShowBottomTable(false);
+      setSelectedRawPlanCategoryKey('personnel');
       const options = await listBudgetDatasetOptions();
       const selectedOption = options.find((option) => option.reportPeriodId === reportPeriodId) ?? null;
 
@@ -418,6 +494,9 @@ export function BudgetUtilizationDashboardPage() {
   const handleDatasetChange = (reportPeriodId: string) => {
     setSelectedReportPeriodId(reportPeriodId);
     setSearchParams(reportPeriodId ? { reportPeriodId } : {});
+    setShowProjectBar(false);
+    setShowBottomTable(false);
+    setSelectedRawPlanCategoryKey('personnel');
     void loadData(reportPeriodId);
   };
 
@@ -426,6 +505,55 @@ export function BudgetUtilizationDashboardPage() {
   const rawDashboard = useMemo(() => getRawDashboardRows(rawWorkbook), [rawWorkbook]);
   const rawTotal = rawDashboard.total;
   const rawCategoryData = rawDashboard.categories;
+
+  const rawPlanCategoryData = useMemo(() => getRawPlanCategoryData(rawCategoryData), [rawCategoryData]);
+
+  const visiblePlanCategoryData = useMemo(() => {
+    const keys = ["personnel", "investment", "operations_total"];
+    if (showProjectBar) {
+      keys.push("project");
+    }
+    return rawPlanCategoryData.filter((item) => keys.includes(item.key));
+  }, [rawPlanCategoryData, showProjectBar]);
+
+  const selectedRawPlanCategory = rawPlanCategoryData.find((item) => item.key === selectedRawPlanCategoryKey) ?? rawPlanCategoryData[0] ?? rawTotal;
+  const selectedRawPlanDetailRows = useMemo(() => {
+    const keyToFetch = selectedRawPlanCategoryKey === "operations_total" ? "operations" : selectedRawPlanCategoryKey;
+    return getRawPlanDetailRows(rawWorkbook, keyToFetch);
+  }, [rawWorkbook, selectedRawPlanCategoryKey]);
+
+  const projectPlanDetailRows = useMemo(() => {
+    return getRawPlanDetailRows(rawWorkbook, "project");
+  }, [rawWorkbook]);
+
+  const groupedProjectPlanRows = useMemo(() => {
+    const groups: Record<string, { label: string; output: string; activity: string; committedTotal: number; utilizationTotal: number; remaining: number; disbursedTotal: number; netTotal: number }> = {};
+    for (const item of projectPlanDetailRows) {
+      const key = `${item.output}-${item.activity}`;
+      if (!groups[key]) {
+        groups[key] = {
+          label: `ผลผลิตที่ ${item.output} กิจกรรมหลักที่ ${item.activity}`,
+          output: item.output ?? '',
+          activity: item.activity ?? '',
+          committedTotal: 0,
+          utilizationTotal: 0,
+          remaining: 0,
+          disbursedTotal: 0,
+          netTotal: 0,
+        };
+      }
+      groups[key].committedTotal += item.committedTotal;
+      groups[key].utilizationTotal += item.utilizationTotal;
+      groups[key].remaining += item.remaining;
+      groups[key].disbursedTotal += item.disbursedTotal;
+      groups[key].netTotal += item.netTotal;
+    }
+    return Object.values(groups).map(g => ({
+      ...g,
+      disbursementRate: percent(g.disbursedTotal, g.netTotal),
+    }));
+  }, [projectPlanDetailRows]);
+
   const rawAssessmentRows = useMemo(() => assessmentGroupOrder.map((group) => {
     const actual = getRawActualByGroup(group, rawTotal, rawCategoryData);
     const target = assessmentTargets[group][selectedQuarter];
@@ -440,9 +568,9 @@ export function BudgetUtilizationDashboardPage() {
   }), [rawCategoryData, rawTotal, selectedQuarter]);
   const dashboardMetrics = totals ? getDashboardAmountMetrics(totals) : null;
   const allocationData = useMemo(() => [
-    { name: 'งวด 1', value: totals?.allocation_tranche_1_amount ?? 0 },
-    { name: 'งวด 2', value: totals?.allocation_tranche_2_amount ?? 0 },
-    { name: 'งวด 3', value: totals?.allocation_tranche_3_amount ?? 0 },
+    { name: 'รับจัดสรร(งวด 1)', value: totals?.allocation_tranche_1_amount ?? 0 },
+    { name: 'รับจัดสรร(งวด 2)', value: totals?.allocation_tranche_2_amount ?? 0 },
+    { name: 'รับจัดสรร(งวด 3)', value: totals?.allocation_tranche_3_amount ?? 0 },
   ].filter((item) => item.value > 0), [totals]);
 
   const categoryData = useMemo(() => (summary?.categoryItems ?? []).map((item) => {
@@ -459,6 +587,11 @@ export function BudgetUtilizationDashboardPage() {
       amount,
     };
   }), [summary]);
+
+  const dbPersonnelPlanned = useMemo(() => categoryData.find(item => /บุคลากร/.test(item.name))?.amount.planned_budget_amount ?? 0, [categoryData]);
+  const dbInvestmentPlanned = useMemo(() => categoryData.find(item => /ลงทุน/.test(item.name))?.amount.planned_budget_amount ?? 0, [categoryData]);
+  const dbOperationsPlanned = useMemo(() => categoryData.find(item => /ดำเนินงาน/.test(item.name))?.amount.planned_budget_amount ?? 0, [categoryData]);
+  const dbPlannedTotal = useMemo(() => dbPersonnelPlanned + dbInvestmentPlanned + dbOperationsPlanned, [dbPersonnelPlanned, dbInvestmentPlanned, dbOperationsPlanned]);
 
   const assessmentRows = useMemo(() => assessmentGroupOrder.map((group) => {
     const actual = totals ? getActualByGroup(group, totals, categoryData) : null;
@@ -533,15 +666,71 @@ export function BudgetUtilizationDashboardPage() {
           <section className="grid items-start gap-4 xl:grid-cols-[250px_minmax(0,1fr)]">
             <div className="space-y-3">
               <div className="rounded-md border border-slate-200 bg-white p-4 shadow-sm">
-                <h2 className="text-base font-semibold text-slate-950">งบประมาณตามไฟล์ Excel</h2>
+                <h2 className="text-base font-semibold text-slate-950">วงเงินตามแผนปฏิบัติราชการ</h2>
                 <div className="relative mt-3 h-56">
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
                       <Pie
                         data={[
-                          { name: 'งวด 1', value: rawTotal.allocation1 },
-                          { name: 'งวด 2', value: rawTotal.allocation2 },
-                          { name: 'งวด 3', value: rawTotal.allocation3 },
+                          { name: 'งบบุคลากร (รวม)', value: rawPlanCategoryData.find(item => item.key === 'personnel')?.planned ?? 0 },
+                          { name: 'งบลงทุน (รวม)', value: rawPlanCategoryData.find(item => item.key === 'investment')?.planned ?? 0 },
+                          { name: 'งบดำเนินงาน (รวม)', value: rawPlanCategoryData.find(item => item.key === 'operations_total')?.planned ?? 0 },
+                        ].filter((item) => item.value > 0)}
+                        dataKey="value"
+                        nameKey="name"
+                        innerRadius={58}
+                        outerRadius={88}
+                        paddingAngle={2}
+                      >
+                        {[
+                          { key: 'personnel', color: '#2563eb' },
+                          { key: 'investment', color: '#f59e0b' },
+                          { key: 'operations_total', color: '#0f766e' },
+                        ].filter(item => (rawPlanCategoryData.find(x => x.key === item.key)?.planned ?? 0) > 0).map((item, index) => (
+                          <Cell key={index} fill={item.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip formatter={(value) => formatExactBaht(Number(value))} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                  <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-center">
+                    <div className="max-w-[110px]">
+                      <p className="text-[10px] font-semibold text-slate-500">วงเงินตามแผนรวม</p>
+                      <p className="text-[16px] font-bold leading-none text-slate-950 my-0.5">
+                        {formatBudgetAmount(
+                          (rawPlanCategoryData.find(item => item.key === 'personnel')?.planned ?? 0) +
+                          (rawPlanCategoryData.find(item => item.key === 'investment')?.planned ?? 0) +
+                          (rawPlanCategoryData.find(item => item.key === 'operations_total')?.planned ?? 0)
+                        )}
+                      </p>
+                      <p className="text-[10px] font-semibold text-slate-500">บาท</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  {[
+                    { name: 'งบบุคลากร (รวม)', value: rawPlanCategoryData.find(item => item.key === 'personnel')?.planned ?? 0 },
+                    { name: 'งบลงทุน (รวม)', value: rawPlanCategoryData.find(item => item.key === 'investment')?.planned ?? 0 },
+                    { name: 'งบดำเนินงาน (รวม)', value: rawPlanCategoryData.find(item => item.key === 'operations_total')?.planned ?? 0 },
+                  ].map((item) => (
+                    <div key={item.name} className="flex items-center justify-between gap-3 text-xs">
+                      <span className="min-w-0 truncate text-slate-900">{item.name}</span>
+                      <span className="shrink-0 font-semibold text-slate-950">{formatBudgetAmount(item.value, 0)} บาท</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="rounded-md border border-slate-200 bg-white p-4 shadow-sm">
+                <h2 className="text-base font-semibold text-slate-950">งบประมาณที่รับจัดสรร</h2>
+                <div className="relative mt-3 h-56">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={[
+                          { name: 'รับจัดสรรงวด 1', value: rawTotal.allocation1 },
+                          { name: 'รับจัดสรรงวด 2', value: rawTotal.allocation2 },
+                          { name: 'รับจัดสรรงวด 3', value: rawTotal.allocation3 },
                         ].filter((item) => item.value > 0)}
                         dataKey="value"
                         nameKey="name"
@@ -553,21 +742,26 @@ export function BudgetUtilizationDashboardPage() {
                           <Cell key={index} fill={chartColors[index % chartColors.length]} />
                         ))}
                       </Pie>
-                      <Tooltip formatter={(value) => formatMillionBaht(Number(value))} />
+                      <Tooltip formatter={(value) => formatExactBaht(Number(value))} />
                     </PieChart>
                   </ResponsiveContainer>
                   <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-center">
-                    <div className="max-w-28">
-                      <p className="text-[11px] font-semibold text-slate-600">ยอดสุทธิภาพรวม</p>
-                      <p className="text-xl font-bold leading-tight text-slate-950">{formatMillionBaht(rawTotal.netTotal)}</p>
+                    <div className="max-w-[110px]">
+                      <p className="text-[10px] font-semibold text-slate-500">ยอดสุทธิภาพรวม</p>
+                      <p className="text-[16px] font-bold leading-none text-slate-950 my-0.5">{formatBudgetAmount(rawTotal.netTotal)}</p>
+                      <p className="text-[9px] font-semibold text-slate-500">บาท</p>
                     </div>
                   </div>
                 </div>
                 <div className="space-y-2">
-                  {rawCategoryData.slice(0, 5).map((item) => (
-                    <div key={item.id} className="flex items-center justify-between gap-3 text-xs">
-                      <span className="min-w-0 truncate text-slate-600">{item.name}</span>
-                      <span className="shrink-0 font-semibold text-slate-950">{formatBudgetAmount(item.netTotal, 0)} บาท</span>
+                  {[
+                    { name: 'รับจัดสรรงวด 1', value: rawTotal.allocation1 },
+                    { name: 'รับจัดสรรงวด 2', value: rawTotal.allocation2 },
+                    { name: 'รับจัดสรรงวด 3', value: rawTotal.allocation3 },
+                  ].filter((item) => item.value > 0).map((item) => (
+                    <div key={item.name} className="flex items-center justify-between gap-3 text-xs">
+                      <span className="min-w-0 truncate text-slate-900">{item.name}</span>
+                      <span className="shrink-0 font-semibold text-slate-950">{formatBudgetAmount(item.value, 0)} บาท</span>
                     </div>
                   ))}
                 </div>
@@ -577,51 +771,146 @@ export function BudgetUtilizationDashboardPage() {
 
             <div className="flex flex-col gap-4">
               <div className="order-1 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                <StatCard title="ยอดรวมสุทธิ" value={formatMillionBaht(rawTotal.netTotal)} subtext="อ่านจากคอลัมน์ยอดสุทธิในไฟล์ Excel" icon={Coins} tone="bg-blue-50 text-blue-700 ring-blue-100" />
-                <StatCard title="เบิกจ่ายรวม" value={formatMillionBaht(rawTotal.disbursedTotal)} subtext="เบิกจ่ายทั่วไป + เงินยืมราชการ" icon={WalletCards} tone="bg-emerald-50 text-emerald-700 ring-emerald-100" />
-                <StatCard title="ร้อยละเบิกจ่าย" value={`${formatBudgetAmount(rawTotal.disbursementRate)}%`} subtext="อ่านจากไฟล์ หรือคำนวณจากเบิกจ่ายรวม" icon={TrendingUp} tone="bg-amber-50 text-amber-700 ring-amber-100" />
-                <StatCard title="คงเหลือ" value={formatMillionBaht(rawTotal.remaining)} subtext="อ่านจากคอลัมน์คงเหลือในไฟล์ Excel" icon={BarChart3} tone="bg-slate-50 text-slate-700 ring-slate-200" />
+                <StatCard title="ยอดรวมสุทธิ" value={formatExactBaht(rawTotal.netTotal)}  icon={Coins} tone="bg-blue-50 text-blue-700 ring-blue-100" />
+                <StatCard title="เบิกจ่ายรวม" value={formatExactBaht(rawTotal.disbursedTotal)}  icon={WalletCards} tone="bg-emerald-50 text-emerald-700 ring-emerald-100" />
+                <StatCard title="คงเหลือ" value={formatExactBaht(rawTotal.remaining)} icon={BarChart3} tone="bg-slate-50 text-slate-700 ring-slate-200" />
+                <StatCard title="ร้อยละเบิกจ่าย" value={`${formatBudgetAmount(rawTotal.disbursementRate)}%`} icon={TrendingUp} tone="bg-amber-50 text-amber-700 ring-amber-100" />
               </div>
 
               <div className="order-2 rounded-md border border-slate-200 bg-white p-4 shadow-sm">
-                <h2 className="text-base font-semibold text-slate-950">สรุปผลตามหมวดจาก Excel</h2>
-                <div className="mt-4 grid items-stretch gap-4 xl:grid-cols-[minmax(540px,0.9fr)_minmax(520px,1fr)]">
+                <h2 className="text-base font-semibold text-slate-950">วงเงินตามแผนปฏิบัติราชการ</h2>
+                <div className="mt-4 grid items-start gap-4 xl:grid-cols-[minmax(540px,0.9fr)_minmax(520px,1fr)]">
                   <div>
-                    <div className="h-64">
+                    <div className="h-96">
                       <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={rawCategoryData} margin={{ bottom: 28, left: 18, right: 12, top: 10 }}>
+                        <BarChart data={visiblePlanCategoryData} margin={{ bottom: 28, left: 18, right: 12, top: 10 }}>
                           <CartesianGrid strokeDasharray="3 3" vertical={false} />
                           <XAxis dataKey="name" tick={{ fontSize: 13, fontWeight: 600 }} interval={0} angle={-8} textAnchor="end" height={42} />
                           <YAxis tick={{ fontSize: 13, fontWeight: 600 }} tickFormatter={(value) => `${Number(value) / 1_000_000}ล.`} />
-                          <Tooltip formatter={(value) => formatMillionBaht(Number(value))} />
-                          <Bar dataKey="netTotal" name="ยอดสุทธิ" fill="#2563eb" radius={[4, 4, 0, 0]} />
-                          <Bar dataKey="disbursedTotal" name="เบิกจ่ายรวม" fill="#f97316" radius={[4, 4, 0, 0]} />
+                          <Tooltip formatter={(value) => formatBudgetAmount(Number(value))} />
+                          <Bar dataKey="planned" name="วงเงินตามแผน" radius={[4, 4, 0, 0]}>
+                            {visiblePlanCategoryData.map((item) => {
+                              const isActive = showBottomTable
+                                ? item.key === "project"
+                                : item.key === selectedRawPlanCategoryKey;
+
+                              return (
+                                <Cell
+                                  key={item.key}
+                                  fill={item.color}
+                                  fillOpacity={isActive ? 1 : 0.45}
+                                  stroke={isActive ? "#0f172a" : item.color}
+                                  strokeWidth={isActive ? 2 : 1}
+                                  className="cursor-pointer"
+                                  onClick={() => {
+                                    if (item.key === "operations_total") {
+                                      setSelectedRawPlanCategoryKey("operations_total");
+                                      setShowProjectBar(true);
+                                      setShowBottomTable(false);
+                                    } else if (item.key === "project") {
+                                      setShowBottomTable(true);
+                                    } else {
+                                      setSelectedRawPlanCategoryKey(item.key);
+                                      setShowProjectBar(false);
+                                      setShowBottomTable(false);
+                                    }
+                                  }}
+                                />
+                              );
+                            })}
+                          </Bar>
                         </BarChart>
                       </ResponsiveContainer>
                     </div>
-                    <div className="mt-1 flex justify-center gap-3 text-xs font-medium text-slate-600">
-                      <span className="inline-flex items-center gap-1.5">
-                        <span className="h-2.5 w-2.5 rounded-sm bg-blue-600" aria-hidden="true" />
-                        ยอดสุทธิ
-                      </span>
-                      <span className="inline-flex items-center gap-1.5">
-                        <span className="h-2.5 w-2.5 rounded-sm bg-orange-500" aria-hidden="true" />
-                        เบิกจ่ายรวม
-                      </span>
-                    </div>
                   </div>
-                  <div className="grid w-full gap-3">
-                    {rawAssessmentRows[0] ? (
-                      <TargetCard title={`เปรียบเทียบ${rawAssessmentRows[0].label}`} value={rawAssessmentRows[0].actualDisbursement} target={rawAssessmentRows[0].target.disbursement} tone={targetToneByGroup[rawAssessmentRows[0].group]} />
-                    ) : null}
-                    <div className="grid gap-3 md:grid-cols-2">
-                      {rawAssessmentRows.slice(1, 3).map((row) => (
-                        <TargetCard key={row.group} title={`เปรียบเทียบ${row.label}`} value={row.actualDisbursement} target={row.target.disbursement} tone={targetToneByGroup[row.group]} />
-                      ))}
+
+                  <div className="flex flex-col gap-4">
+                    <div className="rounded-md border border-slate-200 bg-slate-50 shadow-sm">
+                      <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-3 py-2">
+                        <h3 className="text-sm font-semibold text-slate-950">
+                          {selectedRawPlanCategoryKey === "operations_total" ? "รายการงบดำเนินงาน (ดำเนินงานปกติ)" : `รายการ${selectedRawPlanCategory?.name ?? "งบประมาณ"}`}
+                        </h3>
+                        <span className="text-xs font-medium text-slate-500">{selectedRawPlanDetailRows.length.toLocaleString()} รายการ</span>
+                      </div>
+                      <div className="max-h-56 overflow-auto">
+                        <table className="w-full min-w-[480px] divide-y divide-slate-200 text-xs">
+                          <thead className="sticky top-0 bg-slate-100 text-left font-semibold text-slate-600">
+                            <tr>
+                              <th className="w-[40%] px-2 py-2">รายการ</th>
+                              <th className="w-[15%] px-2 py-2 text-right">ผูกพัน รวม PO</th>
+                              <th className="w-[15%] px-2 py-2 text-right">รวม (10)</th>
+                              <th className="w-[15%] px-2 py-2 text-right">คงเหลือ (11)</th>
+                              <th className="w-[15%] px-2 py-2 text-right">ร้อยละ (12)</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 bg-white">
+                            {selectedRawPlanDetailRows.length ? selectedRawPlanDetailRows.map((item) => (
+                              <tr key={item.id}>
+                                <td className="w-[40%] max-w-0 px-2 py-2 font-medium text-slate-900">
+                                  <span className="line-clamp-2">{item.name}</span>
+                                  <span className="mt-0.5 block text-[11px] font-normal text-slate-500">
+                                    ผลผลิตที่ {item.output || "-"} · กิจกรรมหลักที่ {item.activity || "-"}
+                                  </span>
+                                </td>
+                                <td className="w-[15%] px-2 py-2 text-right font-semibold text-indigo-700">{formatBudgetAmount(item.committedTotal)}</td>
+                                <td className="w-[15%] px-2 py-2 text-right font-semibold text-slate-950">{formatBudgetAmount(item.utilizationTotal)}</td>
+                                <td className="w-[15%] px-2 py-2 text-right font-semibold text-slate-950">{formatBudgetAmount(item.remaining)}</td>
+                                <td className="w-[15%] px-2 py-2 text-right font-semibold text-teal-700">{formatBudgetAmount(item.disbursementRate)}%</td>
+                              </tr>
+                            )) : (
+                              <tr>
+                                <td colSpan={5} className="px-3 py-4 text-center text-slate-500">ไม่มีรายการในหมวดนี้</td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
                     </div>
+
+                    {showBottomTable ? (
+                      <div className="rounded-md border border-slate-200 bg-slate-50 shadow-sm">
+                        <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-3 py-2">
+                          <h3 className="text-sm font-semibold text-slate-950">
+                            รายการงบโครงการ (รวม)
+                          </h3>
+                          <span className="text-xs font-medium text-slate-500">{groupedProjectPlanRows.length.toLocaleString()} กิจกรรมหลัก</span>
+                        </div>
+                        <div className="max-h-72 overflow-auto">
+                          <table className="w-full min-w-[480px] divide-y divide-slate-200 text-xs">
+                            <thead className="sticky top-0 bg-slate-100 text-left font-semibold text-slate-600">
+                              <tr>
+                                <th className="w-[40%] px-2 py-2">หัวข้อโครงการ</th>
+                                <th className="w-[15%] px-2 py-2 text-right">ผูกพัน รวม PO</th>
+                                <th className="w-[15%] px-2 py-2 text-right">รวม (10)</th>
+                                <th className="w-[15%] px-2 py-2 text-right">คงเหลือ (11)</th>
+                                <th className="w-[15%] px-2 py-2 text-right">ร้อยละ (12)</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100 bg-white">
+                              {groupedProjectPlanRows.length ? groupedProjectPlanRows.map((item) => (
+                                <tr key={`${item.output}-${item.activity}`}>
+                                  <td className="w-[40%] max-w-0 px-2 py-2 font-medium text-slate-900">
+                                    <span className="block font-semibold text-slate-950">{item.label}</span>
+                                  </td>
+                                  <td className="w-[15%] px-2 py-2 text-right font-semibold text-indigo-700">{formatBudgetAmount(item.committedTotal)}</td>
+                                  <td className="w-[15%] px-2 py-2 text-right font-semibold text-slate-950">{formatBudgetAmount(item.utilizationTotal)}</td>
+                                  <td className="w-[15%] px-2 py-2 text-right font-semibold text-slate-950">{formatBudgetAmount(item.remaining)}</td>
+                                  <td className="w-[15%] px-2 py-2 text-right font-semibold text-teal-700">{formatBudgetAmount(item.disbursementRate)}%</td>
+                                </tr>
+                              )) : (
+                                <tr>
+                                  <td colSpan={5} className="px-3 py-4 text-center text-slate-500">ไม่มีรายการในหมวดนี้</td>
+                                </tr>
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
                 </div>
               </div>
+
 
             </div>
 
@@ -718,49 +1007,102 @@ export function BudgetUtilizationDashboardPage() {
       {summary && totals ? (
         <div className="space-y-6">
           <section className="grid gap-5 xl:grid-cols-[360px_minmax(0,1fr)]">
-            <div className="rounded-md border border-slate-200 bg-white p-5 shadow-sm">
-              <h2 className="text-lg font-semibold text-slate-950">งบประมาณที่ได้รับจัดสรร</h2>
-              <div className="relative mt-4 h-72">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie data={allocationData.length ? allocationData : [{ name: 'ไม่มีข้อมูลงวด', value: dashboardMetrics?.netAllocationTotal || totals.planned_budget_amount }]} dataKey="value" nameKey="name" innerRadius={72} outerRadius={112} paddingAngle={2}>
-                      {(allocationData.length ? allocationData : [{ name: 'ไม่มีข้อมูลงวด', value: dashboardMetrics?.netAllocationTotal || totals.planned_budget_amount }]).map((_, index) => (
-                        <Cell key={index} fill={chartColors[index % chartColors.length]} />
-                      ))}
-                    </Pie>
-                    <Tooltip formatter={(value) => formatMillionBaht(Number(value))} />
-                  </PieChart>
-                </ResponsiveContainer>
-                <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-center">
-                  <div className="max-w-32">
-                    <p className="text-xs font-semibold text-slate-600">งบประมาณภาพรวม</p>
-                    <p className="text-2xl font-bold leading-tight text-slate-950">{formatMillionBaht(dashboardMetrics?.netAllocationTotal ?? 0)}</p>
+            <div className="space-y-4">
+              <div className="rounded-md border border-slate-200 bg-white p-5 shadow-sm">
+                <h2 className="text-lg font-semibold text-slate-950">วงเงินตามแผนปฏิบัติราชการ</h2>
+                <div className="relative mt-4 h-72">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={[
+                          { name: 'งบบุคลากร (รวม)', value: dbPersonnelPlanned },
+                          { name: 'งบลงทุน (รวม)', value: dbInvestmentPlanned },
+                          { name: 'งบดำเนินงาน (รวม)', value: dbOperationsPlanned },
+                        ].filter((item) => item.value > 0)}
+                        dataKey="value"
+                        nameKey="name"
+                        innerRadius={72}
+                        outerRadius={112}
+                        paddingAngle={2}
+                      >
+                        {[
+                          { key: 'personnel', color: '#2563eb' },
+                          { key: 'investment', color: '#f59e0b' },
+                          { key: 'operations_total', color: '#0f766e' },
+                        ].filter(item => {
+                          const val = item.key === 'personnel' ? dbPersonnelPlanned :
+                                      item.key === 'investment' ? dbInvestmentPlanned :
+                                      dbOperationsPlanned;
+                          return val > 0;
+                        }).map((item, index) => (
+                          <Cell key={index} fill={item.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip formatter={(value) => formatExactBaht(Number(value))} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                  <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-center">
+                    <div className="max-w-[130px]">
+                      <p className="text-xs font-semibold text-slate-500">วงเงินตามแผนรวม</p>
+                      <p className="text-[16px] font-bold leading-none text-slate-950 my-1">{formatBudgetAmount(dbPlannedTotal)}</p>
+                      <p className="text-xs font-semibold text-slate-900">บาท</p>
+                    </div>
                   </div>
                 </div>
+                <div className="space-y-2">
+                  {[
+                    { name: 'งบบุคลากร (รวม)', value: dbPersonnelPlanned },
+                    { name: 'งบลงทุน (รวม)', value: dbInvestmentPlanned },
+                    { name: 'งบดำเนินงาน (รวม)', value: dbOperationsPlanned },
+                  ].map((item) => (
+                    <div key={item.name} className="flex items-center justify-between gap-3 text-sm">
+                      <span className="min-w-0 truncate text-slate-600">{item.name}</span>
+                      <span className="shrink-0 font-semibold text-slate-950">{formatBudgetAmount(item.value, 0)} บาท</span>
+                    </div>
+                  ))}
+                </div>
               </div>
-              <div className="space-y-2">
-                {categoryData.slice(0, 5).map((item) => (
-                  <div key={item.name} className="flex items-center justify-between gap-3 text-sm">
-                    <span className="min-w-0 truncate text-slate-600">{item.name}</span>
-                    <span className="shrink-0 font-semibold text-slate-950">{formatBudgetAmount(item.budget, 0)} บาท</span>
+
+              <div className="rounded-md border border-slate-200 bg-white p-5 shadow-sm">
+                <h2 className="text-lg font-semibold text-slate-950">งบประมาณที่ได้รับจัดสรร</h2>
+                <div className="relative mt-4 h-72">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie data={allocationData.length ? allocationData : [{ name: 'ไม่มีข้อมูลงวด', value: dashboardMetrics?.netAllocationTotal || totals.planned_budget_amount }]} dataKey="value" nameKey="name" innerRadius={72} outerRadius={112} paddingAngle={2}>
+                        {(allocationData.length ? allocationData : [{ name: 'ไม่มีข้อมูลงวด', value: dashboardMetrics?.netAllocationTotal || totals.planned_budget_amount }]).map((_, index) => (
+                          <Cell key={index} fill={chartColors[index % chartColors.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip formatter={(value) => formatExactBaht(Number(value))} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                  <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-center">
+                    <div className="max-w-[130px]">
+                      <p className="text-xs font-semibold text-slate-500">งบประมาณภาพรวม</p>
+                      <p className="text-[15px] font-bold leading-none text-slate-950 my-1">{formatBudgetAmount(dashboardMetrics?.netAllocationTotal ?? 0)}</p>
+                      <p className="text-xs font-semibold text-slate-500">บาท</p>
+                    </div>
                   </div>
-                ))}
+                </div>
+                <div className="space-y-2">
+                  {allocationData.map((item) => (
+                    <div key={item.name} className="flex items-center justify-between gap-3 text-sm">
+                      <span className="min-w-0 truncate text-slate-600">{item.name}</span>
+                      <span className="shrink-0 font-semibold text-slate-950">{formatBudgetAmount(item.value, 0)} บาท</span>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
 
             <div className="space-y-5">
               <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                <StatCard title="ยอดรวมสุทธิ" value={formatMillionBaht(dashboardMetrics?.netAllocationTotal ?? 0)} subtext="งวดจัดสรร + รับโอน - โอนออก" icon={Coins} tone="bg-blue-50 text-blue-700 ring-blue-100" />
-                <StatCard title="เบิกจ่ายรวม" value={formatMillionBaht(totals.disbursed_total_amount)} subtext="รวมเบิกทั่วไปและเงินยืม" icon={WalletCards} tone="bg-emerald-50 text-emerald-700 ring-emerald-100" />
+                <StatCard title="ยอดรวมสุทธิ" value={formatExactBaht(dashboardMetrics?.netAllocationTotal ?? 0)} subtext="งวดจัดสรร + รับโอน - โอนออก" icon={Coins} tone="bg-blue-50 text-blue-700 ring-blue-100" />
+                <StatCard title="เบิกจ่ายรวม" value={formatExactBaht(totals.disbursed_total_amount)} subtext="รวมเบิกทั่วไปและเงินยืม" icon={WalletCards} tone="bg-emerald-50 text-emerald-700 ring-emerald-100" />
+                <StatCard title="คงเหลือ" value={formatExactBaht(dashboardMetrics?.remaining ?? 0)} subtext="ยอดรวมสุทธิหลังใช้จ่ายรวม" icon={BarChart3} tone="bg-slate-50 text-slate-700 ring-slate-200" />
                 <StatCard title="ร้อยละเบิกจ่าย" value={`${formatBudgetAmount(dashboardMetrics?.disbursementRate ?? 0)}%`} subtext="เบิกจ่ายรวมเทียบยอดรวมสุทธิ" icon={TrendingUp} tone="bg-amber-50 text-amber-700 ring-amber-100" />
-                <StatCard title="คงเหลือ" value={formatMillionBaht(dashboardMetrics?.remaining ?? 0)} subtext="ยอดรวมสุทธิหลังใช้จ่ายรวม" icon={BarChart3} tone="bg-slate-50 text-slate-700 ring-slate-200" />
               </div>
 
-              <div className="grid gap-3 lg:grid-cols-3">
-                {assessmentRows.map((row) => (
-                  <TargetCard key={row.group} title={`เปรียบเทียบ${row.label}`} value={row.actualDisbursement} target={row.target.disbursement} />
-                ))}
-              </div>
 
               <section className="rounded-md border border-slate-200 bg-white p-4 shadow-sm">
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
@@ -847,7 +1189,7 @@ export function BudgetUtilizationDashboardPage() {
                       <CartesianGrid strokeDasharray="3 3" vertical={false} />
                       <XAxis dataKey="name" tick={{ fontSize: 10 }} interval={0} angle={-15} textAnchor="end" height={58} />
                       <YAxis tickFormatter={(value) => `${Number(value) / 1_000_000}ล.`} />
-                      <Tooltip formatter={(value) => formatMillionBaht(Number(value))} />
+                      <Tooltip formatter={(value) => formatExactBaht(Number(value))} />
                       <Bar dataKey="budget" name="งบประมาณ" fill="#2563eb" radius={[4, 4, 0, 0]} />
                       <Bar dataKey="disbursed" name="เบิกจ่าย" fill="#f97316" radius={[4, 4, 0, 0]} />
                     </BarChart>
