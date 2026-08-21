@@ -442,6 +442,7 @@ export function BudgetUtilizationDashboardPage() {
   const [selectedRawPlanCategoryKey, setSelectedRawPlanCategoryKey] = useState('personnel');
   const [showProjectBar, setShowProjectBar] = useState<boolean>(false);
   const [showBottomTable, setShowBottomTable] = useState<boolean>(false);
+  const [hasPlanBarClicked, setHasPlanBarClicked] = useState<boolean>(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -496,6 +497,7 @@ export function BudgetUtilizationDashboardPage() {
     setSearchParams(reportPeriodId ? { reportPeriodId } : {});
     setShowProjectBar(false);
     setShowBottomTable(false);
+    setHasPlanBarClicked(false);
     setSelectedRawPlanCategoryKey('personnel');
     void loadData(reportPeriodId);
   };
@@ -521,6 +523,20 @@ export function BudgetUtilizationDashboardPage() {
     const keyToFetch = selectedRawPlanCategoryKey === "operations_total" ? "operations" : selectedRawPlanCategoryKey;
     return getRawPlanDetailRows(rawWorkbook, keyToFetch);
   }, [rawWorkbook, selectedRawPlanCategoryKey]);
+
+  const selectedPlanStats = useMemo(() => {
+    const fallback = { netTotal: rawTotal?.netTotal ?? 0, disbursedTotal: rawTotal?.disbursedTotal ?? 0, remaining: rawTotal?.remaining ?? 0, disbursementRate: rawTotal?.disbursementRate ?? 0 };
+    if (!hasPlanBarClicked) return fallback;
+    const activeKey = showBottomTable ? "project" : selectedRawPlanCategoryKey;
+    const cat = rawPlanCategoryData.find((item) => item.key === activeKey);
+    if (!cat) return fallback;
+    return {
+      netTotal: cat.netTotal,
+      disbursedTotal: cat.disbursedTotal,
+      remaining: cat.remaining,
+      disbursementRate: cat.disbursementRate,
+    };
+  }, [hasPlanBarClicked, showBottomTable, selectedRawPlanCategoryKey, rawPlanCategoryData, rawTotal]);
 
   const projectPlanDetailRows = useMemo(() => {
     return getRawPlanDetailRows(rawWorkbook, "project");
@@ -770,12 +786,17 @@ export function BudgetUtilizationDashboardPage() {
             </div>
 
             <div className="flex flex-col gap-4">
-              <div className="order-1 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                <StatCard title="ยอดรวมสุทธิ" value={formatExactBaht(rawTotal.netTotal)}  icon={Coins} tone="bg-blue-50 text-blue-700 ring-blue-100" />
-                <StatCard title="เบิกจ่ายรวม" value={formatExactBaht(rawTotal.disbursedTotal)}  icon={WalletCards} tone="bg-emerald-50 text-emerald-700 ring-emerald-100" />
-                <StatCard title="คงเหลือ" value={formatExactBaht(rawTotal.remaining)} icon={BarChart3} tone="bg-slate-50 text-slate-700 ring-slate-200" />
-                <StatCard title="ร้อยละเบิกจ่าย" value={`${formatBudgetAmount(rawTotal.disbursementRate)}%`} icon={TrendingUp} tone="bg-amber-50 text-amber-700 ring-amber-100" />
-              </div>
+              {(() => {
+                const activeStatLabel = !hasPlanBarClicked ? "ยอดรวมทั้งหมด" : showBottomTable ? "งบโครงการ (รวม)" : (selectedRawPlanCategory?.name ?? "ยอดรวมทั้งหมด");
+                return (
+                  <div className="order-1 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                    <StatCard title="ยอดรวมสุทธิ" value={formatExactBaht(selectedPlanStats.netTotal)} subtext={activeStatLabel} icon={Coins} tone="bg-blue-50 text-blue-700 ring-blue-100" />
+                    <StatCard title="เบิกจ่ายรวม" value={formatExactBaht(selectedPlanStats.disbursedTotal)} subtext={activeStatLabel} icon={WalletCards} tone="bg-emerald-50 text-emerald-700 ring-emerald-100" />
+                    <StatCard title="คงเหลือ" value={formatExactBaht(selectedPlanStats.remaining)} subtext={activeStatLabel} icon={BarChart3} tone="bg-slate-50 text-slate-700 ring-slate-200" />
+                    <StatCard title="ร้อยละเบิกจ่าย" value={`${formatBudgetAmount(selectedPlanStats.disbursementRate)}%`} subtext={activeStatLabel} icon={TrendingUp} tone="bg-amber-50 text-amber-700 ring-amber-100" />
+                  </div>
+                );
+              })()}
 
               <div className="order-2 rounded-md border border-slate-200 bg-white p-4 shadow-sm">
                 <h2 className="text-base font-semibold text-slate-950">วงเงินตามแผนปฏิบัติราชการ</h2>
@@ -803,6 +824,7 @@ export function BudgetUtilizationDashboardPage() {
                                   strokeWidth={isActive ? 2 : 1}
                                   className="cursor-pointer"
                                   onClick={() => {
+                                    setHasPlanBarClicked(true);
                                     if (item.key === "operations_total") {
                                       setSelectedRawPlanCategoryKey("operations_total");
                                       setShowProjectBar(true);
@@ -918,7 +940,6 @@ export function BudgetUtilizationDashboardPage() {
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                   <div>
                     <h2 className="text-base font-semibold text-slate-950">การประเมินตามไตรมาส</h2>
-                    <p className="mt-1 text-xs text-slate-500">รูปแบบ Dashboard คงเดิม และใช้ข้อมูลจริงจากไฟล์ Excel ที่เลือก</p>
                   </div>
                   <label className="flex flex-col gap-1 text-xs font-semibold text-slate-600">
                     เลือกไตรมาส
