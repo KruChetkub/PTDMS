@@ -319,7 +319,7 @@ async function readImportRows(file: File) {
   }
 
   const text = (await file.text()).replace(/^\uFEFF/, '');
-  const rows = text.trimStart().startsWith('<') ? parseHtmlTable(text) : parseDelimitedText(text);
+  const rows = parseDelimitedText(text);
   return rowsToImportRows(rows);
 }
 
