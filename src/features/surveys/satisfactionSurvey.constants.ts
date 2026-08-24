@@ -40,6 +40,7 @@ export function createDefaultSurveyContextSettings(surveyId: string): SmartDspSu
     role_options: SURVEY_RESPONDENT_ROLE_OPTIONS.map((option) => ({ ...option })),
     frequency_options: SURVEY_USAGE_FREQUENCY_OPTIONS.map((option) => ({ ...option })),
     service_options: SURVEY_SERVICE_OPTIONS.map((option) => ({ ...option })),
+    additional_fields: [],
     created_at: '',
     updated_at: '',
   };

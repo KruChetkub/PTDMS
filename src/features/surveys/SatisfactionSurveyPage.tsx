@@ -3,7 +3,6 @@ import { ArrowLeft, CheckCircle2, ClipboardCheck, Save, Send, ShieldCheck } from
 import { Link, useParams } from 'react-router-dom';
 import { ConfirmModal } from '../../components/ui/ConfirmModal';
 import { useAuthStore } from '../../stores/auth.store';
-import type { SmartDspSurveyRespondentRole, SmartDspSurveyUsageFrequency } from '../../types/database.types';
 import { getSafeUserErrorMessage, reportClientError } from '../../utils/errorHandling';
 import type { SatisfactionSurveyBundle, SurveySubmissionAnswer } from './satisfactionSurvey.service';
 import {
@@ -37,11 +36,12 @@ export function SatisfactionSurveyPage() {
   const [bundle, setBundle] = useState<SatisfactionSurveyBundle | null>(null);
   const [ratings, setRatings] = useState<Record<string, number>>({});
   const [texts, setTexts] = useState<Record<string, string>>({});
-  const [respondentRole, setRespondentRole] = useState<SmartDspSurveyRespondentRole | ''>('');
+  const [respondentRole, setRespondentRole] = useState('');
   const [respondentRoleOther, setRespondentRoleOther] = useState('');
-  const [usageFrequency, setUsageFrequency] = useState<SmartDspSurveyUsageFrequency | ''>('');
+  const [usageFrequency, setUsageFrequency] = useState('');
   const [usedServices, setUsedServices] = useState<string[]>([]);
   const [usedServicesOther, setUsedServicesOther] = useState('');
+  const [customContextAnswers, setCustomContextAnswers] = useState<Record<string, string[]>>({});
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [acceptingPdpa, setAcceptingPdpa] = useState(false);
@@ -76,6 +76,7 @@ export function SatisfactionSurveyPage() {
     setPdpaAccepted(Boolean(bundle?.ownResponse));
     setPdpaConsentRecordId(null);
     setPdpaError(null);
+    setCustomContextAnswers({});
   }, [bundle?.survey.id, bundle?.ownResponse?.id]);
 
   const pdpaRequired = Boolean(bundle && !bundle.ownResponse && !pdpaAccepted);
@@ -118,16 +119,24 @@ export function SatisfactionSurveyPage() {
       setMessage('กรุณาระบุส่วนงานหรือบริการอื่น ๆ');
       return false;
     }
+    const missingCustomField = bundle?.contextSettings.additional_fields.find((field) => (
+      field.is_active && field.is_required && (customContextAnswers[field.id]?.length || 0) === 0
+    ));
+    if (missingCustomField) {
+      setMessage(`กรุณาเลือกคำตอบสำหรับ “${missingCustomField.prompt}”`);
+      return false;
+    }
     setMessage(null);
     return true;
   };
 
   const buildContext = () => ({
-    respondent_role: respondentRole as SmartDspSurveyRespondentRole,
+    respondent_role: respondentRole,
     respondent_role_other: respondentRole === 'other' ? respondentRoleOther.trim() : undefined,
-    usage_frequency: usageFrequency as SmartDspSurveyUsageFrequency,
+    usage_frequency: usageFrequency,
     used_services: usedServices,
     used_services_other: usedServices.includes('other') ? usedServicesOther.trim() : undefined,
+    custom_answers: customContextAnswers,
   });
 
   const validate = () => {
@@ -281,13 +290,19 @@ export function SatisfactionSurveyPage() {
                   <div><dt className="text-xs font-semibold text-slate-500">{bundle.contextSettings.role_prompt}</dt><dd className="mt-1 text-sm text-slate-800">{bundle.ownContext ? getSurveyOptionLabel(roleOptions, bundle.ownContext.respondent_role) : 'ไม่มีข้อมูล'}{bundle.ownContext?.respondent_role_other ? `: ${bundle.ownContext.respondent_role_other}` : ''}</dd></div>
                   <div><dt className="text-xs font-semibold text-slate-500">{bundle.contextSettings.frequency_prompt}</dt><dd className="mt-1 text-sm text-slate-800">{bundle.ownContext ? getSurveyOptionLabel(frequencyOptions, bundle.ownContext.usage_frequency) : 'ไม่มีข้อมูล'}</dd></div>
                   <div><dt className="text-xs font-semibold text-slate-500">{bundle.contextSettings.services_prompt}</dt><dd className="mt-1 text-sm leading-6 text-slate-800">{bundle.ownContext ? bundle.ownContext.used_services.map((service) => getSurveyOptionLabel(serviceOptions, service)).join(', ') : 'ไม่มีข้อมูล'}{bundle.ownContext?.used_services_other ? `: ${bundle.ownContext.used_services_other}` : ''}</dd></div>
+                  {bundle.contextSettings.additional_fields.filter((field) => field.is_active).map((field) => (
+                    <div key={field.id}>
+                      <dt className="text-xs font-semibold text-slate-500">{field.prompt}</dt>
+                      <dd className="mt-1 text-sm leading-6 text-slate-800">{(bundle.ownContext?.custom_answers?.[field.id] || []).map((value) => getSurveyOptionLabel(field.options, value)).join(', ') || 'ไม่มีข้อมูล'}</dd>
+                    </div>
+                  ))}
                 </dl>
               ) : (
                 <div className="mt-5 space-y-6">
                   <fieldset>
                     <legend className="text-sm font-semibold text-slate-800">{bundle.contextSettings.role_prompt} <span className="text-red-600">*</span></legend>
                     <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                      {roleOptions.map((option) => <label key={option.value} className={`flex min-h-11 cursor-pointer items-center gap-3 rounded-md border px-3 py-2 text-sm ${respondentRole === option.value ? 'border-brand-500 bg-brand-50 text-brand-800' : 'border-slate-200 text-slate-700 hover:border-brand-300'}`}><input type="radio" name="respondent-role" checked={respondentRole === option.value} onChange={() => setRespondentRole(option.value as SmartDspSurveyRespondentRole)} className="h-4 w-4" />{option.label}</label>)}
+                      {roleOptions.map((option) => <label key={option.value} className={`flex min-h-11 cursor-pointer items-center gap-3 rounded-md border px-3 py-2 text-sm ${respondentRole === option.value ? 'border-brand-500 bg-brand-50 text-brand-800' : 'border-slate-200 text-slate-700 hover:border-brand-300'}`}><input type="radio" name="respondent-role" checked={respondentRole === option.value} onChange={() => setRespondentRole(option.value)} className="h-4 w-4" />{option.label}</label>)}
                     </div>
                     {respondentRole === 'other' ? <input value={respondentRoleOther} onChange={(event) => setRespondentRoleOther(event.target.value)} maxLength={500} placeholder="โปรดระบุบทบาท" className="mt-3 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:ring-2 focus:ring-brand-100" /> : null}
                   </fieldset>
@@ -295,7 +310,7 @@ export function SatisfactionSurveyPage() {
                   <fieldset>
                     <legend className="text-sm font-semibold text-slate-800">{bundle.contextSettings.frequency_prompt} <span className="text-red-600">*</span></legend>
                     <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
-                      {frequencyOptions.map((option) => <label key={option.value} className={`flex min-h-11 cursor-pointer items-center gap-3 rounded-md border px-3 py-2 text-sm ${usageFrequency === option.value ? 'border-brand-500 bg-brand-50 text-brand-800' : 'border-slate-200 text-slate-700 hover:border-brand-300'}`}><input type="radio" name="usage-frequency" checked={usageFrequency === option.value} onChange={() => setUsageFrequency(option.value as SmartDspSurveyUsageFrequency)} className="h-4 w-4" />{option.label}</label>)}
+                      {frequencyOptions.map((option) => <label key={option.value} className={`flex min-h-11 cursor-pointer items-center gap-3 rounded-md border px-3 py-2 text-sm ${usageFrequency === option.value ? 'border-brand-500 bg-brand-50 text-brand-800' : 'border-slate-200 text-slate-700 hover:border-brand-300'}`}><input type="radio" name="usage-frequency" checked={usageFrequency === option.value} onChange={() => setUsageFrequency(option.value)} className="h-4 w-4" />{option.label}</label>)}
                     </div>
                   </fieldset>
 
@@ -306,6 +321,37 @@ export function SatisfactionSurveyPage() {
                     </div>
                     {usedServices.includes('other') ? <input value={usedServicesOther} onChange={(event) => setUsedServicesOther(event.target.value)} maxLength={500} placeholder="โปรดระบุส่วนงานหรือบริการ" className="mt-3 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:ring-2 focus:ring-brand-100" /> : null}
                   </fieldset>
+
+                  {bundle.contextSettings.additional_fields.filter((field) => field.is_active).map((field) => (
+                    <fieldset key={field.id}>
+                      <legend className="text-sm font-semibold text-slate-800">{field.prompt} {field.is_required ? <span className="text-red-600">*</span> : null}</legend>
+                      <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                        {field.options.map((option) => {
+                          const selectedValues = customContextAnswers[field.id] || [];
+                          const checked = selectedValues.includes(option.value);
+                          return (
+                            <label key={option.value} className={`flex min-h-11 cursor-pointer items-center gap-3 rounded-md border px-3 py-2 text-sm ${checked ? 'border-violet-500 bg-violet-50 text-violet-800' : 'border-slate-200 text-slate-700 hover:border-violet-300'}`}>
+                              <input
+                                type={field.selection_type === 'single' ? 'radio' : 'checkbox'}
+                                name={`context-${field.id}`}
+                                checked={checked}
+                                onChange={(event) => setCustomContextAnswers((current) => ({
+                                  ...current,
+                                  [field.id]: field.selection_type === 'single'
+                                    ? [option.value]
+                                    : event.target.checked
+                                      ? [...(current[field.id] || []), option.value]
+                                      : (current[field.id] || []).filter((value) => value !== option.value),
+                                }))}
+                                className="h-4 w-4"
+                              />
+                              {option.label}
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </fieldset>
+                  ))}
                 </div>
               )}
             </section>

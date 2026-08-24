@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { BarChart3, ChevronLeft, ChevronRight, ClipboardCheck, CopyPlus, Download, Gauge, Save, Settings2, Trash2 } from 'lucide-react';
+import { BarChart3, ChevronLeft, ChevronRight, ClipboardCheck, CopyPlus, Download, Gauge, Plus, Save, Settings2, Trash2, X } from 'lucide-react';
 import { Bar, BarChart, CartesianGrid, Cell, LabelList, Legend, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { ConfirmModal } from '../../../components/ui/ConfirmModal';
 import { useAuthStore } from '../../../stores/auth.store';
@@ -56,6 +56,10 @@ function toLocalDateTime(value: string | null) {
 
 function toIso(value: string) {
   return value ? new Date(value).toISOString() : null;
+}
+
+function createContextKey(prefix: string) {
+  return `${prefix}_${crypto.randomUUID().replace(/-/g, '').slice(0, 16)}`;
 }
 
 function formatSurveyDateTime(value: string | null) {
@@ -369,10 +373,35 @@ export function SiteManagerSatisfactionSurveyEditor({
   const resultRoleDistribution = countLabels((bundle?.respondentContexts || []).map((context) => getSurveyOptionLabel(roleOptions, context.respondent_role)), roleLabelOrder);
   const resultFrequencyDistribution = countLabels((bundle?.respondentContexts || []).map((context) => getSurveyOptionLabel(frequencyOptions, context.usage_frequency)), frequencyLabelOrder);
   const resultServiceDistribution = countLabels((bundle?.respondentContexts || []).flatMap((context) => context.used_services.map((service) => getSurveyOptionLabel(serviceOptions, service))), serviceLabelOrder);
+  const additionalResultDistributions = (bundle?.contextSettings.additional_fields || [])
+    .filter((field) => field.is_active)
+    .map((field) => ({
+      title: field.prompt,
+      data: countLabels(
+        (bundle?.respondentContexts || []).flatMap((context) =>
+          (context.custom_answers?.[field.id] || []).map((value) => getSurveyOptionLabel(field.options, value)),
+        ),
+        field.options.map((option) => option.label),
+      ),
+    }));
   const contextMissingCount = Math.max(0, (bundle?.responses.length || 0) - (bundle?.respondentContexts.length || 0));
   const roleDistribution = addDistributionPercentage(countLabels(filteredContexts.map((context) => getSurveyOptionLabel(roleOptions, context.respondent_role)), roleLabelOrder), filteredContexts.length);
   const frequencyDistribution = addDistributionPercentage(countLabels(filteredContexts.map((context) => getSurveyOptionLabel(frequencyOptions, context.usage_frequency)), frequencyLabelOrder), filteredContexts.length);
   const serviceDistribution = addDistributionPercentage(countLabels(filteredContexts.flatMap((context) => context.used_services.map((service) => getSurveyOptionLabel(serviceOptions, service))), serviceLabelOrder), filteredContexts.length);
+  const additionalDashboardDistributions = (bundle?.contextSettings.additional_fields || [])
+    .filter((field) => field.is_active)
+    .map((field) => ({
+      title: field.prompt,
+      data: addDistributionPercentage(
+        countLabels(
+          filteredContexts.flatMap((context) =>
+            (context.custom_answers?.[field.id] || []).map((value) => getSurveyOptionLabel(field.options, value)),
+          ),
+          field.options.map((option) => option.label),
+        ),
+        filteredContexts.length,
+      ),
+    }));
   const openTextQuestions = questions
     .filter((question) => question.question_type === 'open_text')
     .sort((left, right) => left.position - right.position);
@@ -438,19 +467,24 @@ export function SiteManagerSatisfactionSurveyEditor({
           กลุ่มงาน: safeExcelText(profile?.work_group),
           ฝ่าย: safeExcelText(profile?.department),
           สิทธิ์ผู้ใช้: profile?.role || '',
-          'บทบาทผู้ตอบแบบสำรวจ': context ? getSurveyOptionLabel(roleOptions, context.respondent_role) : '',
+          [bundle.contextSettings.role_prompt]: context ? getSurveyOptionLabel(roleOptions, context.respondent_role) : '',
           'บทบาทอื่น ๆ': safeExcelText(context?.respondent_role_other),
-          'ความถี่ในการใช้งาน': context ? getSurveyOptionLabel(frequencyOptions, context.usage_frequency) : '',
-          'ส่วนงานหรือบริการที่เคยใช้': context ? context.used_services.map((service) => getSurveyOptionLabel(serviceOptions, service)).join(', ') : '',
+          [bundle.contextSettings.frequency_prompt]: context ? getSurveyOptionLabel(frequencyOptions, context.usage_frequency) : '',
+          [bundle.contextSettings.services_prompt]: context ? context.used_services.map((service) => getSurveyOptionLabel(serviceOptions, service)).join(', ') : '',
           'ส่วนงานหรือบริการอื่น ๆ': safeExcelText(context?.used_services_other),
         };
+        for (const field of bundle.contextSettings.additional_fields.filter((item) => item.is_active)) {
+          row[field.prompt] = context
+            ? (context.custom_answers?.[field.id] || []).map((value) => getSurveyOptionLabel(field.options, value)).join(', ')
+            : '';
+        }
         for (const answer of responseAnswerMap.get(response.id) || []) {
           row[`ข้อ ${answer.question_position}`] = answer.rating_value ?? safeExcelText(answer.text_value);
         }
         return row;
       });
       const responsesSheet = XLSX.utils.json_to_sheet(responseRows.length > 0 ? responseRows : [{ หมายเหตุ: 'ไม่มีข้อมูลในช่วงวันที่ที่เลือก' }]);
-      responsesSheet['!cols'] = [{ wch: 8 }, { wch: 38 }, { wch: 12 }, { wch: 24 }, { wch: 16 }, { wch: 28 }, { wch: 24 }, { wch: 24 }, { wch: 24 }, { wch: 16 }, { wch: 28 }, { wch: 28 }, { wch: 24 }, { wch: 70 }, { wch: 40 }, ...questions.map(() => ({ wch: 24 }))];
+      responsesSheet['!cols'] = [{ wch: 8 }, { wch: 38 }, { wch: 12 }, { wch: 24 }, { wch: 16 }, { wch: 28 }, { wch: 24 }, { wch: 24 }, { wch: 24 }, { wch: 16 }, { wch: 28 }, { wch: 28 }, { wch: 24 }, { wch: 70 }, { wch: 40 }, ...bundle.contextSettings.additional_fields.filter((field) => field.is_active).map(() => ({ wch: 36 })), ...questions.map(() => ({ wch: 24 }))];
 
       const answerRows = filteredDashboardResponses.flatMap((response) => {
         const profile = profileById.get(response.respondent_id);
@@ -588,6 +622,71 @@ export function SiteManagerSatisfactionSurveyEditor({
       ...bundle,
       contextSettings: { ...bundle.contextSettings, [field]: nextOptions },
     });
+  };
+
+  const addContextOption = (field: 'role_options' | 'frequency_options' | 'service_options') => {
+    if (!bundle || structureLocked) return;
+    setBundle({
+      ...bundle,
+      contextSettings: {
+        ...bundle.contextSettings,
+        [field]: [...bundle.contextSettings[field], { value: createContextKey('option'), label: 'ตัวเลือกใหม่' }],
+      },
+    });
+  };
+
+  const removeContextOption = (field: 'role_options' | 'frequency_options' | 'service_options', index: number) => {
+    if (!bundle || structureLocked || bundle.contextSettings[field].length <= 1) return;
+    setBundle({
+      ...bundle,
+      contextSettings: {
+        ...bundle.contextSettings,
+        [field]: bundle.contextSettings[field].filter((_, optionIndex) => optionIndex !== index),
+      },
+    });
+  };
+
+  const addAdditionalContextField = () => {
+    if (!bundle || structureLocked) return;
+    setBundle({
+      ...bundle,
+      contextSettings: {
+        ...bundle.contextSettings,
+        additional_fields: [
+          ...bundle.contextSettings.additional_fields,
+          {
+            id: createContextKey('field'),
+            prompt: 'หัวข้อใหม่',
+            selection_type: 'single',
+            is_required: true,
+            is_active: true,
+            options: [{ value: createContextKey('option'), label: 'ตัวเลือกใหม่' }],
+          },
+        ],
+      },
+    });
+  };
+
+  const updateAdditionalContextField = (index: number, updates: Partial<SatisfactionSurveyAdminBundle['contextSettings']['additional_fields'][number]>) => {
+    if (!bundle || structureLocked) return;
+    setBundle({
+      ...bundle,
+      contextSettings: {
+        ...bundle.contextSettings,
+        additional_fields: bundle.contextSettings.additional_fields.map((field, fieldIndex) => fieldIndex === index ? { ...field, ...updates } : field),
+      },
+    });
+  };
+
+  const removeAdditionalContextField = (index: number) => {
+    if (!bundle || structureLocked) return;
+    setBundle((current) => current ? {
+      ...current,
+      contextSettings: {
+        ...current.contextSettings,
+        additional_fields: current.contextSettings.additional_fields.filter((_, fieldIndex) => fieldIndex !== index),
+      },
+    } : current);
   };
 
   const createRound = async () => {
@@ -768,20 +867,57 @@ export function SiteManagerSatisfactionSurveyEditor({
                     <p className="text-xs font-semibold text-slate-600">ชื่อตัวเลือก</p>
                     <div className={cn('mt-2 grid gap-2', group.optionsField === 'service_options' && 'sm:grid-cols-2 sm:gap-x-4')}>
                       {bundle.contextSettings[group.optionsField].map((option, index) => (
-                        <label key={option.value} className="grid grid-cols-[88px_1fr] items-center gap-2 text-xs text-slate-500">
-                          <span className="truncate" title={option.value}>{option.value}</span>
+                        <div key={option.value} className="flex min-w-0 items-center gap-2">
                           <input
                             disabled={structureLocked}
                             value={option.label}
                             onChange={(event) => updateContextOptionLabel(group.optionsField, index, event.target.value)}
-                            className="min-w-0 rounded-md border border-slate-300 bg-white px-2.5 py-2 text-sm text-slate-800 disabled:bg-slate-100"
+                            className="min-w-0 flex-1 rounded-md border border-slate-300 bg-white px-2.5 py-2 text-sm text-slate-800 disabled:bg-slate-100"
                           />
-                        </label>
+                          {!structureLocked ? <button type="button" onClick={() => removeContextOption(group.optionsField, index)} disabled={bundle.contextSettings[group.optionsField].length <= 1} title="ลบตัวเลือก" className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-30"><X className="h-4 w-4" aria-hidden="true" /></button> : null}
+                        </div>
                       ))}
                     </div>
+                    {!structureLocked ? <button type="button" onClick={() => addContextOption(group.optionsField)} className="mt-3 inline-flex items-center gap-2 rounded-md border border-brand-200 bg-white px-3 py-2 text-xs font-semibold text-brand-700 hover:bg-brand-50"><Plus className="h-4 w-4" aria-hidden="true" /> เพิ่มตัวเลือก</button> : null}
                   </div>
                 </section>
               ))}
+            </div>
+
+            <div className="mt-6 border-t border-slate-200 pt-5">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h4 className="text-sm font-semibold text-slate-900">หัวข้อข้อมูลผู้ตอบเพิ่มเติม</h4>
+                  <p className="mt-1 text-xs leading-5 text-slate-500">เพิ่มหัวข้อแบบเลือกหนึ่งข้อหรือหลายข้อ รหัสภายในจะสร้างอัตโนมัติและไม่แสดงบนหน้าจอ</p>
+                </div>
+                {!structureLocked ? <button type="button" onClick={addAdditionalContextField} className="inline-flex items-center gap-2 rounded-md bg-brand-700 px-3 py-2 text-sm font-semibold text-white hover:bg-brand-800"><Plus className="h-4 w-4" aria-hidden="true" /> เพิ่มหัวข้อใหม่</button> : null}
+              </div>
+
+              <div className="mt-4 space-y-4">
+                {bundle.contextSettings.additional_fields.length === 0 ? <div className="rounded-md border border-dashed border-slate-300 px-4 py-8 text-center text-sm text-slate-500">ยังไม่มีหัวข้อเพิ่มเติม</div> : null}
+                {bundle.contextSettings.additional_fields.map((field, fieldIndex) => (
+                  <section key={field.id} className="rounded-md border border-slate-200 bg-slate-50/60 p-4">
+                    <div className="grid gap-3 lg:grid-cols-[minmax(280px,1fr)_180px_auto]">
+                      <label className="text-xs font-medium text-slate-600">ชื่อหัวข้อ<input disabled={structureLocked} value={field.prompt} onChange={(event) => updateAdditionalContextField(fieldIndex, { prompt: event.target.value })} className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 disabled:bg-slate-100" /></label>
+                      <label className="text-xs font-medium text-slate-600">รูปแบบคำตอบ<select disabled={structureLocked} value={field.selection_type} onChange={(event) => updateAdditionalContextField(fieldIndex, { selection_type: event.target.value === 'multiple' ? 'multiple' : 'single' })} className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm disabled:bg-slate-100"><option value="single">เลือกหนึ่งข้อ</option><option value="multiple">เลือกได้หลายข้อ</option></select></label>
+                      {!structureLocked ? <button type="button" onClick={() => removeAdditionalContextField(fieldIndex)} title="ลบหัวข้อ" className="mt-5 inline-flex h-9 w-9 items-center justify-center rounded-md border border-red-200 text-red-600 hover:bg-red-50"><Trash2 className="h-4 w-4" aria-hidden="true" /></button> : null}
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-5 text-xs text-slate-600">
+                      <label className="flex items-center gap-2"><input type="checkbox" disabled={structureLocked} checked={field.is_required} onChange={(event) => updateAdditionalContextField(fieldIndex, { is_required: event.target.checked })} /> บังคับตอบ</label>
+                      <label className="flex items-center gap-2"><input type="checkbox" disabled={structureLocked} checked={field.is_active} onChange={(event) => updateAdditionalContextField(fieldIndex, { is_active: event.target.checked })} /> เปิดใช้งาน</label>
+                    </div>
+                    <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                      {field.options.map((option, optionIndex) => (
+                        <div key={option.value} className="flex min-w-0 items-center gap-2">
+                          <input disabled={structureLocked} value={option.label} onChange={(event) => updateAdditionalContextField(fieldIndex, { options: field.options.map((item, index) => index === optionIndex ? { ...item, label: event.target.value } : item) })} className="min-w-0 flex-1 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm disabled:bg-slate-100" />
+                          {!structureLocked ? <button type="button" disabled={field.options.length <= 1} onClick={() => updateAdditionalContextField(fieldIndex, { options: field.options.filter((_, index) => index !== optionIndex) })} title="ลบตัวเลือก" className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-30"><X className="h-4 w-4" aria-hidden="true" /></button> : null}
+                        </div>
+                      ))}
+                    </div>
+                    {!structureLocked ? <button type="button" onClick={() => updateAdditionalContextField(fieldIndex, { options: [...field.options, { value: createContextKey('option'), label: 'ตัวเลือกใหม่' }] })} className="mt-3 inline-flex items-center gap-2 rounded-md border border-brand-200 bg-white px-3 py-2 text-xs font-semibold text-brand-700 hover:bg-brand-50"><Plus className="h-4 w-4" aria-hidden="true" /> เพิ่มตัวเลือก</button> : null}
+                  </section>
+                ))}
+              </div>
             </div>
           </div>
           <div className="space-y-3">
@@ -799,11 +935,12 @@ export function SiteManagerSatisfactionSurveyEditor({
               <div><h3 className="text-sm font-semibold text-slate-900">ข้อมูลเกี่ยวกับการใช้งานระบบ</h3><p className="mt-1 text-xs text-slate-500">สรุปจากข้อมูลที่ผู้ตอบเลือกในรอบนี้</p></div>
               <span className={`rounded-md px-3 py-1.5 text-xs font-semibold ${contextMissingCount > 0 ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'}`}>มีข้อมูล {bundle.respondentContexts.length}/{bundle.responses.length}{contextMissingCount > 0 ? ` · ยังไม่มีข้อมูล ${contextMissingCount}` : ''}</span>
             </div>
-            <div className="mt-4 grid gap-5 lg:grid-cols-3">
+            <div className="mt-4 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
               {[
-                { title: 'บทบาทของผู้ตอบ', data: resultRoleDistribution },
-                { title: 'ความถี่ในการใช้งาน', data: resultFrequencyDistribution },
-                { title: 'ส่วนงานหรือบริการที่เคยใช้', data: resultServiceDistribution },
+                { title: bundle.contextSettings.role_prompt, data: resultRoleDistribution },
+                { title: bundle.contextSettings.frequency_prompt, data: resultFrequencyDistribution },
+                { title: bundle.contextSettings.services_prompt, data: resultServiceDistribution },
+                ...additionalResultDistributions,
               ].map((group) => <div key={group.title}><h4 className="text-xs font-semibold text-slate-600">{group.title}</h4><div className="mt-2 divide-y divide-slate-100 border-y border-slate-100">{group.data.length > 0 ? group.data.map((item) => <div key={item.name} className="flex items-start justify-between gap-3 py-2 text-sm"><span className="text-slate-700">{item.name}</span><strong className="shrink-0 text-slate-900">{item.total}</strong></div>) : <p className="py-3 text-sm text-slate-400">ยังไม่มีข้อมูล</p>}</div></div>)}
             </div>
           </section>
@@ -824,7 +961,7 @@ export function SiteManagerSatisfactionSurveyEditor({
                         {respondent?.full_name || 'ไม่พบชื่อผู้ตอบ'} · {new Intl.DateTimeFormat('th-TH', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(response.submitted_at))}
                       </summary>
                       <div className="border-t border-slate-100 px-4 py-3">
-                        {context ? <div className="mb-3 grid gap-2 rounded-md bg-slate-50 p-3 text-xs text-slate-600 sm:grid-cols-3"><span><strong>บทบาท:</strong> {getSurveyOptionLabel(roleOptions, context.respondent_role)}{context.respondent_role_other ? `: ${context.respondent_role_other}` : ''}</span><span><strong>ความถี่:</strong> {getSurveyOptionLabel(frequencyOptions, context.usage_frequency)}</span><span><strong>บริการ:</strong> {context.used_services.map((service) => getSurveyOptionLabel(serviceOptions, service)).join(', ')}{context.used_services_other ? `: ${context.used_services_other}` : ''}</span></div> : null}
+                        {context ? <div className="mb-3 grid gap-3 rounded-md bg-slate-50 p-3 text-xs text-slate-600 sm:grid-cols-2 xl:grid-cols-3"><span><strong>{bundle.contextSettings.role_prompt}:</strong> {getSurveyOptionLabel(roleOptions, context.respondent_role)}{context.respondent_role_other ? `: ${context.respondent_role_other}` : ''}</span><span><strong>{bundle.contextSettings.frequency_prompt}:</strong> {getSurveyOptionLabel(frequencyOptions, context.usage_frequency)}</span><span><strong>{bundle.contextSettings.services_prompt}:</strong> {context.used_services.map((service) => getSurveyOptionLabel(serviceOptions, service)).join(', ')}{context.used_services_other ? `: ${context.used_services_other}` : ''}</span>{bundle.contextSettings.additional_fields.filter((field) => field.is_active).map((field) => <span key={field.id}><strong>{field.prompt}:</strong> {(context.custom_answers?.[field.id] || []).map((value) => getSurveyOptionLabel(field.options, value)).join(', ') || '-'}</span>)}</div> : null}
                         {(answersByResponse.get(response.id) || []).map((answer) => <div key={answer.id} className="border-b border-slate-100 py-2 last:border-0"><p className="text-xs text-slate-500">ข้อ {answer.question_position}: {answer.question_prompt}</p><p className="mt-1 text-sm text-slate-800">{answer.rating_value !== null ? `${answer.rating_value} คะแนน` : answer.text_value}</p></div>)}
                       </div>
                     </details>
@@ -894,9 +1031,10 @@ export function SiteManagerSatisfactionSurveyEditor({
                 </div>
                 {filteredContexts.length > 0 ? (
                   <div className="mt-4 grid gap-5 xl:grid-cols-2">
-                    <div><h5 className="text-center text-xs font-semibold text-slate-600">บทบาทของผู้ตอบ</h5><div className="h-72"><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={roleDistribution} dataKey="total" nameKey="name" innerRadius={52} outerRadius={86} paddingAngle={2} labelLine={false} label={({ payload }) => payload?.total ? payload.display : ''}>{roleDistribution.map((item, index) => <Cell key={item.name} fill={SCORE_COLORS[index % SCORE_COLORS.length]} />)}</Pie><Tooltip formatter={(value) => [formatDistributionValue(value, filteredContexts.length), 'จำนวนและร้อยละ']} /><Legend /></PieChart></ResponsiveContainer></div></div>
-                    <div><h5 className="text-center text-xs font-semibold text-slate-600">ความถี่ในการเข้าใช้งาน</h5><div className="h-72"><ResponsiveContainer width="100%" height="100%"><BarChart data={frequencyDistribution} margin={{ top: 30, right: 10, left: -18, bottom: 42 }}><CartesianGrid strokeDasharray="3 3" vertical={false} /><XAxis dataKey="name" interval={0} angle={-24} textAnchor="end" fontSize={10} /><YAxis allowDecimals={false} fontSize={11} /><Tooltip formatter={(value) => [formatDistributionValue(value, filteredContexts.length), 'จำนวนและร้อยละ']} /><Bar dataKey="total" fill="#0d9488" radius={[4, 4, 0, 0]}><LabelList dataKey="display" position="top" fill="#334155" fontSize={12} fontWeight={600} /></Bar></BarChart></ResponsiveContainer></div></div>
-                    <div className="xl:col-span-2"><h5 className="text-center text-xs font-semibold text-slate-600">ส่วนงานหรือบริการที่เคยใช้งาน</h5><div className="mt-3 divide-y divide-slate-100 md:hidden">{serviceDistribution.map((item) => <div key={item.name} className="flex items-start justify-between gap-3 py-2 text-sm"><span className="text-slate-700">{item.name}</span><strong className="shrink-0 text-blue-700">{item.display}</strong></div>)}</div><div className="hidden md:block" style={{ height: Math.max(340, serviceDistribution.length * 46) }}><ResponsiveContainer width="100%" height="100%"><BarChart data={serviceDistribution} layout="vertical" margin={{ top: 10, right: 130, left: 0, bottom: 4 }}><CartesianGrid strokeDasharray="3 3" horizontal={false} /><XAxis type="number" allowDecimals={false} fontSize={12} /><YAxis type="category" dataKey="name" width={280} tick={<ServiceAxisTick />} /><Tooltip formatter={(value) => [formatDistributionValue(value, filteredContexts.length), 'จำนวนและร้อยละ']} /><Bar dataKey="total" fill="#0369a1" radius={[0, 4, 4, 0]}><LabelList dataKey="display" position="right" fill="#334155" fontSize={12} fontWeight={600} /></Bar></BarChart></ResponsiveContainer></div></div>
+                    <div><h5 className="text-center text-xs font-semibold text-slate-600">{bundle.contextSettings.role_prompt}</h5><div className="h-72"><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={roleDistribution} dataKey="total" nameKey="name" innerRadius={52} outerRadius={86} paddingAngle={2} labelLine={false} label={({ payload }) => payload?.total ? payload.display : ''}>{roleDistribution.map((item, index) => <Cell key={item.name} fill={SCORE_COLORS[index % SCORE_COLORS.length]} />)}</Pie><Tooltip formatter={(value) => [formatDistributionValue(value, filteredContexts.length), 'จำนวนและร้อยละ']} /><Legend /></PieChart></ResponsiveContainer></div></div>
+                    <div><h5 className="text-center text-xs font-semibold text-slate-600">{bundle.contextSettings.frequency_prompt}</h5><div className="h-72"><ResponsiveContainer width="100%" height="100%"><BarChart data={frequencyDistribution} margin={{ top: 30, right: 10, left: -18, bottom: 42 }}><CartesianGrid strokeDasharray="3 3" vertical={false} /><XAxis dataKey="name" interval={0} angle={-24} textAnchor="end" fontSize={10} /><YAxis allowDecimals={false} fontSize={11} /><Tooltip formatter={(value) => [formatDistributionValue(value, filteredContexts.length), 'จำนวนและร้อยละ']} /><Bar dataKey="total" fill="#0d9488" radius={[4, 4, 0, 0]}><LabelList dataKey="display" position="top" fill="#334155" fontSize={12} fontWeight={600} /></Bar></BarChart></ResponsiveContainer></div></div>
+                    <div className="xl:col-span-2"><h5 className="text-center text-xs font-semibold text-slate-600">{bundle.contextSettings.services_prompt}</h5><div className="mt-3 divide-y divide-slate-100 md:hidden">{serviceDistribution.map((item) => <div key={item.name} className="flex items-start justify-between gap-3 py-2 text-sm"><span className="text-slate-700">{item.name}</span><strong className="shrink-0 text-blue-700">{item.display}</strong></div>)}</div><div className="hidden md:block" style={{ height: Math.max(340, serviceDistribution.length * 46) }}><ResponsiveContainer width="100%" height="100%"><BarChart data={serviceDistribution} layout="vertical" margin={{ top: 10, right: 130, left: 0, bottom: 4 }}><CartesianGrid strokeDasharray="3 3" horizontal={false} /><XAxis type="number" allowDecimals={false} fontSize={12} /><YAxis type="category" dataKey="name" width={280} tick={<ServiceAxisTick />} /><Tooltip formatter={(value) => [formatDistributionValue(value, filteredContexts.length), 'จำนวนและร้อยละ']} /><Bar dataKey="total" fill="#0369a1" radius={[0, 4, 4, 0]}><LabelList dataKey="display" position="right" fill="#334155" fontSize={12} fontWeight={600} /></Bar></BarChart></ResponsiveContainer></div></div>
+                    {additionalDashboardDistributions.map((group) => <div key={group.title} className="xl:col-span-2"><h5 className="text-center text-xs font-semibold text-slate-600">{group.title}</h5><div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">{group.data.map((item) => <div key={item.name} className="flex items-start justify-between gap-3 rounded-md border border-slate-200 px-3 py-2 text-sm"><span className="text-slate-700">{item.name}</span><strong className="shrink-0 text-blue-700">{item.display}</strong></div>)}</div></div>)}
                   </div>
                 ) : <p className="py-8 text-center text-sm text-slate-500">ยังไม่มีข้อมูลบทบาท ความถี่ และบริการในช่วงที่เลือก</p>}
               </section>

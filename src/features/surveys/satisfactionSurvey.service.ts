@@ -7,16 +7,11 @@ import type {
   SmartDspSurveyQuestion,
   SmartDspSurveyRatingOption,
   SmartDspSurveyRespondentContext,
-  SmartDspSurveyRespondentRole,
   SmartDspSurveyResponse,
-  SmartDspSurveyUsageFrequency,
 } from '../../types/database.types';
 import { optionalPlainTextInput, sanitizePlainTextInput } from '../../utils/inputSecurity';
 import {
   createDefaultSurveyContextSettings,
-  SURVEY_RESPONDENT_ROLE_OPTIONS,
-  SURVEY_SERVICE_OPTIONS,
-  SURVEY_USAGE_FREQUENCY_OPTIONS,
 } from './satisfactionSurvey.constants';
 
 export const SMARTDSP_SURVEY_CODE = 'smartdsp-satisfaction';
@@ -70,11 +65,12 @@ export type SurveySubmissionAnswer = {
 };
 
 export type SurveyRespondentContextInput = {
-  respondent_role: SmartDspSurveyRespondentRole;
+  respondent_role: string;
   respondent_role_other?: string;
-  usage_frequency: SmartDspSurveyUsageFrequency;
+  usage_frequency: string;
   used_services: string[];
   used_services_other?: string;
+  custom_answers: Record<string, string[]>;
 };
 
 export type SurveyConsentConfirmation = {
@@ -414,17 +410,36 @@ export async function saveSurveyContextSettings(settings: SmartDspSurveyContextS
   const servicesPrompt = sanitizePlainTextInput(settings.services_prompt, { fieldName: 'หัวข้อส่วนงานหรือบริการ', maxLength: 500, allowNewlines: false });
   if (!rolePrompt || !frequencyPrompt || !servicesPrompt) throw new Error('กรุณากรอกหัวข้อข้อมูลเกี่ยวกับการใช้งานระบบให้ครบถ้วน');
 
-  const sanitizeOptions = (
-    defaults: ReadonlyArray<{ value: string; label: string }>,
-    current: ReadonlyArray<{ value: string; label: string }>,
-    fieldName: string,
-  ) => defaults.map((defaultOption) => {
+  const sanitizeOptions = (current: ReadonlyArray<{ value: string; label: string }>, fieldName: string) => {
+    if (current.length === 0 || current.length > 50) throw new Error(`${fieldName} ต้องมีตัวเลือก 1–50 รายการ`);
+    const seen = new Set<string>();
+    return current.map((option) => {
+      if (!/^[a-z0-9_]{3,80}$/.test(option.value) || seen.has(option.value)) throw new Error(`รหัสภายในของ ${fieldName} ไม่ถูกต้องหรือซ้ำกัน`);
+      seen.add(option.value);
     const label = sanitizePlainTextInput(
-      current.find((option) => option.value === defaultOption.value)?.label || '',
-      { fieldName: `${fieldName}: ${defaultOption.value}`, maxLength: 200, allowNewlines: false },
+        option.label,
+        { fieldName, maxLength: 200, allowNewlines: false },
     );
     if (!label) throw new Error(`กรุณากรอกชื่อตัวเลือก ${fieldName} ให้ครบถ้วน`);
-    return { value: defaultOption.value, label };
+      return { value: option.value, label };
+    });
+  };
+
+  if (settings.additional_fields.length > 20) throw new Error('เพิ่มหัวข้อข้อมูลผู้ตอบได้ไม่เกิน 20 หัวข้อ');
+  const seenFieldIds = new Set<string>();
+  const additionalFields = settings.additional_fields.map((field, index) => {
+    if (!/^[a-z0-9_]{3,80}$/.test(field.id) || seenFieldIds.has(field.id)) throw new Error('รหัสภายในของหัวข้อใหม่ไม่ถูกต้องหรือซ้ำกัน');
+    seenFieldIds.add(field.id);
+    const prompt = sanitizePlainTextInput(field.prompt, { fieldName: `หัวข้อเพิ่มเติม ${index + 1}`, maxLength: 500, allowNewlines: false });
+    if (!prompt) throw new Error(`กรุณากรอกชื่อหัวข้อเพิ่มเติม ${index + 1}`);
+    return {
+      id: field.id,
+      prompt,
+      selection_type: field.selection_type === 'multiple' ? 'multiple' as const : 'single' as const,
+      is_required: Boolean(field.is_required),
+      is_active: Boolean(field.is_active),
+      options: sanitizeOptions(field.options, `ตัวเลือกของหัวข้อ “${prompt}”`),
+    };
   });
 
   const { data, error } = await supabase
@@ -434,9 +449,10 @@ export async function saveSurveyContextSettings(settings: SmartDspSurveyContextS
       role_prompt: rolePrompt,
       frequency_prompt: frequencyPrompt,
       services_prompt: servicesPrompt,
-      role_options: sanitizeOptions(SURVEY_RESPONDENT_ROLE_OPTIONS, settings.role_options, 'บทบาทผู้ตอบ'),
-      frequency_options: sanitizeOptions(SURVEY_USAGE_FREQUENCY_OPTIONS, settings.frequency_options, 'ความถี่ในการใช้งาน'),
-      service_options: sanitizeOptions(SURVEY_SERVICE_OPTIONS, settings.service_options, 'ส่วนงานหรือบริการ'),
+      role_options: sanitizeOptions(settings.role_options, 'บทบาทผู้ตอบ'),
+      frequency_options: sanitizeOptions(settings.frequency_options, 'ความถี่ในการใช้งาน'),
+      service_options: sanitizeOptions(settings.service_options, 'ส่วนงานหรือบริการ'),
+      additional_fields: additionalFields,
     }, { onConflict: 'survey_id' })
     .select('*')
     .single();

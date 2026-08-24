@@ -402,17 +402,27 @@ export type SmartDspSurveyAnswer = {
 
 export type SmartDspSurveyRespondentContext = {
   response_id: string;
-  respondent_role: SmartDspSurveyRespondentRole;
+  respondent_role: string;
   respondent_role_other: string | null;
-  usage_frequency: SmartDspSurveyUsageFrequency;
+  usage_frequency: string;
   used_services: string[];
   used_services_other: string | null;
+  custom_answers: Record<string, string[]>;
   created_at: string;
 };
 
 export type SmartDspSurveyContextOption = {
   value: string;
   label: string;
+};
+
+export type SmartDspSurveyAdditionalContextField = {
+  id: string;
+  prompt: string;
+  selection_type: 'single' | 'multiple';
+  is_required: boolean;
+  is_active: boolean;
+  options: SmartDspSurveyContextOption[];
 };
 
 export type SmartDspSurveyContextSettings = {
@@ -423,6 +433,7 @@ export type SmartDspSurveyContextSettings = {
   role_options: SmartDspSurveyContextOption[];
   frequency_options: SmartDspSurveyContextOption[];
   service_options: SmartDspSurveyContextOption[];
+  additional_fields: SmartDspSurveyAdditionalContextField[];
   created_at: string;
   updated_at: string;
 };
@@ -735,11 +746,12 @@ export type Database = {
         Row: SmartDspSurveyRespondentContext;
         Insert: {
           response_id: string;
-          respondent_role: SmartDspSurveyRespondentRole;
+          respondent_role: string;
           respondent_role_other?: string | null;
-          usage_frequency: SmartDspSurveyUsageFrequency;
+          usage_frequency: string;
           used_services: string[];
           used_services_other?: string | null;
+          custom_answers?: Record<string, string[]>;
           created_at?: string;
         };
         Update: Partial<Omit<SmartDspSurveyRespondentContext, 'response_id' | 'created_at'>>;
@@ -755,6 +767,7 @@ export type Database = {
           role_options: SmartDspSurveyContextOption[];
           frequency_options: SmartDspSurveyContextOption[];
           service_options: SmartDspSurveyContextOption[];
+          additional_fields: SmartDspSurveyAdditionalContextField[];
           created_at?: string;
           updated_at?: string;
         };
@@ -1067,11 +1080,12 @@ export type Database = {
             text_value?: string;
           }>;
           respondent_context: {
-            respondent_role: SmartDspSurveyRespondentRole;
+            respondent_role: string;
             respondent_role_other?: string;
-            usage_frequency: SmartDspSurveyUsageFrequency;
+            usage_frequency: string;
             used_services: string[];
             used_services_other?: string;
+            custom_answers: Record<string, string[]>;
           };
           consent_record_id: string;
         };
@@ -1103,11 +1117,12 @@ export type Database = {
         Args: {
           target_response_id: string;
           respondent_context: {
-            respondent_role: SmartDspSurveyRespondentRole;
+            respondent_role: string;
             respondent_role_other?: string;
-            usage_frequency: SmartDspSurveyUsageFrequency;
+            usage_frequency: string;
             used_services: string[];
             used_services_other?: string;
+            custom_answers: Record<string, string[]>;
           };
         };
         Returns: undefined;
