@@ -210,7 +210,7 @@ export function SiteManagerSatisfactionSurveyEditor({
   const [saving, setSaving] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const [saveSuccessOpen, setSaveSuccessOpen] = useState(false);
+  const [saveSuccessMessage, setSaveSuccessMessage] = useState<string | null>(null);
   const [deleteResponseId, setDeleteResponseId] = useState<string | null>(null);
   const [clearSurveyId, setClearSurveyId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -582,7 +582,7 @@ export function SiteManagerSatisfactionSurveyEditor({
     try {
       await saveSurveySettings(bundle.survey);
       await load(bundle.survey.id);
-      setSaveSuccessOpen(true);
+      setSaveSuccessMessage('บันทึกการตั้งค่าแบบสำรวจเรียบร้อยแล้ว');
     } catch (error) {
       void reportClientError('Failed to save survey settings', error);
       setMessage(getSafeUserErrorMessage(error, 'บันทึกการตั้งค่าไม่สำเร็จ กรุณาตรวจสอบช่วงเวลาและสถานะของรอบอื่น'));
@@ -599,8 +599,8 @@ export function SiteManagerSatisfactionSurveyEditor({
       await saveSurveyQuestions(questions);
       await saveSurveyRatingOptions(options);
       await saveSurveyContextSettings(bundle.contextSettings);
-      setMessage('บันทึกคำถาม เกณฑ์คะแนน และข้อมูลเกี่ยวกับการใช้งานระบบเรียบร้อย');
       await load(bundle.survey.id);
+      setSaveSuccessMessage('บันทึกคำถาม เกณฑ์คะแนน และข้อมูลเกี่ยวกับการใช้งานระบบเรียบร้อยแล้ว');
     } catch (error) {
       void reportClientError('Failed to save survey structure', error);
       setMessage(getSafeUserErrorMessage(error, 'บันทึกคำถามไม่สำเร็จ'));
@@ -1133,11 +1133,11 @@ export function SiteManagerSatisfactionSurveyEditor({
       ) : null}
 
       <ConfirmModal
-        isOpen={saveSuccessOpen}
-        onClose={() => setSaveSuccessOpen(false)}
-        onConfirm={() => setSaveSuccessOpen(false)}
+        isOpen={Boolean(saveSuccessMessage)}
+        onClose={() => setSaveSuccessMessage(null)}
+        onConfirm={() => setSaveSuccessMessage(null)}
         title="บันทึกสำเร็จ"
-        message="บันทึกการตั้งค่าแบบสำรวจเรียบร้อยแล้ว"
+        message={saveSuccessMessage || ''}
         confirmLabel="ตกลง"
         variant="success"
         showCancelButton={false}
