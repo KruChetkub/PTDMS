@@ -29,8 +29,8 @@ type PortalCard = {
 const coreSystems: PortalCard[] = [
   {
     title: 'Personnel Training & Development Management System',
-    shortTitle: 'PTDMS',
-    description: 'ระบบบริหารจัดการข้อมูลการฝึกอบรมและการพัฒนาบุคลากรภายในกองยุทธศาสตร์และแผนงาน',
+    shortTitle: 'ระบบบริหารจัดการข้อมูลการฝึกอบรมและการพัฒนาบุคลากรภายใน',
+    description: 'กองยุทธศาสตร์และแผนงาน',
     to: '/dashboard',
     icon: GraduationCap,
     roles: ['super_admin', 'admin', 'executive', 'hr', 'personnel'],
@@ -49,8 +49,8 @@ const coreSystems: PortalCard[] = [
   },
   {
     title: 'Budget Utilization Dashboard',
-    shortTitle: 'Budget Utilization',
-    description: 'แดชบอร์ดติดตามการใช้จ่ายงบประมาณ กองยุทธศาสตร์และแผนงาน',
+    shortTitle: 'ติดตามการใช้จ่ายงบประมาณ',
+    description: 'กองยุทธศาสตร์และแผนงาน',
     to: '/budget-utilization',
     icon: Coins,
     roles: ['super_admin', 'admin', 'executive', 'hr', 'personnel'],
@@ -75,8 +75,8 @@ const assetSystems: PortalCard[] = [
 const serviceSystems: PortalCard[] = [
   {
     title: 'DSP Service Management System',
-    shortTitle: 'DSP Service',
-    description: 'ระบบแจ้งขอรับบริการและงานสนับสนุนด้านสารสนเทศภายในกองยุทธศาสตร์และแผนงาน',
+    shortTitle: 'ระบบแจ้งขอรับบริการและงานสนับสนุนด้านสารสนเทศ',
+    description: 'ภายในกองยุทธศาสตร์และแผนงาน',
     to: '/spd-service',
     icon: Headphones,
     roles: ['super_admin', 'admin', 'executive', 'hr', 'personnel'],
@@ -121,7 +121,7 @@ const adminSystems: PortalCard[] = [
   },
   {
     title: 'PTDMS Site Manager',
-    shortTitle: 'Site Manager',
+    shortTitle: 'ตั้งค่า',
     description: 'จัดการหน้า Home ป้ายประชาสัมพันธ์ ข่าวสาร และหมวดเอกสารสำหรับเว็บไซต์',
     to: '/site-manager',
     icon: Megaphone,
