@@ -1,4 +1,4 @@
-import type { SmartDspSurveyRespondentRole, SmartDspSurveyUsageFrequency } from '../../types/database.types';
+import type { SmartDspSurveyContextSettings, SmartDspSurveyRespondentRole, SmartDspSurveyUsageFrequency } from '../../types/database.types';
 
 export const SURVEY_RESPONDENT_ROLE_OPTIONS: Array<{ value: SmartDspSurveyRespondentRole; label: string }> = [
   { value: 'executive', label: 'ผู้บริหาร' },
@@ -30,6 +30,20 @@ export const SURVEY_SERVICE_OPTIONS = [
   { value: 'site_admin', label: 'งานผู้ดูแลระบบและการจัดการเนื้อหา' },
   { value: 'other', label: 'อื่น ๆ' },
 ] as const;
+
+export function createDefaultSurveyContextSettings(surveyId: string): SmartDspSurveyContextSettings {
+  return {
+    survey_id: surveyId,
+    role_prompt: 'บทบาทของผู้ตอบแบบสำรวจ',
+    frequency_prompt: 'ความถี่ในการเข้าใช้งานระบบ',
+    services_prompt: 'ส่วนงานหรือบริการของ SmartDSP ที่เคยใช้งาน (เลือกได้มากกว่า 1 ข้อ)',
+    role_options: SURVEY_RESPONDENT_ROLE_OPTIONS.map((option) => ({ ...option })),
+    frequency_options: SURVEY_USAGE_FREQUENCY_OPTIONS.map((option) => ({ ...option })),
+    service_options: SURVEY_SERVICE_OPTIONS.map((option) => ({ ...option })),
+    created_at: '',
+    updated_at: '',
+  };
+}
 
 export function getSurveyOptionLabel(options: ReadonlyArray<{ value: string; label: string }>, value: string) {
   return options.find((option) => option.value === value)?.label || value;

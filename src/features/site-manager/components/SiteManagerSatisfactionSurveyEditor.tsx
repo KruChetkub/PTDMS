@@ -8,11 +8,13 @@ import { cn } from '../../../utils/cn';
 import { getSafeUserErrorMessage, reportClientError } from '../../../utils/errorHandling';
 import {
   cloneSurveyRound,
+  clearSurveyRoundData,
   deleteSurveyResponse,
   listSurveysForAdmin,
   loadSurveyDashboard,
   loadSurveyForAdmin,
   saveSurveyQuestions,
+  saveSurveyContextSettings,
   saveSurveyRatingOptions,
   saveSurveySettings,
   SMARTDSP_SURVEY_LONG_TEXT_MAX_LENGTH,
@@ -54,6 +56,11 @@ function toLocalDateTime(value: string | null) {
 
 function toIso(value: string) {
   return value ? new Date(value).toISOString() : null;
+}
+
+function formatSurveyDateTime(value: string | null) {
+  if (!value) return 'ไม่กำหนด';
+  return new Intl.DateTimeFormat('th-TH', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
 }
 
 function CharacterCounter({ value }: { value: string }) {
@@ -172,7 +179,17 @@ function LikertTooltip({ active, payload }: {
   );
 }
 
-export function SiteManagerSatisfactionSurveyEditor() {
+type SiteManagerSatisfactionSurveyEditorProps = {
+  surveyCode?: string;
+  heading?: string;
+  description?: string;
+};
+
+export function SiteManagerSatisfactionSurveyEditor({
+  surveyCode,
+  heading = 'แบบสำรวจความพึงพอใจ SmartDSP',
+  description = 'กำหนดช่วงเวลา คำถาม เกณฑ์คะแนน และตรวจผลประเมินแต่ละรอบ',
+}: SiteManagerSatisfactionSurveyEditorProps) {
   const profile = useAuthStore((state) => state.profile);
   const [surveys, setSurveys] = useState<Awaited<ReturnType<typeof listSurveysForAdmin>>>([]);
   const [selectedId, setSelectedId] = useState('');
@@ -191,14 +208,18 @@ export function SiteManagerSatisfactionSurveyEditor() {
   const [deleting, setDeleting] = useState(false);
   const [saveSuccessOpen, setSaveSuccessOpen] = useState(false);
   const [deleteResponseId, setDeleteResponseId] = useState<string | null>(null);
+  const [clearSurveyId, setClearSurveyId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
   const load = async (surveyId?: string) => {
     setLoading(true);
     try {
-      const surveyList = await listSurveysForAdmin();
-      const nextId = surveyId || selectedId || surveyList[0]?.id || '';
-      const [nextBundle, nextDashboardData] = await Promise.all([loadSurveyForAdmin(nextId), loadSurveyDashboard()]);
+      const surveyList = await listSurveysForAdmin(surveyCode);
+      const nextId = surveyId || (surveyList.some((survey) => survey.id === selectedId) ? selectedId : surveyList[0]?.id) || '';
+      const [nextBundle, nextDashboardData] = await Promise.all([
+        loadSurveyForAdmin(nextId, surveyCode),
+        loadSurveyDashboard(surveyCode),
+      ]);
       setSurveys(surveyList);
       setDashboardData(nextDashboardData);
       setSelectedId(nextBundle?.survey.id || '');
@@ -222,11 +243,20 @@ export function SiteManagerSatisfactionSurveyEditor() {
   };
 
   useEffect(() => {
+    setSelectedId('');
     void load();
-  }, []);
+  }, [surveyCode]);
 
   const profileById = useMemo(() => new Map((bundle?.respondents || []).map((profile) => [profile.user_id, profile])), [bundle?.respondents]);
+  const responseCountBySurvey = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const response of dashboardData.responses) counts.set(response.survey_id, (counts.get(response.survey_id) || 0) + 1);
+    return counts;
+  }, [dashboardData.responses]);
   const contextByResponse = useMemo(() => new Map((bundle?.respondentContexts || []).map((context) => [context.response_id, context])), [bundle?.respondentContexts]);
+  const roleOptions = bundle?.contextSettings.role_options || SURVEY_RESPONDENT_ROLE_OPTIONS;
+  const frequencyOptions = bundle?.contextSettings.frequency_options || SURVEY_USAGE_FREQUENCY_OPTIONS;
+  const serviceOptions = bundle?.contextSettings.service_options || SURVEY_SERVICE_OPTIONS;
   const answersByResponse = useMemo(() => {
     const grouped = new Map<string, SatisfactionSurveyAdminBundle['answers']>();
     for (const answer of bundle?.answers || []) grouped.set(answer.response_id, [...(grouped.get(answer.response_id) || []), answer]);
@@ -333,16 +363,16 @@ export function SiteManagerSatisfactionSurveyEditor() {
       respondents: responseIds.size,
     };
   });
-  const roleLabelOrder = SURVEY_RESPONDENT_ROLE_OPTIONS.map((option) => option.label);
-  const frequencyLabelOrder = SURVEY_USAGE_FREQUENCY_OPTIONS.map((option) => option.label);
-  const serviceLabelOrder = SURVEY_SERVICE_OPTIONS.map((option) => option.label);
-  const resultRoleDistribution = countLabels((bundle?.respondentContexts || []).map((context) => getSurveyOptionLabel(SURVEY_RESPONDENT_ROLE_OPTIONS, context.respondent_role)), roleLabelOrder);
-  const resultFrequencyDistribution = countLabels((bundle?.respondentContexts || []).map((context) => getSurveyOptionLabel(SURVEY_USAGE_FREQUENCY_OPTIONS, context.usage_frequency)), frequencyLabelOrder);
-  const resultServiceDistribution = countLabels((bundle?.respondentContexts || []).flatMap((context) => context.used_services.map((service) => getSurveyOptionLabel(SURVEY_SERVICE_OPTIONS, service))), serviceLabelOrder);
+  const roleLabelOrder = roleOptions.map((option) => option.label);
+  const frequencyLabelOrder = frequencyOptions.map((option) => option.label);
+  const serviceLabelOrder = serviceOptions.map((option) => option.label);
+  const resultRoleDistribution = countLabels((bundle?.respondentContexts || []).map((context) => getSurveyOptionLabel(roleOptions, context.respondent_role)), roleLabelOrder);
+  const resultFrequencyDistribution = countLabels((bundle?.respondentContexts || []).map((context) => getSurveyOptionLabel(frequencyOptions, context.usage_frequency)), frequencyLabelOrder);
+  const resultServiceDistribution = countLabels((bundle?.respondentContexts || []).flatMap((context) => context.used_services.map((service) => getSurveyOptionLabel(serviceOptions, service))), serviceLabelOrder);
   const contextMissingCount = Math.max(0, (bundle?.responses.length || 0) - (bundle?.respondentContexts.length || 0));
-  const roleDistribution = addDistributionPercentage(countLabels(filteredContexts.map((context) => getSurveyOptionLabel(SURVEY_RESPONDENT_ROLE_OPTIONS, context.respondent_role)), roleLabelOrder), filteredContexts.length);
-  const frequencyDistribution = addDistributionPercentage(countLabels(filteredContexts.map((context) => getSurveyOptionLabel(SURVEY_USAGE_FREQUENCY_OPTIONS, context.usage_frequency)), frequencyLabelOrder), filteredContexts.length);
-  const serviceDistribution = addDistributionPercentage(countLabels(filteredContexts.flatMap((context) => context.used_services.map((service) => getSurveyOptionLabel(SURVEY_SERVICE_OPTIONS, service))), serviceLabelOrder), filteredContexts.length);
+  const roleDistribution = addDistributionPercentage(countLabels(filteredContexts.map((context) => getSurveyOptionLabel(roleOptions, context.respondent_role)), roleLabelOrder), filteredContexts.length);
+  const frequencyDistribution = addDistributionPercentage(countLabels(filteredContexts.map((context) => getSurveyOptionLabel(frequencyOptions, context.usage_frequency)), frequencyLabelOrder), filteredContexts.length);
+  const serviceDistribution = addDistributionPercentage(countLabels(filteredContexts.flatMap((context) => context.used_services.map((service) => getSurveyOptionLabel(serviceOptions, service))), serviceLabelOrder), filteredContexts.length);
   const openTextQuestions = questions
     .filter((question) => question.question_type === 'open_text')
     .sort((left, right) => left.position - right.position);
@@ -360,6 +390,7 @@ export function SiteManagerSatisfactionSurveyEditor() {
     .slice(0, 5);
   const deleteResponse = bundle?.responses.find((response) => response.id === deleteResponseId) || null;
   const deleteRespondent = deleteResponse ? profileById.get(deleteResponse.respondent_id) : null;
+  const clearSurvey = surveys.find((survey) => survey.id === clearSurveyId) || null;
 
   const exportDashboard = async () => {
     if (!bundle) return;
@@ -375,7 +406,7 @@ export function SiteManagerSatisfactionSurveyEditor() {
       }
 
       const summaryRows = [
-        ['รายงาน', 'แบบสำรวจความพึงพอใจ SmartDSP'],
+        ['รายงาน', heading],
         ['รอบแบบสำรวจ', currentSurvey.version],
         ['ชื่อแบบสำรวจ', safeExcelText(currentSurvey.title)],
         ['ช่วงวันที่เริ่มต้น', dashboardStartDate || 'ทั้งหมด'],
@@ -407,10 +438,10 @@ export function SiteManagerSatisfactionSurveyEditor() {
           กลุ่มงาน: safeExcelText(profile?.work_group),
           ฝ่าย: safeExcelText(profile?.department),
           สิทธิ์ผู้ใช้: profile?.role || '',
-          'บทบาทผู้ตอบแบบสำรวจ': context ? getSurveyOptionLabel(SURVEY_RESPONDENT_ROLE_OPTIONS, context.respondent_role) : '',
+          'บทบาทผู้ตอบแบบสำรวจ': context ? getSurveyOptionLabel(roleOptions, context.respondent_role) : '',
           'บทบาทอื่น ๆ': safeExcelText(context?.respondent_role_other),
-          'ความถี่ในการใช้งาน': context ? getSurveyOptionLabel(SURVEY_USAGE_FREQUENCY_OPTIONS, context.usage_frequency) : '',
-          'ส่วนงานหรือบริการที่เคยใช้': context ? context.used_services.map((service) => getSurveyOptionLabel(SURVEY_SERVICE_OPTIONS, service)).join(', ') : '',
+          'ความถี่ในการใช้งาน': context ? getSurveyOptionLabel(frequencyOptions, context.usage_frequency) : '',
+          'ส่วนงานหรือบริการที่เคยใช้': context ? context.used_services.map((service) => getSurveyOptionLabel(serviceOptions, service)).join(', ') : '',
           'ส่วนงานหรือบริการอื่น ๆ': safeExcelText(context?.used_services_other),
         };
         for (const answer of responseAnswerMap.get(response.id) || []) {
@@ -493,6 +524,23 @@ export function SiteManagerSatisfactionSurveyEditor() {
     }
   };
 
+  const confirmClearSurveyData = async () => {
+    if (!clearSurveyId || profile?.role !== 'super_admin') return;
+    setDeleting(true);
+    setMessage(null);
+    try {
+      await clearSurveyRoundData(clearSurveyId);
+      setClearSurveyId(null);
+      setMessage('ล้างคำตอบและผลประเมินของรอบแบบสำรวจเรียบร้อย โดยคงแม่แบบและการตั้งค่าไว้');
+      await load(selectedId);
+    } catch (error) {
+      void reportClientError('Failed to clear satisfaction survey round data', error);
+      setMessage(getSafeUserErrorMessage(error, 'ไม่สามารถล้างข้อมูลรอบแบบสำรวจได้ กรุณาตรวจสอบสิทธิ์แล้วลองใหม่'));
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   const saveSettings = async () => {
     if (!bundle) return;
     setSaving(true);
@@ -516,7 +564,8 @@ export function SiteManagerSatisfactionSurveyEditor() {
     try {
       await saveSurveyQuestions(questions);
       await saveSurveyRatingOptions(options);
-      setMessage('บันทึกคำถามและเกณฑ์คะแนนเรียบร้อย');
+      await saveSurveyContextSettings(bundle.contextSettings);
+      setMessage('บันทึกคำถาม เกณฑ์คะแนน และข้อมูลเกี่ยวกับการใช้งานระบบเรียบร้อย');
       await load(bundle.survey.id);
     } catch (error) {
       void reportClientError('Failed to save survey structure', error);
@@ -524,6 +573,21 @@ export function SiteManagerSatisfactionSurveyEditor() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const updateContextOptionLabel = (
+    field: 'role_options' | 'frequency_options' | 'service_options',
+    index: number,
+    label: string,
+  ) => {
+    if (!bundle) return;
+    const nextOptions = bundle.contextSettings[field].map((option, optionIndex) => (
+      optionIndex === index ? { ...option, label } : option
+    ));
+    setBundle({
+      ...bundle,
+      contextSettings: { ...bundle.contextSettings, [field]: nextOptions },
+    });
   };
 
   const createRound = async () => {
@@ -551,8 +615,8 @@ export function SiteManagerSatisfactionSurveyEditor() {
       <div className="border-b border-slate-200 pb-4">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <h2 className="text-lg font-semibold text-slate-950">แบบสำรวจความพึงพอใจ SmartDSP</h2>
-            <p className="mt-1 text-sm text-slate-600">กำหนดช่วงเวลา คำถาม เกณฑ์คะแนน และตรวจผลประเมินแต่ละรอบ</p>
+            <h2 className="text-lg font-semibold text-slate-950">{heading}</h2>
+            <p className="mt-1 text-sm text-slate-600">{description}</p>
           </div>
           <button type="button" onClick={() => void createRound()} disabled={saving} className="inline-flex items-center gap-2 rounded-md border border-brand-200 bg-white px-3 py-2 text-sm font-semibold text-brand-700 hover:bg-brand-50 disabled:opacity-60">
             <CopyPlus className="h-4 w-4" aria-hidden="true" /> สร้างรอบใหม่
@@ -588,8 +652,9 @@ export function SiteManagerSatisfactionSurveyEditor() {
       </div>
 
       {view === 'settings' ? (
-        <div className="rounded-md border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="grid gap-4 md:grid-cols-2">
+        <div className="space-y-5">
+          <div className="rounded-md border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="grid gap-4 md:grid-cols-2">
             <label className="text-sm font-medium text-slate-700 md:col-span-2">ชื่อแบบสำรวจ<input value={bundle.survey.title} onChange={(event) => setBundle({ ...bundle, survey: { ...bundle.survey, title: event.target.value } })} className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2" /></label>
             <label className="text-sm font-medium text-slate-700 md:col-span-2">
               รายละเอียด
@@ -600,9 +665,55 @@ export function SiteManagerSatisfactionSurveyEditor() {
             <label className="flex items-center gap-3 self-end rounded-md border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700"><input type="checkbox" checked={bundle.survey.is_enabled} onChange={(event) => setBundle({ ...bundle, survey: { ...bundle.survey, is_enabled: event.target.checked } })} className="h-4 w-4" /> แสดงแบบสำรวจที่หน้า Portal</label>
             <label className="text-sm font-medium text-slate-700">เริ่มรับคำตอบ<input type="datetime-local" value={toLocalDateTime(bundle.survey.starts_at)} onChange={(event) => setBundle({ ...bundle, survey: { ...bundle.survey, starts_at: toIso(event.target.value) } })} className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2" /></label>
             <label className="text-sm font-medium text-slate-700">สิ้นสุดการรับคำตอบ<input type="datetime-local" value={toLocalDateTime(bundle.survey.ends_at)} onChange={(event) => setBundle({ ...bundle, survey: { ...bundle.survey, ends_at: toIso(event.target.value) } })} className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2" /></label>
+            </div>
+            <p className="mt-4 text-xs text-slate-500">การแสดงหน้า Portal ต้องเลือกสถานะ “เปิดใช้งาน” และเปิดสวิตช์แสดงแบบสำรวจ โดยแต่ละระบบเปิดใช้งานได้ครั้งละหนึ่งรอบ</p>
+            <button type="button" onClick={() => void saveSettings()} disabled={saving} className="mt-5 inline-flex items-center gap-2 rounded-md bg-brand-700 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-800 disabled:opacity-60"><Save className="h-4 w-4" aria-hidden="true" /> บันทึกการตั้งค่า</button>
           </div>
-          <p className="mt-4 text-xs text-slate-500">การแสดงหน้า Portal ต้องเลือกสถานะ “เปิดใช้งาน” และเปิดสวิตช์แสดงแบบสำรวจ โดยระบบอนุญาตเพียงหนึ่งรอบในเวลาเดียวกัน</p>
-          <button type="button" onClick={() => void saveSettings()} disabled={saving} className="mt-5 inline-flex items-center gap-2 rounded-md bg-brand-700 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-800 disabled:opacity-60"><Save className="h-4 w-4" aria-hidden="true" /> บันทึกการตั้งค่า</button>
+
+          {profile?.role === 'super_admin' ? (
+            <section className="rounded-md border border-red-200 bg-white shadow-sm">
+              <div className="border-b border-slate-200 px-5 py-4">
+                <h3 className="font-semibold text-slate-950">จัดการข้อมูลรอบแบบสำรวจทั้งหมด</h3>
+                <p className="mt-1 text-xs leading-5 text-slate-500">เฉพาะ Super Admin เท่านั้นที่สามารถล้างคำตอบและผลประเมินของแต่ละรอบได้ โดยแม่แบบ คำถาม และการตั้งค่าจะยังคงอยู่</p>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="min-w-[860px] w-full text-left text-sm">
+                  <thead className="bg-slate-50 text-xs font-semibold text-slate-600">
+                    <tr>
+                      <th className="px-5 py-3">รอบ</th>
+                      <th className="px-4 py-3">สถานะ</th>
+                      <th className="px-4 py-3">ช่วงรับคำตอบ</th>
+                      <th className="px-4 py-3 text-center">ผู้ตอบ</th>
+                      <th className="px-5 py-3 text-right">จัดการ</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {surveys.map((survey) => (
+                      <tr key={survey.id} className={cn(survey.id === selectedId && 'bg-brand-50/50')}>
+                        <td className="px-5 py-3">
+                          <p className="font-semibold text-slate-900">รอบที่ {survey.version}</p>
+                          <p className="mt-0.5 max-w-80 truncate text-xs text-slate-500" title={survey.title}>{survey.title}</p>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={cn('inline-flex rounded-md px-2 py-1 text-xs font-semibold', survey.status === 'active' && survey.is_enabled ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-700')}>{statusLabels[survey.status]}</span>
+                        </td>
+                        <td className="px-4 py-3 text-xs leading-5 text-slate-600">
+                          <span className="block">{formatSurveyDateTime(survey.starts_at)}</span>
+                          <span className="block">ถึง {formatSurveyDateTime(survey.ends_at)}</span>
+                        </td>
+                        <td className="px-4 py-3 text-center font-semibold text-slate-800">{(responseCountBySurvey.get(survey.id) || 0).toLocaleString('th-TH')}</td>
+                        <td className="px-5 py-3 text-right">
+                          <button type="button" onClick={() => setClearSurveyId(survey.id)} title={`ล้างข้อมูลรอบที่ ${survey.version}`} className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-red-200 text-red-600 hover:bg-red-50">
+                            <Trash2 className="h-4 w-4" aria-hidden="true" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          ) : null}
         </div>
       ) : null}
 
@@ -613,6 +724,64 @@ export function SiteManagerSatisfactionSurveyEditor() {
             <h3 className="font-semibold text-slate-900">ความหมายของคะแนน 1–5</h3>
             <div className="mt-4 grid gap-3 md:grid-cols-5">
               {options.map((option, index) => <div key={option.id} className="rounded-md border border-slate-200 p-3"><div className="text-lg font-bold text-brand-700">{option.rating_value}</div><input disabled={structureLocked} value={option.label} onChange={(event) => setOptions((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, label: event.target.value } : item))} className="mt-2 w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm disabled:bg-slate-50" /><textarea disabled={structureLocked} rows={4} value={option.description} onChange={(event) => setOptions((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, description: event.target.value } : item))} className="mt-2 w-full rounded-md border border-slate-300 px-2 py-1.5 text-xs disabled:bg-slate-50" /></div>)}
+            </div>
+          </div>
+          <div className="rounded-md border border-slate-200 bg-white p-5 shadow-sm">
+            <div>
+              <h3 className="font-semibold text-slate-900">ข้อมูลเกี่ยวกับการใช้งานระบบ</h3>
+              <p className="mt-1 text-xs leading-5 text-slate-500">แก้ไขข้อความหัวข้อและชื่อตัวเลือกที่แสดงต่อผู้ตอบ รหัสภายในของตัวเลือกจะคงเดิมเพื่อรักษาความถูกต้องของข้อมูลเก่า</p>
+            </div>
+            <div className="mt-5 grid gap-5 xl:grid-cols-2">
+              {([
+                {
+                  title: 'บทบาทของผู้ตอบแบบสำรวจ',
+                  promptField: 'role_prompt',
+                  optionsField: 'role_options',
+                },
+                {
+                  title: 'ความถี่ในการเข้าใช้งานระบบ',
+                  promptField: 'frequency_prompt',
+                  optionsField: 'frequency_options',
+                },
+                {
+                  title: 'ส่วนงานหรือบริการที่เคยใช้งาน',
+                  promptField: 'services_prompt',
+                  optionsField: 'service_options',
+                },
+              ] as const).map((group) => (
+                <section key={group.promptField} className={cn('rounded-md border border-slate-200 bg-slate-50/60 p-4', group.optionsField === 'service_options' && 'xl:col-span-2')}>
+                  <h4 className="text-sm font-semibold text-slate-900">{group.title}</h4>
+                  <label className="mt-3 block text-xs font-medium text-slate-600">
+                    ข้อความหัวข้อ
+                    <textarea
+                      disabled={structureLocked}
+                      rows={2}
+                      value={bundle.contextSettings[group.promptField]}
+                      onChange={(event) => setBundle({
+                        ...bundle,
+                        contextSettings: { ...bundle.contextSettings, [group.promptField]: event.target.value },
+                      })}
+                      className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm disabled:bg-slate-100"
+                    />
+                  </label>
+                  <div className="mt-4">
+                    <p className="text-xs font-semibold text-slate-600">ชื่อตัวเลือก</p>
+                    <div className={cn('mt-2 grid gap-2', group.optionsField === 'service_options' && 'sm:grid-cols-2 sm:gap-x-4')}>
+                      {bundle.contextSettings[group.optionsField].map((option, index) => (
+                        <label key={option.value} className="grid grid-cols-[88px_1fr] items-center gap-2 text-xs text-slate-500">
+                          <span className="truncate" title={option.value}>{option.value}</span>
+                          <input
+                            disabled={structureLocked}
+                            value={option.label}
+                            onChange={(event) => updateContextOptionLabel(group.optionsField, index, event.target.value)}
+                            className="min-w-0 rounded-md border border-slate-300 bg-white px-2.5 py-2 text-sm text-slate-800 disabled:bg-slate-100"
+                          />
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                </section>
+              ))}
             </div>
           </div>
           <div className="space-y-3">
@@ -655,7 +824,7 @@ export function SiteManagerSatisfactionSurveyEditor() {
                         {respondent?.full_name || 'ไม่พบชื่อผู้ตอบ'} · {new Intl.DateTimeFormat('th-TH', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(response.submitted_at))}
                       </summary>
                       <div className="border-t border-slate-100 px-4 py-3">
-                        {context ? <div className="mb-3 grid gap-2 rounded-md bg-slate-50 p-3 text-xs text-slate-600 sm:grid-cols-3"><span><strong>บทบาท:</strong> {getSurveyOptionLabel(SURVEY_RESPONDENT_ROLE_OPTIONS, context.respondent_role)}{context.respondent_role_other ? `: ${context.respondent_role_other}` : ''}</span><span><strong>ความถี่:</strong> {getSurveyOptionLabel(SURVEY_USAGE_FREQUENCY_OPTIONS, context.usage_frequency)}</span><span><strong>บริการ:</strong> {context.used_services.map((service) => getSurveyOptionLabel(SURVEY_SERVICE_OPTIONS, service)).join(', ')}{context.used_services_other ? `: ${context.used_services_other}` : ''}</span></div> : null}
+                        {context ? <div className="mb-3 grid gap-2 rounded-md bg-slate-50 p-3 text-xs text-slate-600 sm:grid-cols-3"><span><strong>บทบาท:</strong> {getSurveyOptionLabel(roleOptions, context.respondent_role)}{context.respondent_role_other ? `: ${context.respondent_role_other}` : ''}</span><span><strong>ความถี่:</strong> {getSurveyOptionLabel(frequencyOptions, context.usage_frequency)}</span><span><strong>บริการ:</strong> {context.used_services.map((service) => getSurveyOptionLabel(serviceOptions, service)).join(', ')}{context.used_services_other ? `: ${context.used_services_other}` : ''}</span></div> : null}
                         {(answersByResponse.get(response.id) || []).map((answer) => <div key={answer.id} className="border-b border-slate-100 py-2 last:border-0"><p className="text-xs text-slate-500">ข้อ {answer.question_position}: {answer.question_prompt}</p><p className="mt-1 text-sm text-slate-800">{answer.rating_value !== null ? `${answer.rating_value} คะแนน` : answer.text_value}</p></div>)}
                       </div>
                     </details>
@@ -843,6 +1012,18 @@ export function SiteManagerSatisfactionSurveyEditor() {
         title="ยืนยันการลบคำตอบแบบสำรวจ"
         message={<span>ต้องการลบคำตอบของ <strong>{deleteRespondent?.full_name || 'ผู้ตอบรายนี้'}</strong> ในรอบที่ {bundle.survey.version} ออกจากฐานข้อมูลอย่างถาวรใช่หรือไม่ การดำเนินการนี้ไม่สามารถกู้คืนได้</span>}
         confirmLabel="ยืนยันการลบ"
+        cancelLabel="ยกเลิก"
+        isLoading={deleting}
+        variant="danger"
+      />
+
+      <ConfirmModal
+        isOpen={Boolean(clearSurveyId)}
+        onClose={() => setClearSurveyId(null)}
+        onConfirm={() => void confirmClearSurveyData()}
+        title="ยืนยันการล้างข้อมูลรอบแบบสำรวจ"
+        message={clearSurvey ? <span>ต้องการล้างข้อมูลของ <strong>{heading} รอบที่ {clearSurvey.version}</strong> สถานะ “{statusLabels[clearSurvey.status]}” ซึ่งมีผู้ตอบ {(responseCountBySurvey.get(clearSurvey.id) || 0).toLocaleString('th-TH')} คน ใช่หรือไม่ คำตอบ คะแนน Consent และผลประเมินของรอบนี้จะถูกลบอย่างถาวร แต่แม่แบบ คำถาม และการตั้งค่าจะยังคงอยู่</span> : 'ยืนยันการล้างข้อมูลรอบแบบสำรวจนี้หรือไม่'}
+        confirmLabel="ยืนยันการล้างข้อมูล"
         cancelLabel="ยกเลิก"
         isLoading={deleting}
         variant="danger"

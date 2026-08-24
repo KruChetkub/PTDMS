@@ -410,6 +410,23 @@ export type SmartDspSurveyRespondentContext = {
   created_at: string;
 };
 
+export type SmartDspSurveyContextOption = {
+  value: string;
+  label: string;
+};
+
+export type SmartDspSurveyContextSettings = {
+  survey_id: string;
+  role_prompt: string;
+  frequency_prompt: string;
+  services_prompt: string;
+  role_options: SmartDspSurveyContextOption[];
+  frequency_options: SmartDspSurveyContextOption[];
+  service_options: SmartDspSurveyContextOption[];
+  created_at: string;
+  updated_at: string;
+};
+
 export type SmartDspSurveyConsent = {
   id: string;
   response_id: string | null;
@@ -726,6 +743,22 @@ export type Database = {
           created_at?: string;
         };
         Update: Partial<Omit<SmartDspSurveyRespondentContext, 'response_id' | 'created_at'>>;
+        Relationships: [];
+      };
+      smartdsp_survey_context_settings: {
+        Row: SmartDspSurveyContextSettings;
+        Insert: {
+          survey_id: string;
+          role_prompt: string;
+          frequency_prompt: string;
+          services_prompt: string;
+          role_options: SmartDspSurveyContextOption[];
+          frequency_options: SmartDspSurveyContextOption[];
+          service_options: SmartDspSurveyContextOption[];
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Omit<SmartDspSurveyContextSettings, 'survey_id' | 'created_at'>>;
         Relationships: [];
       };
       smartdsp_survey_consents: {
@@ -1057,6 +1090,12 @@ export type Database = {
       delete_smartdsp_survey_response: {
         Args: {
           target_response_id: string;
+        };
+        Returns: undefined;
+      };
+      clear_smartdsp_survey_round_data: {
+        Args: {
+          target_survey_id: string;
         };
         Returns: undefined;
       };

@@ -12,6 +12,7 @@ import { SiteManagerPlanPreview } from '../components/SiteManagerPlanPreview';
 import { SiteManagerPortalManualsEditor } from '../components/SiteManagerPortalManualsEditor';
 import { SiteManagerSecuritySettings } from '../components/SiteManagerSecuritySettings';
 import { SiteManagerSatisfactionSurveyEditor } from '../components/SiteManagerSatisfactionSurveyEditor';
+import { SiteManagerSystemSatisfactionSurveysEditor } from '../components/SiteManagerSystemSatisfactionSurveysEditor';
 
 type PlanFocusTarget = {
   index: number;
@@ -31,6 +32,7 @@ type SiteManagerTab =
   | 'login-page'
   | 'portal-page'
   | 'satisfaction-survey'
+  | 'system-satisfaction-surveys'
   | 'security';
 
 const siteManagerTabs: Array<{ id: SiteManagerTab; label: string; superAdminOnly?: boolean; hidden?: boolean }> = [
@@ -46,6 +48,7 @@ const siteManagerTabs: Array<{ id: SiteManagerTab; label: string; superAdminOnly
   { id: 'login-page', label: 'จัดการภาพหน้า login' },
   { id: 'portal-page', label: 'จัดการภาพหน้า Portal' },
   { id: 'satisfaction-survey', label: 'แบบสำรวจความพึงพอใจ' },
+  { id: 'system-satisfaction-surveys', label: 'แบบสำรวจความพึงพอใจแยกตามระบบ' },
   { id: 'security', label: 'ความปลอดภัย', superAdminOnly: true },
 ];
 
@@ -286,6 +289,8 @@ export function SiteManagerPage() {
           />
         ) : activeTab === 'satisfaction-survey' ? (
           <SiteManagerSatisfactionSurveyEditor />
+        ) : activeTab === 'system-satisfaction-surveys' ? (
+          <SiteManagerSystemSatisfactionSurveysEditor />
         ) : canManageSecurity ? (
           <SiteManagerSecuritySettings />
         ) : (

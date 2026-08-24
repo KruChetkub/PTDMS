@@ -106,6 +106,10 @@ export const router = createBrowserRouter([
         element: <SatisfactionSurveyPage />,
       },
       {
+        path: '/satisfaction-survey/:surveyCode',
+        element: <SatisfactionSurveyPage />,
+      },
+      {
         path: '/pending-approval',
         element: <PendingApprovalPage />,
       },

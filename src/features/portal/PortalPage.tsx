@@ -10,7 +10,7 @@ import type { UserRole } from '../../types/roles';
 import { canAccess, roleLabels } from '../../types/roles';
 import { reportClientError } from '../../utils/errorHandling';
 import { listActivePortalUserManuals } from './portalManuals.service';
-import { getPortalSurveyState } from '../surveys/satisfactionSurvey.service';
+import { getPortalSurveyState, SYSTEM_SURVEY_CONFIGS } from '../surveys/satisfactionSurvey.service';
 
 const PORTAL_MANUALS_PER_PAGE = 2;
 
@@ -139,7 +139,10 @@ export function PortalPage() {
   const [isUserPanelOpen, setIsUserPanelOpen] = useState(false);
   const [manuals, setManuals] = useState<PortalUserManual[]>([]);
   const [manualPage, setManualPage] = useState(0);
-  const [surveyState, setSurveyState] = useState<Awaited<ReturnType<typeof getPortalSurveyState>>>(null);
+  const [surveyStates, setSurveyStates] = useState<Array<{
+    config: (typeof SYSTEM_SURVEY_CONFIGS)[number];
+    state: NonNullable<Awaited<ReturnType<typeof getPortalSurveyState>>>;
+  }>>([]);
   const { user, profile, signOut } = useAuthStore();
   const siteContent = usePublishedSiteContent();
   const portalBackgroundImage = siteContent.portalPage.backgroundImageUrl || '/SmartDSP.png';
@@ -178,9 +181,13 @@ export function PortalPage() {
     let active = true;
     if (!user) return undefined;
 
-    getPortalSurveyState(user.id)
-      .then((state) => {
-        if (active) setSurveyState(state);
+    Promise.all(SYSTEM_SURVEY_CONFIGS.map(async (config) => ({
+      config,
+      state: await getPortalSurveyState(user.id, config.code),
+    })))
+      .then((results) => {
+        if (!active) return;
+        setSurveyStates(results.filter((result): result is typeof result & { state: NonNullable<typeof result.state> } => result.state !== null));
       })
       .catch((error) => {
         void reportClientError('Failed to load portal survey state:', error);
@@ -370,26 +377,40 @@ export function PortalPage() {
               <h1 className="mt-5 max-w-3xl text-3xl font-semibold tracking-normal text-slate-950 sm:text-4xl">
                 เลือกระบบที่ต้องการใช้งาน
               </h1>
-              {manuals.length > 0 || surveyState ? (
+              {manuals.length > 0 || surveyStates.length > 0 ? (
                 <div className="mt-5 grid gap-4 lg:grid-cols-2">
-                  {surveyState ? (
-                    <Link to="/satisfaction-survey" className="group flex min-h-[142px] flex-col justify-between rounded-md border border-emerald-200 bg-emerald-50/60 p-4 transition hover:border-emerald-400 hover:bg-emerald-50">
-                      <div className="flex items-start justify-between gap-3">
-                        <span className="flex h-10 w-10 items-center justify-center rounded-md bg-white text-emerald-700 ring-1 ring-emerald-200">
-                          <ClipboardCheck className="h-5 w-5" aria-hidden="true" />
+                  {surveyStates.length > 0 ? (
+                    <div className="rounded-md border border-emerald-200 bg-emerald-50/30 p-3 sm:p-4">
+                      <div className="flex items-center gap-2">
+                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-white text-emerald-700 ring-1 ring-emerald-200">
+                          <ClipboardCheck className="h-4 w-4" aria-hidden="true" />
                         </span>
-                        <span className={`rounded-md px-2.5 py-1 text-xs font-semibold ${surveyState.ownResponse ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
-                          {surveyState.ownResponse ? 'ตอบแล้ว' : 'เปิดรับคำตอบ'}
-                        </span>
-                      </div>
-                      <div className="mt-4">
-                        <h2 className="text-base font-semibold text-slate-950">แบบสำรวจความพึงพอใจ SmartDSP</h2>
-                        <div className="mt-1 flex items-center justify-between gap-3 text-sm text-slate-600">
-                          <span>{surveyState.ownResponse ? 'ดูคำตอบของฉัน' : surveyState.survey.title}</span>
-                          <ArrowRight className="h-4 w-4 shrink-0 text-emerald-700 transition group-hover:translate-x-1" aria-hidden="true" />
+                        <div>
+                          <h2 className="text-sm font-semibold text-slate-950">แบบสำรวจความพึงพอใจ</h2>
+                          <p className="text-xs text-slate-500">เลือกประเมินระบบที่ท่านใช้งาน</p>
                         </div>
                       </div>
-                    </Link>
+                      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                        {surveyStates.map(({ config, state }, index) => (
+                          <Link
+                            key={config.code}
+                            to={config.code === 'smartdsp-satisfaction' ? '/satisfaction-survey' : `/satisfaction-survey/${config.code}`}
+                            className={`group flex min-h-24 flex-col justify-between rounded-md border border-slate-200 bg-white p-3 transition hover:border-emerald-400 hover:bg-emerald-50 ${surveyStates.length % 2 === 1 && index === surveyStates.length - 1 ? 'sm:col-span-2' : ''}`}
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <span className="text-sm font-semibold leading-5 text-slate-900">{config.shortTitle}</span>
+                              <span className={`shrink-0 rounded-md px-2 py-0.5 text-[11px] font-semibold ${state.ownResponse ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
+                                {state.ownResponse ? 'ตอบแล้ว' : 'เปิดรับ'}
+                              </span>
+                            </div>
+                            <div className="mt-2 flex items-end justify-between gap-2 text-xs text-slate-500">
+                              <span className="line-clamp-2">{state.ownResponse ? 'ดูคำตอบของฉัน' : state.survey.title}</span>
+                              <ArrowRight className="h-4 w-4 shrink-0 text-emerald-700 transition group-hover:translate-x-1" aria-hidden="true" />
+                            </div>
+                          </Link>
+                        ))}
+                      </div>
+                    </div>
                   ) : <div className="hidden lg:block" />}
                   {manuals.length > 0 ? <div className="rounded-md border border-slate-200 bg-slate-50/80 p-3 sm:p-4">
                     <div className="flex items-center justify-between gap-3">

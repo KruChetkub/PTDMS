@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, CheckCircle2, ClipboardCheck, Save, Send, ShieldCheck } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { ConfirmModal } from '../../components/ui/ConfirmModal';
 import { useAuthStore } from '../../stores/auth.store';
 import type { SmartDspSurveyRespondentRole, SmartDspSurveyUsageFrequency } from '../../types/database.types';
@@ -9,6 +9,7 @@ import type { SatisfactionSurveyBundle, SurveySubmissionAnswer } from './satisfa
 import {
   acceptSatisfactionSurveyPdpa,
   completeSurveyRespondentContext,
+  getSystemSurveyConfig,
   loadSatisfactionSurvey,
   SMARTDSP_SURVEY_PDPA_ACKNOWLEDGEMENT,
   SMARTDSP_SURVEY_PDPA_CONSENT,
@@ -30,6 +31,8 @@ function mergeSurveyDetails(description: string, instructions: string) {
 }
 
 export function SatisfactionSurveyPage() {
+  const { surveyCode } = useParams<{ surveyCode?: string }>();
+  const surveyConfig = getSystemSurveyConfig(surveyCode);
   const user = useAuthStore((state) => state.user);
   const [bundle, setBundle] = useState<SatisfactionSurveyBundle | null>(null);
   const [ratings, setRatings] = useState<Record<string, number>>({});
@@ -54,7 +57,7 @@ export function SatisfactionSurveyPage() {
     if (!user) return;
     setLoading(true);
     try {
-      setBundle(await loadSatisfactionSurvey(user.id));
+      setBundle(await loadSatisfactionSurvey(user.id, surveyConfig.code));
     } catch (error) {
       void reportClientError('Failed to load satisfaction survey', error);
       setMessage(getSafeUserErrorMessage(error, 'ไม่สามารถโหลดแบบสำรวจได้ กรุณาลองใหม่อีกครั้ง'));
@@ -65,7 +68,7 @@ export function SatisfactionSurveyPage() {
 
   useEffect(() => {
     void reload();
-  }, [user?.id]);
+  }, [user?.id, surveyConfig.code]);
 
   useEffect(() => {
     setPdpaAcknowledged(false);
@@ -90,6 +93,9 @@ export function SatisfactionSurveyPage() {
     () => new Map((bundle?.ownAnswers || []).map((answer) => [answer.question_id, answer])),
     [bundle?.ownAnswers],
   );
+  const roleOptions = bundle?.contextSettings.role_options || SURVEY_RESPONDENT_ROLE_OPTIONS;
+  const frequencyOptions = bundle?.contextSettings.frequency_options || SURVEY_USAGE_FREQUENCY_OPTIONS;
+  const serviceOptions = bundle?.contextSettings.service_options || SURVEY_SERVICE_OPTIONS;
 
   const validateContext = () => {
     if (!respondentRole) {
@@ -231,8 +237,8 @@ export function SatisfactionSurveyPage() {
               <ClipboardCheck className="h-6 w-6" aria-hidden="true" />
             </span>
             <div>
-              <h1 className="text-2xl font-semibold tracking-normal text-slate-950 sm:text-3xl">แบบสำรวจความพึงพอใจระบบ SmartDSP</h1>
-              <p className="mt-1 text-sm leading-6 text-slate-600">คำตอบของท่านจะนำไปใช้ประเมินผลและปรับปรุงระบบ</p>
+              <h1 className="text-2xl font-semibold tracking-normal text-slate-950 sm:text-3xl">{surveyConfig.title}</h1>
+              <p className="mt-1 text-sm leading-6 text-slate-600">{surveyConfig.description} คำตอบของท่านจะนำไปใช้ประเมินผลและปรับปรุงระบบ</p>
             </div>
           </div>
         </header>
@@ -272,31 +278,31 @@ export function SatisfactionSurveyPage() {
 
               {bundle.ownResponse && bundle.ownContext ? (
                 <dl className="mt-5 grid gap-4 md:grid-cols-3">
-                  <div><dt className="text-xs font-semibold text-slate-500">บทบาทของผู้ตอบ</dt><dd className="mt-1 text-sm text-slate-800">{bundle.ownContext ? getSurveyOptionLabel(SURVEY_RESPONDENT_ROLE_OPTIONS, bundle.ownContext.respondent_role) : 'ไม่มีข้อมูล'}{bundle.ownContext?.respondent_role_other ? `: ${bundle.ownContext.respondent_role_other}` : ''}</dd></div>
-                  <div><dt className="text-xs font-semibold text-slate-500">ความถี่ในการใช้งาน</dt><dd className="mt-1 text-sm text-slate-800">{bundle.ownContext ? getSurveyOptionLabel(SURVEY_USAGE_FREQUENCY_OPTIONS, bundle.ownContext.usage_frequency) : 'ไม่มีข้อมูล'}</dd></div>
-                  <div><dt className="text-xs font-semibold text-slate-500">ส่วนงานหรือบริการที่เคยใช้</dt><dd className="mt-1 text-sm leading-6 text-slate-800">{bundle.ownContext ? bundle.ownContext.used_services.map((service) => getSurveyOptionLabel(SURVEY_SERVICE_OPTIONS, service)).join(', ') : 'ไม่มีข้อมูล'}{bundle.ownContext?.used_services_other ? `: ${bundle.ownContext.used_services_other}` : ''}</dd></div>
+                  <div><dt className="text-xs font-semibold text-slate-500">{bundle.contextSettings.role_prompt}</dt><dd className="mt-1 text-sm text-slate-800">{bundle.ownContext ? getSurveyOptionLabel(roleOptions, bundle.ownContext.respondent_role) : 'ไม่มีข้อมูล'}{bundle.ownContext?.respondent_role_other ? `: ${bundle.ownContext.respondent_role_other}` : ''}</dd></div>
+                  <div><dt className="text-xs font-semibold text-slate-500">{bundle.contextSettings.frequency_prompt}</dt><dd className="mt-1 text-sm text-slate-800">{bundle.ownContext ? getSurveyOptionLabel(frequencyOptions, bundle.ownContext.usage_frequency) : 'ไม่มีข้อมูล'}</dd></div>
+                  <div><dt className="text-xs font-semibold text-slate-500">{bundle.contextSettings.services_prompt}</dt><dd className="mt-1 text-sm leading-6 text-slate-800">{bundle.ownContext ? bundle.ownContext.used_services.map((service) => getSurveyOptionLabel(serviceOptions, service)).join(', ') : 'ไม่มีข้อมูล'}{bundle.ownContext?.used_services_other ? `: ${bundle.ownContext.used_services_other}` : ''}</dd></div>
                 </dl>
               ) : (
                 <div className="mt-5 space-y-6">
                   <fieldset>
-                    <legend className="text-sm font-semibold text-slate-800">3.1 บทบาทของผู้ตอบแบบสำรวจ <span className="text-red-600">*</span></legend>
+                    <legend className="text-sm font-semibold text-slate-800">{bundle.contextSettings.role_prompt} <span className="text-red-600">*</span></legend>
                     <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                      {SURVEY_RESPONDENT_ROLE_OPTIONS.map((option) => <label key={option.value} className={`flex min-h-11 cursor-pointer items-center gap-3 rounded-md border px-3 py-2 text-sm ${respondentRole === option.value ? 'border-brand-500 bg-brand-50 text-brand-800' : 'border-slate-200 text-slate-700 hover:border-brand-300'}`}><input type="radio" name="respondent-role" checked={respondentRole === option.value} onChange={() => setRespondentRole(option.value)} className="h-4 w-4" />{option.label}</label>)}
+                      {roleOptions.map((option) => <label key={option.value} className={`flex min-h-11 cursor-pointer items-center gap-3 rounded-md border px-3 py-2 text-sm ${respondentRole === option.value ? 'border-brand-500 bg-brand-50 text-brand-800' : 'border-slate-200 text-slate-700 hover:border-brand-300'}`}><input type="radio" name="respondent-role" checked={respondentRole === option.value} onChange={() => setRespondentRole(option.value as SmartDspSurveyRespondentRole)} className="h-4 w-4" />{option.label}</label>)}
                     </div>
                     {respondentRole === 'other' ? <input value={respondentRoleOther} onChange={(event) => setRespondentRoleOther(event.target.value)} maxLength={500} placeholder="โปรดระบุบทบาท" className="mt-3 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:ring-2 focus:ring-brand-100" /> : null}
                   </fieldset>
 
                   <fieldset>
-                    <legend className="text-sm font-semibold text-slate-800">3.2 ความถี่ในการเข้าใช้งานระบบ <span className="text-red-600">*</span></legend>
+                    <legend className="text-sm font-semibold text-slate-800">{bundle.contextSettings.frequency_prompt} <span className="text-red-600">*</span></legend>
                     <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
-                      {SURVEY_USAGE_FREQUENCY_OPTIONS.map((option) => <label key={option.value} className={`flex min-h-11 cursor-pointer items-center gap-3 rounded-md border px-3 py-2 text-sm ${usageFrequency === option.value ? 'border-brand-500 bg-brand-50 text-brand-800' : 'border-slate-200 text-slate-700 hover:border-brand-300'}`}><input type="radio" name="usage-frequency" checked={usageFrequency === option.value} onChange={() => setUsageFrequency(option.value)} className="h-4 w-4" />{option.label}</label>)}
+                      {frequencyOptions.map((option) => <label key={option.value} className={`flex min-h-11 cursor-pointer items-center gap-3 rounded-md border px-3 py-2 text-sm ${usageFrequency === option.value ? 'border-brand-500 bg-brand-50 text-brand-800' : 'border-slate-200 text-slate-700 hover:border-brand-300'}`}><input type="radio" name="usage-frequency" checked={usageFrequency === option.value} onChange={() => setUsageFrequency(option.value as SmartDspSurveyUsageFrequency)} className="h-4 w-4" />{option.label}</label>)}
                     </div>
                   </fieldset>
 
                   <fieldset>
-                    <legend className="text-sm font-semibold text-slate-800">3.3 ส่วนงานหรือบริการของ SmartDSP ที่เคยใช้งาน (เลือกได้มากกว่า 1 ข้อ) <span className="text-red-600">*</span></legend>
+                    <legend className="text-sm font-semibold text-slate-800">{bundle.contextSettings.services_prompt} <span className="text-red-600">*</span></legend>
                     <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                      {SURVEY_SERVICE_OPTIONS.map((option) => { const checked = usedServices.includes(option.value); return <label key={option.value} className={`flex min-h-11 cursor-pointer items-center gap-3 rounded-md border px-3 py-2 text-sm ${checked ? 'border-emerald-500 bg-emerald-50 text-emerald-800' : 'border-slate-200 text-slate-700 hover:border-emerald-300'}`}><input type="checkbox" checked={checked} onChange={(event) => setUsedServices((current) => event.target.checked ? [...current, option.value] : current.filter((value) => value !== option.value))} className="h-4 w-4" />{option.label}</label>; })}
+                      {serviceOptions.map((option) => { const checked = usedServices.includes(option.value); return <label key={option.value} className={`flex min-h-11 cursor-pointer items-center gap-3 rounded-md border px-3 py-2 text-sm ${checked ? 'border-emerald-500 bg-emerald-50 text-emerald-800' : 'border-slate-200 text-slate-700 hover:border-emerald-300'}`}><input type="checkbox" checked={checked} onChange={(event) => setUsedServices((current) => event.target.checked ? [...current, option.value] : current.filter((value) => value !== option.value))} className="h-4 w-4" />{option.label}</label>; })}
                     </div>
                     {usedServices.includes('other') ? <input value={usedServicesOther} onChange={(event) => setUsedServicesOther(event.target.value)} maxLength={500} placeholder="โปรดระบุส่วนงานหรือบริการ" className="mt-3 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:ring-2 focus:ring-brand-100" /> : null}
                   </fieldset>
