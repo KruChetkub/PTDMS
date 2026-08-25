@@ -1,4 +1,4 @@
--- Recalculate net budget from allocation tranches and transfers, never from planned budget.
+-- Recalculate net budget from allocations, transfers, and commitments, never from planned budget.
 
 begin;
 
@@ -11,7 +11,9 @@ set
     + central_transfer_in_amount
     - central_transfer_out_amount
     + division_transfer_in_amount
-    - division_transfer_out_amount,
+    - division_transfer_out_amount
+    + committed_po_amount
+    + committed_without_po_amount,
   remaining_amount = greatest(
     0,
     allocation_tranche_1_amount
@@ -21,6 +23,8 @@ set
     - central_transfer_out_amount
     + division_transfer_in_amount
     - division_transfer_out_amount
+    + committed_po_amount
+    + committed_without_po_amount
     - utilization_total_amount
   ),
   disbursement_rate = case
@@ -30,7 +34,9 @@ set
       + central_transfer_in_amount
       - central_transfer_out_amount
       + division_transfer_in_amount
-      - division_transfer_out_amount = 0
+      - division_transfer_out_amount
+      + committed_po_amount
+      + committed_without_po_amount = 0
     then 0
     else disbursed_total_amount * 100 / (
       allocation_tranche_1_amount
@@ -40,6 +46,8 @@ set
       - central_transfer_out_amount
       + division_transfer_in_amount
       - division_transfer_out_amount
+      + committed_po_amount
+      + committed_without_po_amount
     )
   end,
   utilization_with_po_rate = case
@@ -49,7 +57,9 @@ set
       + central_transfer_in_amount
       - central_transfer_out_amount
       + division_transfer_in_amount
-      - division_transfer_out_amount = 0
+      - division_transfer_out_amount
+      + committed_po_amount
+      + committed_without_po_amount = 0
     then 0
     else utilization_total_amount * 100 / (
       allocation_tranche_1_amount
@@ -59,6 +69,8 @@ set
       - central_transfer_out_amount
       + division_transfer_in_amount
       - division_transfer_out_amount
+      + committed_po_amount
+      + committed_without_po_amount
     )
   end
 where not exists (

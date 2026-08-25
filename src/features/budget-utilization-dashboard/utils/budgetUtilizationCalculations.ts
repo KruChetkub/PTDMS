@@ -72,13 +72,16 @@ export function getNetAllocationTotal(amount: Partial<BudgetUtilizationAmount>) 
     toNumber(amount.allocation_tranche_2_amount) +
     toNumber(amount.allocation_tranche_3_amount)
   );
-  return (
+  const netAllocationAfterTransfer = (
     allocationTotal +
     toNumber(amount.central_transfer_in_amount) -
     toNumber(amount.central_transfer_out_amount) +
     toNumber(amount.division_transfer_in_amount) -
     toNumber(amount.division_transfer_out_amount)
   );
+  const committedTotal = toNumber(amount.committed_po_amount) + toNumber(amount.committed_without_po_amount);
+
+  return netAllocationAfterTransfer + committedTotal;
 }
 
 export function normalizeAmount(raw?: Partial<BudgetUtilizationAmount> | null): BudgetUtilizationAmount {
@@ -91,7 +94,9 @@ export function normalizeAmount(raw?: Partial<BudgetUtilizationAmount> | null): 
   const centralTransferOut = toNumber(source.central_transfer_out_amount);
   const divisionTransferIn = toNumber(source.division_transfer_in_amount);
   const divisionTransferOut = toNumber(source.division_transfer_out_amount);
-  const allocationTotal = getNetAllocationTotal({
+  const committedTotal = toNumber(source.committed_po_amount) + toNumber(source.committed_without_po_amount);
+  const calculatedNetBudgetAfterTransfer = getNetAllocationTotal({
+    allocation_total_amount: source.allocation_total_amount,
     allocation_tranche_1_amount: allocationTranche1,
     allocation_tranche_2_amount: allocationTranche2,
     allocation_tranche_3_amount: allocationTranche3,
@@ -99,14 +104,19 @@ export function normalizeAmount(raw?: Partial<BudgetUtilizationAmount> | null): 
     central_transfer_out_amount: centralTransferOut,
     division_transfer_in_amount: divisionTransferIn,
     division_transfer_out_amount: divisionTransferOut,
+    committed_po_amount: source.committed_po_amount,
+    committed_without_po_amount: source.committed_without_po_amount,
   });
-  const netBudgetAfterTransfer = toNumber(source.net_budget_after_transfer_amount) || allocationTotal;
-  const committedTotal = toNumber(source.committed_total_amount) || toNumber(source.committed_po_amount) + toNumber(source.committed_without_po_amount);
-  const disbursedTotal = toNumber(source.disbursed_total_amount) || toNumber(source.disbursed_general_amount) + toNumber(source.disbursed_advance_amount);
-  const utilizationTotal = toNumber(source.utilization_total_amount) || committedTotal + disbursedTotal;
-  const remaining = toNumber(source.remaining_amount) || Math.max(0, netBudgetAfterTransfer - utilizationTotal);
-  const disbursementRate = toNumber(source.disbursement_rate) || percent(disbursedTotal, netBudgetAfterTransfer || allocationTotal);
-  const utilizationWithPoRate = toNumber(source.utilization_with_po_rate) || percent(utilizationTotal, netBudgetAfterTransfer || allocationTotal);
+  const netBudgetAfterTransfer = calculatedNetBudgetAfterTransfer
+    || toNumber(source.net_budget_after_transfer_amount)
+    || committedTotal;
+  const disbursedFromParts = toNumber(source.disbursed_general_amount) + toNumber(source.disbursed_advance_amount);
+  const disbursedTotal = disbursedFromParts;
+  const calculatedUtilizationTotal = committedTotal + disbursedTotal;
+  const utilizationTotal = calculatedUtilizationTotal;
+  const remaining = Math.max(0, netBudgetAfterTransfer - utilizationTotal);
+  const disbursementRate = percent(disbursedTotal, netBudgetAfterTransfer);
+  const utilizationWithPoRate = percent(utilizationTotal, netBudgetAfterTransfer);
 
   return {
     ...emptyBudgetAmount,

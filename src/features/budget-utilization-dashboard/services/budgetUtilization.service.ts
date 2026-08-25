@@ -419,7 +419,8 @@ export async function saveBudgetItemAllocation(
   );
   const netBudget = allocationTotal
     + currentAmount.central_transfer_in_amount - currentAmount.central_transfer_out_amount
-    + currentAmount.division_transfer_in_amount - currentAmount.division_transfer_out_amount;
+    + currentAmount.division_transfer_in_amount - currentAmount.division_transfer_out_amount
+    + currentAmount.committed_po_amount + currentAmount.committed_without_po_amount;
   const remaining = Math.max(0, netBudget - currentAmount.utilization_total_amount);
   const updatePayload: Record<string, number | string | null> = {
     net_budget_after_transfer_amount: netBudget,
@@ -507,6 +508,9 @@ function toBudgetItemPayload(input: BudgetUtilizationItemInput, sortOrder?: numb
 }
 
 function toBudgetAmountPayload(input: BudgetUtilizationItemInput, itemId: string) {
+  const committedPoAmount = input.committedPoAmount ?? 0;
+  const committedWithoutPoAmount = input.committedWithoutPoAmount ?? 0;
+  const committedTotalAmount = committedPoAmount + committedWithoutPoAmount;
   const calculatedNetBudgetAfterTransferAmount =
     (input.allocationTranche1Amount ?? 0) +
     (input.allocationTranche2Amount ?? 0) +
@@ -514,17 +518,13 @@ function toBudgetAmountPayload(input: BudgetUtilizationItemInput, itemId: string
     (input.centralTransferInAmount ?? 0) -
     (input.centralTransferOutAmount ?? 0) +
     (input.divisionTransferInAmount ?? 0) -
-    (input.divisionTransferOutAmount ?? 0);
-  const storedNetBudgetAfterTransferAmount = input.netBudgetAfterTransferAmount ?? 0;
-  const netBudgetAfterTransferAmount = storedNetBudgetAfterTransferAmount !== 0
-    ? storedNetBudgetAfterTransferAmount
-    : calculatedNetBudgetAfterTransferAmount;
+    (input.divisionTransferOutAmount ?? 0) +
+    committedTotalAmount;
+  const netBudgetAfterTransferAmount = calculatedNetBudgetAfterTransferAmount
+    || (input.netBudgetAfterTransferAmount ?? 0);
   const disbursedGeneralAmount = input.disbursedGeneralAmount ?? 0;
   const disbursedAdvanceAmount = input.disbursedAdvanceAmount ?? 0;
   const disbursedTotalAmount = input.disbursedTotalAmount ?? disbursedGeneralAmount + disbursedAdvanceAmount;
-  const committedPoAmount = input.committedPoAmount ?? 0;
-  const committedWithoutPoAmount = input.committedWithoutPoAmount ?? 0;
-  const committedTotalAmount = input.committedTotalAmount ?? committedPoAmount + committedWithoutPoAmount;
   const utilizationTotalAmount = input.utilizationTotalAmount ?? committedTotalAmount + disbursedTotalAmount;
   const remainingAmount = Math.max(0, netBudgetAfterTransferAmount - utilizationTotalAmount);
   const normalized = normalizeAmount({

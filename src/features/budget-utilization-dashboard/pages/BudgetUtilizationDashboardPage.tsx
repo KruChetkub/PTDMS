@@ -192,6 +192,25 @@ function getDashboardAmountMetrics(amount: BudgetUtilizationAmount) {
   };
 }
 
+const hierarchyAmountFields = [
+  'planned_budget_amount',
+  'allocation_tranche_1_amount',
+  'allocation_tranche_2_amount',
+  'allocation_tranche_3_amount',
+  'allocation_total_amount',
+  'central_transfer_in_amount',
+  'central_transfer_out_amount',
+  'division_transfer_in_amount',
+  'division_transfer_out_amount',
+  'committed_po_amount',
+  'committed_without_po_amount',
+  'committed_total_amount',
+  'disbursed_general_amount',
+  'disbursed_advance_amount',
+  'disbursed_total_amount',
+  'utilization_total_amount',
+] as const;
+
 function getCategoryAmount(category: BudgetUtilizationItemWithAmount, items: BudgetUtilizationItemWithAmount[]) {
   const descendantIds = new Set([category.id]);
   let hasChange = true;
@@ -208,26 +227,7 @@ function getCategoryAmount(category: BudgetUtilizationItemWithAmount, items: Bud
 
   const descendants = items.filter((item) => descendantIds.has(item.id) && item.id !== category.id);
   const itemById = new Map(items.map((item) => [item.id, item]));
-  const amountFields = [
-    'planned_budget_amount',
-    'allocation_tranche_1_amount',
-    'allocation_tranche_2_amount',
-    'allocation_tranche_3_amount',
-    'allocation_total_amount',
-    'central_transfer_in_amount',
-    'central_transfer_out_amount',
-    'division_transfer_in_amount',
-    'division_transfer_out_amount',
-    'committed_po_amount',
-    'committed_without_po_amount',
-    'committed_total_amount',
-    'disbursed_general_amount',
-    'disbursed_advance_amount',
-    'disbursed_total_amount',
-    'utilization_total_amount',
-  ] as const;
-
-  const aggregatedAmount = Object.fromEntries(amountFields.map((field) => {
+  const aggregatedAmount = Object.fromEntries(hierarchyAmountFields.map((field) => {
     const categoryValue = toNumber(category.amount[field]);
     if (categoryValue !== 0) return [field, categoryValue];
 
@@ -273,14 +273,18 @@ function getRawCell(row: string[], index: number) {
 }
 
 function mapRawBudgetRow(row: string[], index: number): RawBudgetRow {
-  const name = getRawCell(row, 5) || getRawCell(row, 1) || getRawCell(row, 0) || `แถวที่ ${index + 1}`;
+  const summaryLabel = getRawCell(row, 0);
+  const name = (/\(รวม\)/.test(summaryLabel) || summaryLabel === 'งบดำเนินงาน')
+    ? summaryLabel
+    : getRawCell(row, 5) || getRawCell(row, 1) || summaryLabel || `แถวที่ ${index + 1}`;
   const committedTotal = toNumber(row[19]) || toNumber(row[17]) + toNumber(row[18]);
   const disbursedTotal = toNumber(row[22]) || toNumber(row[20]) + toNumber(row[21]);
   const utilizationTotal = toNumber(row[23]) || committedTotal + disbursedTotal;
-  const netTotal = toNumber(row[12])
-    || toNumber(row[9]) + toNumber(row[10]) + toNumber(row[11])
-      + toNumber(row[13]) - toNumber(row[14])
-      + toNumber(row[15]) - toNumber(row[16]);
+  const calculatedNetTotal = toNumber(row[9]) + toNumber(row[10]) + toNumber(row[11])
+    + toNumber(row[13]) - toNumber(row[14])
+    + toNumber(row[15]) - toNumber(row[16])
+    + committedTotal;
+  const netTotal = calculatedNetTotal || toNumber(row[12]);
 
   return {
     id: `raw-${index}`,
@@ -302,8 +306,8 @@ function mapRawBudgetRow(row: string[], index: number): RawBudgetRow {
     disbursedTotal,
     utilizationTotal,
     remaining: toNumber(row[24]),
-    disbursementRate: toNumber(row[25]) || percent(disbursedTotal, netTotal),
-    utilizationWithPoRate: toNumber(row[26]) || percent(utilizationTotal, netTotal),
+    disbursementRate: percent(disbursedTotal, netTotal),
+    utilizationWithPoRate: percent(utilizationTotal, netTotal),
   };
 }
 
@@ -401,11 +405,18 @@ function getRawPlanDetailRows(rawWorkbook: BudgetUtilizationRawWorkbook | null |
   return rawWorkbook.rows
     .map((row, index) => ({ row, mapped: mapRawBudgetRow(row, index) }))
     .filter(({ row, mapped }) => {
+      const rowLabel = getRawCell(row, 0);
       const categoryName = getRawCell(row, 2);
       const itemName = getRawCell(row, 5);
       const hasMoney = mapped.planned || mapped.netTotal || mapped.utilizationTotal || mapped.remaining || mapped.disbursedTotal;
 
-      if (!definition.matcher.test(categoryName) || /\(รวม\)|ดึงมา/.test(categoryName) || !itemName || !hasMoney) {
+      if (
+        !definition.matcher.test(categoryName)
+        || /\(รวม\)|รวมทั้งสิ้น|ดึงมา/.test(rowLabel)
+        || /\(รวม\)|ดึงมา/.test(categoryName)
+        || !itemName
+        || !hasMoney
+      ) {
         return false;
       }
 
@@ -422,6 +433,9 @@ function getRawPlanDetailRows(rawWorkbook: BudgetUtilizationRawWorkbook | null |
     })
     .map(({ row, mapped }) => ({
       ...mapped,
+      name: categoryKey === 'personnel'
+        ? mapped.name.replace(/^\s*งบบุคลากร\s*:\s*/, '')
+        : mapped.name,
       output: getRawCell(row, 3),
       activity: getRawCell(row, 4),
     }));
@@ -515,11 +529,68 @@ function buildDatabaseWorkbook(summary: BudgetUtilizationDashboardSummary | null
     }
     return false;
   };
+  const isDescendantOf = (item: BudgetUtilizationItemWithAmount, ancestorId: string) => {
+    let parentId = item.parent_id;
+    while (parentId) {
+      if (parentId === ancestorId) return true;
+      parentId = itemById.get(parentId)?.parent_id ?? null;
+    }
+    return false;
+  };
+  const orderedCategories = [...summary.categoryItems].sort((a, b) => a.sort_order - b.sort_order);
+  const findTableCategory = (item: BudgetUtilizationItemWithAmount) => (
+    findCategory(item)
+    ?? [...orderedCategories].reverse().find((category) => category.sort_order < item.sort_order)
+    ?? null
+  );
+  const operationsCategories = orderedCategories.filter((category) => (
+    category.item_name.replace(/\s+/g, '').includes('งบดำเนินงาน')
+  ));
+  const majorProjects = summary.items.filter((item) => item.row_type === 'major_project');
 
-  const categoryAmounts = summary.categoryItems.map((category) => ({
-    category,
-    amount: getCategoryAmount(category, summary.items),
-  }));
+  const categoryAmounts = summary.categoryItems.map((category) => {
+    const categoryAmount = getCategoryAmount(category, summary.items);
+    const isPrimaryOperationsCategory = category.id === operationsCategories[0]?.id;
+    const additionalItemIds = new Set(summary.items
+      .filter((item) => (
+        item.row_type !== 'total'
+        && item.row_type !== 'budget_category'
+        && !isDescendantOf(item, category.id)
+        && findTableCategory(item)?.id === category.id
+      ))
+      .map((item) => item.id));
+
+    if (isPrimaryOperationsCategory) {
+      majorProjects
+        .filter((project) => !operationsCategories.some((operationsCategory) => isDescendantOf(project, operationsCategory.id)))
+        .forEach((project) => additionalItemIds.add(project.id));
+    }
+
+    const additionalRootItems = summary.items.filter((item) => (
+      additionalItemIds.has(item.id)
+      && (!item.parent_id || !additionalItemIds.has(item.parent_id))
+    ));
+    const additionalAmounts = additionalRootItems.map((item) => getCategoryAmount(item, summary.items));
+    const additionalAmount = additionalAmounts.length > 0
+      ? sumBudgetAmounts(additionalAmounts)
+      : null;
+    const mergedAmount = additionalAmount
+      ? normalizeAmount({
+          ...categoryAmount,
+          ...Object.fromEntries(hierarchyAmountFields.map((field) => [
+            field,
+            toNumber(category.amount[field]) !== 0
+              ? toNumber(categoryAmount[field])
+              : toNumber(categoryAmount[field]) + toNumber(additionalAmount[field]),
+          ])),
+        })
+      : categoryAmount;
+
+    return {
+      category,
+      amount: mergedAmount,
+    };
+  });
   if (categoryAmounts.length > 0) {
     rows[1] = toRow('รวมทั้งสิ้น', '', 'รวมทั้งสิ้น', sumBudgetAmounts(categoryAmounts.map(({ amount }) => amount)));
   }
@@ -540,9 +611,7 @@ function buildDatabaseWorkbook(summary: BudgetUtilizationDashboardSummary | null
   const operationsDetails = detailItems.filter((item) => /งบดำเนินงาน/.test(findCategory(item)?.item_name ?? ''));
   const regularOperations = operationsDetails.filter((item) => !isProjectItem(item));
   const projectOperations = operationsDetails.filter(isProjectItem);
-  const majorProjectAmounts = summary.items
-    .filter((item) => item.row_type === 'major_project' && /งบดำเนินงาน/.test(findCategory(item)?.item_name ?? ''))
-    .map((item) => getCategoryAmount(item, summary.items));
+  const majorProjectAmounts = majorProjects.map((item) => getCategoryAmount(item, summary.items));
   if (regularOperations.length > 0) {
     rows.push(toRow('งบดำเนินงาน', 'งบดำเนินงาน', 'งบดำเนินงาน', sumBudgetAmounts(regularOperations.map((item) => item.amount))));
   }
