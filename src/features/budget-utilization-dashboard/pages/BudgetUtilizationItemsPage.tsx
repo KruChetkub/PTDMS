@@ -4,19 +4,22 @@ import { PageHeader } from '../../../components/ui/PageHeader';
 import { ConfirmModal } from '../../../components/ui/ConfirmModal';
 import { useAuditPageAccess } from '../../../hooks/useAuditPageAccess';
 import { useAuthStore } from '../../../stores/auth.store';
-import { canManageBudgetUtilization, createBudgetItem, createBudgetReportPeriod, deleteBudgetItem, getBudgetDashboardSummary, updateBudgetItem } from '../services/budgetUtilization.service';
-import { formatBudgetAmount, toNumber } from '../utils/budgetUtilizationCalculations';
-import type { BudgetUtilizationDashboardSummary, BudgetUtilizationItemInput, BudgetUtilizationItemWithAmount } from '../types/budgetUtilization.types';
+import { canManageBudgetUtilization, createBudgetItem, createBudgetReportPeriod, deleteBudgetItem, getBudgetDashboardSummary, saveBudgetAllocationTrancheDefinitions, saveBudgetItemAllocation, updateBudgetItem } from '../services/budgetUtilization.service';
+import { formatBudgetAmount, getNetAllocationTotal, toNumber } from '../utils/budgetUtilizationCalculations';
+import type { BudgetUtilizationDashboardSummary, BudgetUtilizationItemInput, BudgetUtilizationItemWithAmount, BudgetUtilizationRowType } from '../types/budgetUtilization.types';
 import { getSafeUserErrorMessage } from '../../../utils/errorHandling';
 
 type ItemForm = {
   itemId: string | null;
   parentId: string;
+  rowType: BudgetUtilizationRowType;
   sequenceLabel: string;
   itemName: string;
   outputLabel: string;
+  activitySequenceLabel: string;
   activityLabel: string;
   plannedBudgetAmount: string;
+  netBudgetAfterTransferAmount: string;
   allocationTranche1Amount: string;
   allocationTranche1Date: string;
   allocationTranche2Amount: string;
@@ -37,7 +40,7 @@ type ItemForm = {
   remainingAmount: string;
 };
 
-type AllocationTrancheKey = '1' | '2' | '3';
+type AllocationTrancheKey = string;
 
 type AllocationForm = {
   itemId: string;
@@ -72,6 +75,8 @@ type CommitmentForm = {
 
 type TrancheDefinition = {
   key: AllocationTrancheKey;
+  id?: string;
+  trancheNumber: number;
   label: string;
 };
 
@@ -83,11 +88,14 @@ type TrancheForm = {
 const emptyMainForm: ItemForm = {
   itemId: null,
   parentId: '',
+  rowType: 'budget_category',
   sequenceLabel: '',
   itemName: '',
   outputLabel: '',
+  activitySequenceLabel: '',
   activityLabel: '',
   plannedBudgetAmount: '',
+  netBudgetAfterTransferAmount: '',
   allocationTranche1Amount: '',
   allocationTranche1Date: '',
   allocationTranche2Amount: '',
@@ -110,11 +118,22 @@ const emptyMainForm: ItemForm = {
 
 const emptyChildForm: ItemForm = {
   ...emptyMainForm,
+  rowType: 'line_item',
+};
+
+const emptyMajorProjectForm: ItemForm = {
+  ...emptyMainForm,
+  rowType: 'major_project',
+};
+
+const emptySubActivityForm: ItemForm = {
+  ...emptyMainForm,
+  rowType: 'sub_project',
 };
 
 const initialAllocationForm: AllocationForm = {
   itemId: '',
-  trancheKey: '1',
+  trancheKey: 'legacy-1',
   amount: '',
   allocationDate: '',
 };
@@ -144,9 +163,9 @@ const initialCommitmentForm: CommitmentForm = {
 };
 
 const initialTrancheDefinitions: TrancheDefinition[] = [
-  { key: '1', label: 'จัดสรรงวด 1' },
-  { key: '2', label: 'จัดสรรงวด 2' },
-  { key: '3', label: 'จัดสรรงวด 3' },
+  { key: 'legacy-1', trancheNumber: 1, label: 'จัดสรรงวด 1' },
+  { key: 'legacy-2', trancheNumber: 2, label: 'จัดสรรงวด 2' },
+  { key: 'legacy-3', trancheNumber: 3, label: 'จัดสรรงวด 3' },
 ];
 
 const emptyTrancheForm: TrancheForm = {
@@ -154,17 +173,18 @@ const emptyTrancheForm: TrancheForm = {
   label: '',
 };
 
-const allocationTrancheKeys: AllocationTrancheKey[] = ['1', '2', '3'];
-
 function formFromItem(item: BudgetUtilizationItemWithAmount): ItemForm {
   return {
     itemId: item.id,
     parentId: item.parent_id ?? '',
+    rowType: item.row_type,
     sequenceLabel: item.sequence_label ?? '',
     itemName: item.item_name,
     outputLabel: item.output_label ?? '',
+    activitySequenceLabel: item.activity_sequence_label ?? '',
     activityLabel: item.activity_label ?? '',
     plannedBudgetAmount: String(item.amount.planned_budget_amount || ''),
+    netBudgetAfterTransferAmount: String(item.amount.net_budget_after_transfer_amount || ''),
     allocationTranche1Amount: String(item.amount.allocation_tranche_1_amount || ''),
     allocationTranche1Date: item.amount.allocation_tranche_1_date ?? '',
     allocationTranche2Amount: String(item.amount.allocation_tranche_2_amount || ''),
@@ -191,12 +211,14 @@ function toItemPayload(reportPeriodId: string, form: ItemForm, parentId: string 
     reportPeriodId,
     itemId: form.itemId ?? undefined,
     parentId,
-    rowType: parentId ? 'line_item' : 'budget_category',
+    rowType: form.rowType,
     sequenceLabel,
     itemName: form.itemName,
     outputLabel: form.outputLabel,
+    activitySequenceLabel: form.activitySequenceLabel,
     activityLabel: form.activityLabel,
     plannedBudgetAmount: toNumber(form.plannedBudgetAmount),
+    netBudgetAfterTransferAmount: toNumber(form.netBudgetAfterTransferAmount),
     allocationTranche1Amount: toNumber(form.allocationTranche1Amount),
     allocationTranche1Date: form.allocationTranche1Date || null,
     allocationTranche2Amount: toNumber(form.allocationTranche2Amount),
@@ -230,7 +252,12 @@ export function BudgetUtilizationItemsPage() {
   const [summary, setSummary] = useState<BudgetUtilizationDashboardSummary | null>(null);
   const [keyword, setKeyword] = useState('');
   const [mainForm, setMainForm] = useState<ItemForm>(emptyMainForm);
+  const [majorProjectForm, setMajorProjectForm] = useState<ItemForm>(emptyMajorProjectForm);
+  const [subActivityForm, setSubActivityForm] = useState<ItemForm>(emptySubActivityForm);
   const [childForm, setChildForm] = useState<ItemForm>(emptyChildForm);
+  const [selectedCategoryId, setSelectedCategoryId] = useState('');
+  const [selectedMajorProjectId, setSelectedMajorProjectId] = useState('');
+  const [selectedSubActivityId, setSelectedSubActivityId] = useState('');
   const [allocationForm, setAllocationForm] = useState<AllocationForm>(initialAllocationForm);
   const [disbursementForm, setDisbursementForm] = useState<DisbursementForm>(initialDisbursementForm);
   const [centralTransferForm, setCentralTransferForm] = useState<CentralTransferForm>(initialCentralTransferForm);
@@ -253,6 +280,22 @@ export function BudgetUtilizationItemsPage() {
       const dashboardSummary = await getBudgetDashboardSummary(nextReportPeriodId || null);
       setSummary(dashboardSummary);
       setReportPeriodId(dashboardSummary.reportPeriod?.id ?? '');
+      const loadedTranches = dashboardSummary.allocationTranches.map((tranche) => ({
+        key: tranche.id,
+        id: tranche.id,
+        trancheNumber: tranche.tranche_number,
+        label: tranche.label,
+      }));
+      if (loadedTranches.length > 0) {
+        setTrancheDefinitions(loadedTranches);
+        setTrancheDrafts(loadedTranches);
+        setAllocationForm((current) => ({
+          ...current,
+          trancheKey: loadedTranches.some((tranche) => tranche.key === current.trancheKey)
+            ? current.trancheKey
+            : loadedTranches[0].key,
+        }));
+      }
     } catch (loadError) {
       setError(getSafeUserErrorMessage(loadError, 'ไม่สามารถโหลดรายการงบประมาณได้'));
     } finally {
@@ -280,6 +323,7 @@ export function BudgetUtilizationItemsPage() {
   };
 
   const allBudgetItems = useMemo(() => summary?.items ?? [], [summary]);
+  const displayFiscalYear = summary?.reportPeriod?.fiscal_year ?? getCurrentThaiFiscalYear();
 
   const hierarchyItems = useMemo(() => {
     const compareItems = (a: BudgetUtilizationItemWithAmount, b: BudgetUtilizationItemWithAmount) => {
@@ -302,15 +346,14 @@ export function BudgetUtilizationItemsPage() {
       .filter((item) => item.parent_id === null && item.row_type === 'budget_category')
       .sort(compareItems);
 
-    categories.forEach((category) => {
-      orderedItems.push(category);
-      orderedIds.add(category.id);
+    const appendItemAndDescendants = (item: BudgetUtilizationItemWithAmount) => {
+      if (orderedIds.has(item.id)) return;
+      orderedItems.push(item);
+      orderedIds.add(item.id);
+      (childrenByParent.get(item.id) ?? []).sort(compareItems).forEach(appendItemAndDescendants);
+    };
 
-      (childrenByParent.get(category.id) ?? []).sort(compareItems).forEach((child) => {
-        orderedItems.push(child);
-        orderedIds.add(child.id);
-      });
-    });
+    categories.forEach(appendItemAndDescendants);
 
     const orphanItems = allBudgetItems
       .filter((item) => item.row_type !== 'total' && !orderedIds.has(item.id))
@@ -323,22 +366,18 @@ export function BudgetUtilizationItemsPage() {
     const normalizedKeyword = keyword.trim().toLowerCase();
     if (!normalizedKeyword) return hierarchyItems;
 
-    const matchesKeyword = (item: BudgetUtilizationItemWithAmount) => `${item.sequence_label ?? ''} ${item.item_name} ${item.output_label ?? ''} ${item.activity_label ?? ''}`.toLowerCase().includes(normalizedKeyword);
+    const matchesKeyword = (item: BudgetUtilizationItemWithAmount) => `${item.sequence_label ?? ''} ${item.item_name} ${item.output_label ?? ''} ${item.activity_sequence_label ?? ''} ${item.activity_label ?? ''}`.toLowerCase().includes(normalizedKeyword);
     const itemById = new Map(allBudgetItems.map((item) => [item.id, item]));
-    const matchingParentIds = new Set(
-      allBudgetItems
-        .filter((item) => item.parent_id && matchesKeyword(item))
-        .map((item) => item.parent_id as string),
-    );
-
-    return hierarchyItems.filter((item) => {
-      if (item.parent_id === null) {
-        return matchesKeyword(item) || matchingParentIds.has(item.id);
+    const visibleIds = new Set(allBudgetItems.filter(matchesKeyword).map((item) => item.id));
+    allBudgetItems.filter(matchesKeyword).forEach((item) => {
+      let parentId = item.parent_id;
+      while (parentId) {
+        visibleIds.add(parentId);
+        parentId = itemById.get(parentId)?.parent_id ?? null;
       }
-
-      const parent = itemById.get(item.parent_id);
-      return matchesKeyword(item) || (parent ? matchesKeyword(parent) : false);
     });
+
+    return hierarchyItems.filter((item) => visibleIds.has(item.id));
   }, [allBudgetItems, hierarchyItems, keyword]);
 
   const mainBudgetItems = useMemo(() => {
@@ -346,8 +385,64 @@ export function BudgetUtilizationItemsPage() {
   }, [allBudgetItems]);
 
   const selectedParent = useMemo(() => {
-    return mainBudgetItems.find((item) => item.id === childForm.parentId) ?? null;
-  }, [childForm.parentId, mainBudgetItems]);
+    return allBudgetItems.find((item) => item.id === childForm.parentId) ?? null;
+  }, [allBudgetItems, childForm.parentId]);
+
+  const majorProjectItems = useMemo(() => {
+    return allBudgetItems.filter((item) => item.row_type === 'major_project');
+  }, [allBudgetItems]);
+
+  const selectedMainCategory = useMemo(() => {
+    let currentItem = selectedParent;
+    while (currentItem && currentItem.row_type !== 'budget_category') {
+      currentItem = currentItem.parent_id
+        ? allBudgetItems.find((item) => item.id === currentItem?.parent_id) ?? null
+        : null;
+    }
+    return currentItem ?? mainBudgetItems.find((item) => item.id === selectedCategoryId) ?? null;
+  }, [allBudgetItems, mainBudgetItems, selectedCategoryId, selectedParent]);
+
+  const selectedCategoryMajorProjects = useMemo(() => {
+    if (!selectedMainCategory) return [];
+    return majorProjectItems
+      .filter((project) => project.parent_id === selectedMainCategory.id)
+      .sort((a, b) => {
+        const sequenceCompare = (a.sequence_label ?? '').localeCompare(b.sequence_label ?? '', 'th', { numeric: true });
+        return sequenceCompare || a.sort_order - b.sort_order;
+      });
+  }, [majorProjectItems, selectedMainCategory]);
+
+  const selectedMajorProject = useMemo(() => {
+    return selectedCategoryMajorProjects.find((project) => project.id === selectedMajorProjectId) ?? null;
+  }, [selectedCategoryMajorProjects, selectedMajorProjectId]);
+
+  const selectedMajorProjectSubActivities = useMemo(() => {
+    if (!selectedMajorProject) return [];
+    return allBudgetItems
+      .filter((item) => item.parent_id === selectedMajorProject.id && item.row_type === 'sub_project')
+      .sort((a, b) => {
+        const sequenceCompare = (a.sequence_label ?? '').localeCompare(b.sequence_label ?? '', 'th', { numeric: true });
+        return sequenceCompare || a.sort_order - b.sort_order;
+      });
+  }, [allBudgetItems, selectedMajorProject]);
+
+  const selectedSubActivity = useMemo(() => {
+    return selectedMajorProjectSubActivities.find((item) => item.id === selectedSubActivityId) ?? null;
+  }, [selectedMajorProjectSubActivities, selectedSubActivityId]);
+
+  const isOperationsCategorySelected = selectedMainCategory?.item_name.replace(/\s+/g, '').includes('งบดำเนินงาน') ?? false;
+
+  const availableBudgetParents = useMemo(() => {
+    return mainBudgetItems.flatMap((category) => [
+      category,
+      ...majorProjectItems
+        .filter((project) => project.parent_id === category.id)
+        .flatMap((project) => [
+          project,
+          ...allBudgetItems.filter((item) => item.parent_id === project.id && item.row_type === 'sub_project'),
+        ]),
+    ]);
+  }, [allBudgetItems, mainBudgetItems, majorProjectItems]);
 
   const selectedParentChildTotal = useMemo(() => {
     if (!selectedParent || !summary) return 0;
@@ -358,8 +453,15 @@ export function BudgetUtilizationItemsPage() {
   }, [childForm.itemId, selectedParent, summary]);
 
   const budgetLineItems = useMemo(() => {
-    return hierarchyItems.filter((item) => item.parent_id !== null);
-  }, [hierarchyItems]);
+    return hierarchyItems.filter((item) => {
+      if (item.parent_id === null) return false;
+      const isStructuralMajorProject = item.row_type === 'major_project'
+        && (item.source_import_batch_id === null || allBudgetItems.some((candidate) => candidate.parent_id === item.id));
+      const isStructuralSubActivity = item.row_type === 'sub_project'
+        && (item.source_import_batch_id === null || allBudgetItems.some((candidate) => candidate.parent_id === item.id));
+      return !isStructuralMajorProject && !isStructuralSubActivity;
+    });
+  }, [allBudgetItems, hierarchyItems]);
 
   const selectedAllocationItem = useMemo(() => {
     return budgetLineItems.find((item) => item.id === allocationForm.itemId) ?? null;
@@ -398,20 +500,26 @@ export function BudgetUtilizationItemsPage() {
     return (summary?.items ?? []).filter((item) => item.parent_id === categoryId).length;
   };
 
-  const getTrancheUsageCount = (trancheKey: AllocationTrancheKey) => {
-    return budgetLineItems.filter((item) => {
-      if (trancheKey === '1') {
-        return item.amount.allocation_tranche_1_amount > 0 || Boolean(item.amount.allocation_tranche_1_date);
-      }
-      if (trancheKey === '2') {
-        return item.amount.allocation_tranche_2_amount > 0 || Boolean(item.amount.allocation_tranche_2_date);
-      }
-      return item.amount.allocation_tranche_3_amount > 0 || Boolean(item.amount.allocation_tranche_3_date);
-    }).length;
+  const getDirectChildCount = (itemId: string) => {
+    return (summary?.items ?? []).filter((item) => item.parent_id === itemId).length;
   };
 
-  const getNextAvailableTrancheKey = () => {
-    return allocationTrancheKeys.find((key) => !trancheDrafts.some((tranche) => tranche.key === key)) ?? null;
+  const getDescendantItems = (itemId: string) => {
+    const descendants: BudgetUtilizationItemWithAmount[] = [];
+    const appendChildren = (parentId: string) => {
+      (summary?.items ?? []).filter((item) => item.parent_id === parentId).forEach((item) => {
+        descendants.push(item);
+        appendChildren(item.id);
+      });
+    };
+    appendChildren(itemId);
+    return descendants;
+  };
+
+  const getTrancheUsageCount = (trancheKey: AllocationTrancheKey) => {
+    return budgetLineItems.filter((item) => item.allocations?.some((allocation) => (
+      allocation.tranche_id === trancheKey && (allocation.amount !== 0 || Boolean(allocation.allocation_date))
+    ))).length;
   };
 
   const saveTrancheDraft = () => {
@@ -430,13 +538,12 @@ export function BudgetUtilizationItemsPage() {
       return;
     }
 
-    const nextKey = getNextAvailableTrancheKey();
-    if (!nextKey) {
-      setError('เพิ่มงวดจัดสรรได้สูงสุด 3 งวดตามโครงสร้างข้อมูลปัจจุบัน');
-      return;
-    }
-
-    setTrancheDrafts((current) => [...current, { key: nextKey, label }].sort((a, b) => Number(a.key) - Number(b.key)));
+    const nextTrancheNumber = Math.max(0, ...trancheDrafts.map((tranche) => tranche.trancheNumber)) + 1;
+    setTrancheDrafts((current) => [...current, {
+      key: `new-${crypto.randomUUID()}`,
+      trancheNumber: nextTrancheNumber,
+      label,
+    }]);
     setTrancheForm(emptyTrancheForm);
   };
 
@@ -458,25 +565,80 @@ export function BudgetUtilizationItemsPage() {
     }
   };
 
-  const saveTrancheDefinitions = () => {
+  const saveTrancheDefinitions = async () => {
+    if (!reportPeriodId) return;
     const nextDefinitions = trancheDrafts.map((tranche) => ({
       ...tranche,
-      label: tranche.label.trim() || `จัดสรรงวด ${tranche.key}`,
+      label: tranche.label.trim() || `จัดสรรงวด ${tranche.trancheNumber}`,
     }));
-
-    setTrancheDefinitions(nextDefinitions);
-    if (!nextDefinitions.some((tranche) => tranche.key === allocationForm.trancheKey)) {
-      const nextKey = nextDefinitions[0]?.key ?? '1';
+    try {
+      setSaving(true);
+      setError(null);
+      const savedDefinitions = await saveBudgetAllocationTrancheDefinitions(
+        reportPeriodId,
+        nextDefinitions.map((tranche, index) => ({
+          id: tranche.id,
+          trancheNumber: tranche.trancheNumber,
+          label: tranche.label,
+          sortOrder: index + 1,
+        })),
+      );
+      const mappedDefinitions = savedDefinitions.map((tranche) => ({
+        key: tranche.id,
+        id: tranche.id,
+        trancheNumber: tranche.tranche_number,
+        label: tranche.label,
+      }));
+      setTrancheDefinitions(mappedDefinitions);
+      setTrancheDrafts(mappedDefinitions);
+      const nextKey = mappedDefinitions.some((tranche) => tranche.key === allocationForm.trancheKey)
+        ? allocationForm.trancheKey
+        : mappedDefinitions[0]?.key ?? '';
       setAllocationForm((current) => ({ ...current, trancheKey: nextKey }));
       applySelectedAllocationItemValue(selectedAllocationItem, nextKey);
+      setTrancheForm(emptyTrancheForm);
+      setIsTrancheManagerOpen(false);
+      await loadData(reportPeriodId);
+    } catch (saveError) {
+      setError(getSafeUserErrorMessage(saveError, 'ไม่สามารถบันทึกการจัดการงวดได้'));
+    } finally {
+      setSaving(false);
     }
-    setTrancheForm(emptyTrancheForm);
-    setIsTrancheManagerOpen(false);
   };
 
   const startEdit = (item: BudgetUtilizationItemWithAmount) => {
+    if (item.row_type === 'major_project' && (item.source_import_batch_id === null || getDirectChildCount(item.id) > 0)) {
+      setMajorProjectForm(formFromItem(item));
+      setSelectedMajorProjectId(item.id);
+      setSelectedSubActivityId('');
+      setSubActivityForm({ ...emptySubActivityForm, parentId: item.id });
+      setChildForm(emptyChildForm);
+      setSelectedCategoryId(item.parent_id ?? '');
+      setMainForm(emptyMainForm);
+      return;
+    }
+
+    if (item.row_type === 'sub_project' && (item.source_import_batch_id === null || getDirectChildCount(item.id) > 0)) {
+      const majorProject = allBudgetItems.find((candidate) => candidate.id === item.parent_id) ?? null;
+      setSubActivityForm(formFromItem(item));
+      setSelectedMajorProjectId(majorProject?.id ?? '');
+      setSelectedSubActivityId(item.id);
+      setChildForm({ ...emptyChildForm, parentId: item.id, rowType: 'activity' });
+      setSelectedCategoryId(majorProject?.parent_id ?? '');
+      setMajorProjectForm(emptyMajorProjectForm);
+      setMainForm(emptyMainForm);
+      return;
+    }
+
     if (item.parent_id) {
       setChildForm(formFromItem(item));
+      const directParent = allBudgetItems.find((candidate) => candidate.id === item.parent_id) ?? null;
+      const majorProject = directParent?.row_type === 'sub_project'
+        ? allBudgetItems.find((candidate) => candidate.id === directParent.parent_id) ?? null
+        : directParent?.row_type === 'major_project' ? directParent : null;
+      setSelectedMajorProjectId(majorProject?.id ?? '');
+      setSelectedSubActivityId(directParent?.row_type === 'sub_project' ? directParent.id : '');
+      setSelectedCategoryId(majorProject?.parent_id ?? directParent?.id ?? '');
       setAllocationForm((current) => ({ ...current, itemId: item.id }));
       setDisbursementForm({
         itemId: item.id,
@@ -513,21 +675,23 @@ export function BudgetUtilizationItemsPage() {
       return;
     }
 
-    const amountByTranche = {
-      '1': item.amount.allocation_tranche_1_amount,
-      '2': item.amount.allocation_tranche_2_amount,
-      '3': item.amount.allocation_tranche_3_amount,
-    };
-    const dateByTranche = {
-      '1': item.amount.allocation_tranche_1_date ?? '',
-      '2': item.amount.allocation_tranche_2_date ?? '',
-      '3': item.amount.allocation_tranche_3_date ?? '',
-    };
+    const allocation = item.allocations?.find((entry) => entry.tranche_id === trancheKey) ?? null;
+    const definition = trancheDefinitions.find((tranche) => tranche.key === trancheKey) ?? null;
+    const legacyAmount = definition?.trancheNumber === 1
+      ? item.amount.allocation_tranche_1_amount
+      : definition?.trancheNumber === 2
+        ? item.amount.allocation_tranche_2_amount
+        : definition?.trancheNumber === 3 ? item.amount.allocation_tranche_3_amount : 0;
+    const legacyDate = definition?.trancheNumber === 1
+      ? item.amount.allocation_tranche_1_date
+      : definition?.trancheNumber === 2
+        ? item.amount.allocation_tranche_2_date
+        : definition?.trancheNumber === 3 ? item.amount.allocation_tranche_3_date : null;
 
     setAllocationForm((current) => ({
       ...current,
-      amount: String(amountByTranche[trancheKey] || ''),
-      allocationDate: dateByTranche[trancheKey],
+      amount: String(allocation?.amount || legacyAmount || ''),
+      allocationDate: allocation?.allocation_date ?? legacyDate ?? '',
     }));
   };
 
@@ -573,20 +737,16 @@ export function BudgetUtilizationItemsPage() {
       setSaving(true);
       setError(null);
       const activeReportPeriodId = await ensureReportPeriodId();
-      const nextForm = formFromItem(selectedAllocationItem);
-
-      if (allocationForm.trancheKey === '1') {
-        nextForm.allocationTranche1Amount = allocationForm.amount;
-        nextForm.allocationTranche1Date = allocationForm.allocationDate;
-      } else if (allocationForm.trancheKey === '2') {
-        nextForm.allocationTranche2Amount = allocationForm.amount;
-        nextForm.allocationTranche2Date = allocationForm.allocationDate;
-      } else {
-        nextForm.allocationTranche3Amount = allocationForm.amount;
-        nextForm.allocationTranche3Date = allocationForm.allocationDate;
+      const selectedTranche = summary?.allocationTranches.find((tranche) => tranche.id === allocationForm.trancheKey);
+      if (!selectedTranche) {
+        throw new Error('ไม่พบงวดจัดสรรที่เลือก');
       }
-
-      await updateBudgetItem(toItemPayload(activeReportPeriodId, nextForm, selectedAllocationItem.parent_id, selectedAllocationItem.sequence_label ?? ''));
+      await saveBudgetItemAllocation(
+        selectedAllocationItem.id,
+        selectedTranche,
+        toNumber(allocationForm.amount),
+        allocationForm.allocationDate || null,
+      );
       await loadData(activeReportPeriodId);
     } catch (saveError) {
       setError(getSafeUserErrorMessage(saveError, 'ไม่สามารถบันทึกจัดสรรงวดได้'));
@@ -611,7 +771,7 @@ export function BudgetUtilizationItemsPage() {
       const disbursedTotal = disbursedGeneral + disbursedAdvance;
       const committedTotal = toNumber(nextForm.committedTotalAmount);
       const utilizationTotal = committedTotal + disbursedTotal;
-      const effectiveBudget = toNumber(nextForm.plannedBudgetAmount) + toNumber(nextForm.centralTransferInAmount) - toNumber(nextForm.centralTransferOutAmount);
+      const effectiveBudget = toNumber(nextForm.netBudgetAfterTransferAmount);
       const remainingAmount = Math.max(0, effectiveBudget - utilizationTotal);
 
       nextForm.disbursedGeneralAmount = disbursementForm.disbursedGeneralAmount;
@@ -642,12 +802,18 @@ export function BudgetUtilizationItemsPage() {
       const nextForm = formFromItem(selectedCentralTransferItem);
       const centralTransferIn = toNumber(centralTransferForm.centralTransferInAmount);
       const centralTransferOut = toNumber(centralTransferForm.centralTransferOutAmount);
-      const effectiveBudget = toNumber(nextForm.plannedBudgetAmount) + centralTransferIn - centralTransferOut;
+      const effectiveBudget =
+        toNumber(nextForm.netBudgetAfterTransferAmount) -
+        toNumber(nextForm.centralTransferInAmount) +
+        toNumber(nextForm.centralTransferOutAmount) +
+        centralTransferIn -
+        centralTransferOut;
       const utilizationTotal = toNumber(nextForm.committedTotalAmount) + toNumber(nextForm.disbursedTotalAmount);
       const remainingAmount = Math.max(0, effectiveBudget - utilizationTotal);
 
       nextForm.centralTransferInAmount = centralTransferForm.centralTransferInAmount;
       nextForm.centralTransferOutAmount = centralTransferForm.centralTransferOutAmount;
+      nextForm.netBudgetAfterTransferAmount = String(effectiveBudget || '');
       nextForm.utilizationTotalAmount = String(utilizationTotal || '');
       nextForm.remainingAmount = String(remainingAmount || '');
 
@@ -671,9 +837,20 @@ export function BudgetUtilizationItemsPage() {
       setError(null);
       const activeReportPeriodId = await ensureReportPeriodId();
       const nextForm = formFromItem(selectedDivisionTransferItem);
+      const divisionTransferIn = toNumber(divisionTransferForm.divisionTransferInAmount);
+      const divisionTransferOut = toNumber(divisionTransferForm.divisionTransferOutAmount);
+      const effectiveBudget =
+        toNumber(nextForm.netBudgetAfterTransferAmount) -
+        toNumber(nextForm.divisionTransferInAmount) +
+        toNumber(nextForm.divisionTransferOutAmount) +
+        divisionTransferIn -
+        divisionTransferOut;
+      const remainingAmount = Math.max(0, effectiveBudget - toNumber(nextForm.utilizationTotalAmount));
 
       nextForm.divisionTransferInAmount = divisionTransferForm.divisionTransferInAmount;
       nextForm.divisionTransferOutAmount = divisionTransferForm.divisionTransferOutAmount;
+      nextForm.netBudgetAfterTransferAmount = String(effectiveBudget || '');
+      nextForm.remainingAmount = String(remainingAmount || '');
 
       await updateBudgetItem(toItemPayload(activeReportPeriodId, nextForm, selectedDivisionTransferItem.parent_id, selectedDivisionTransferItem.sequence_label ?? ''));
       await loadData(activeReportPeriodId);
@@ -700,7 +877,7 @@ export function BudgetUtilizationItemsPage() {
       const committedTotal = committedPo + committedWithoutPo;
       const disbursedTotal = toNumber(nextForm.disbursedTotalAmount);
       const utilizationTotal = committedTotal + disbursedTotal;
-      const effectiveBudget = toNumber(nextForm.plannedBudgetAmount) + toNumber(nextForm.centralTransferInAmount) - toNumber(nextForm.centralTransferOutAmount);
+      const effectiveBudget = toNumber(nextForm.netBudgetAfterTransferAmount);
       const remainingAmount = Math.max(0, effectiveBudget - utilizationTotal);
 
       nextForm.committedPoAmount = commitmentForm.committedPoAmount;
@@ -745,6 +922,126 @@ export function BudgetUtilizationItemsPage() {
     }
   };
 
+  const saveMajorProjectForm = async () => {
+    const categoryId = majorProjectForm.parentId || selectedMainCategory?.id || '';
+    if (!categoryId) {
+      setError('กรุณาเลือกประเภทหลักงบดำเนินงานก่อนสร้างโครงการใหญ่');
+      return;
+    }
+
+    const category = mainBudgetItems.find((item) => item.id === categoryId);
+    if (!category || !category.item_name.replace(/\s+/g, '').includes('งบดำเนินงาน')) {
+      setError('โครงการใหญ่ต้องอยู่ภายใต้ประเภทหลักงบดำเนินงาน');
+      return;
+    }
+
+    const majorProjectBudget = toNumber(majorProjectForm.plannedBudgetAmount);
+    if (majorProjectBudget <= 0) {
+      setError('กรุณาระบุวงเงินโครงการใหญ่ให้มากกว่า 0');
+      return;
+    }
+
+    const existingSubProjectTotal = majorProjectForm.itemId
+      ? allBudgetItems
+          .filter((item) => item.parent_id === majorProjectForm.itemId && item.row_type === 'sub_project')
+          .reduce((sum, item) => sum + item.amount.planned_budget_amount, 0)
+      : 0;
+    if (majorProjectBudget < existingSubProjectTotal) {
+      setError(`วงเงินโครงการใหญ่ต้องไม่น้อยกว่ายอดรวมกิจกรรมย่อย ${formatBudgetAmount(existingSubProjectTotal)} บาท`);
+      return;
+    }
+
+    try {
+      setSaving(true);
+      setError(null);
+      const activeReportPeriodId = await ensureReportPeriodId();
+      const payload = toItemPayload(
+        activeReportPeriodId,
+        { ...majorProjectForm, rowType: 'major_project' },
+        category.id,
+        getChildSequenceLabel(category, majorProjectForm.itemId),
+      );
+
+      let savedProject: { id: string };
+      if (majorProjectForm.itemId) {
+        savedProject = await updateBudgetItem(payload);
+      } else {
+        savedProject = await createBudgetItem(payload);
+      }
+
+      setMajorProjectForm({ ...emptyMajorProjectForm, parentId: category.id });
+      setSelectedMajorProjectId(savedProject.id);
+      setSelectedSubActivityId('');
+      setSubActivityForm({ ...emptySubActivityForm, parentId: savedProject.id });
+      setChildForm(emptyChildForm);
+      await loadData(activeReportPeriodId);
+    } catch (saveError) {
+      setError(getSafeUserErrorMessage(saveError, 'ไม่สามารถบันทึกโครงการใหญ่ได้'));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const saveSubActivityForm = async () => {
+    if (!selectedMajorProject) {
+      setError('กรุณาเลือกโครงการใหญ่ก่อนสร้างกิจกรรมย่อย');
+      return;
+    }
+
+    if (!subActivityForm.itemName.trim()) {
+      setError('กรุณาระบุชื่อกิจกรรมย่อย');
+      return;
+    }
+
+    const subActivityBudget = toNumber(subActivityForm.plannedBudgetAmount);
+    if (subActivityBudget < 0) {
+      setError('วงเงินโครงการย่อยต้องไม่ติดลบ');
+      return;
+    }
+
+    const otherSubActivityTotal = selectedMajorProjectSubActivities
+      .filter((item) => item.id !== subActivityForm.itemId)
+      .reduce((sum, item) => sum + item.amount.planned_budget_amount, 0);
+    if (otherSubActivityTotal + subActivityBudget > selectedMajorProject.amount.planned_budget_amount) {
+      setError(`วงเงินรวมของกิจกรรมย่อยต้องไม่เกินวงเงินโครงการใหญ่ ${formatBudgetAmount(selectedMajorProject.amount.planned_budget_amount)} บาท`);
+      return;
+    }
+
+    const existingActivityTotal = subActivityForm.itemId
+      ? getDescendantItems(subActivityForm.itemId)
+          .filter((item) => item.row_type === 'activity' || item.row_type === 'line_item')
+          .reduce((sum, item) => sum + item.amount.planned_budget_amount, 0)
+      : 0;
+    if (subActivityBudget < existingActivityTotal) {
+      setError(`วงเงินกิจกรรมย่อยต้องไม่น้อยกว่ายอดรวมกิจกรรม ${formatBudgetAmount(existingActivityTotal)} บาท`);
+      return;
+    }
+
+    try {
+      setSaving(true);
+      setError(null);
+      const activeReportPeriodId = await ensureReportPeriodId();
+      const payload = toItemPayload(
+        activeReportPeriodId,
+        { ...subActivityForm, parentId: selectedMajorProject.id, rowType: 'sub_project' },
+        selectedMajorProject.id,
+        getChildSequenceLabel(selectedMajorProject, subActivityForm.itemId),
+      );
+      const savedSubActivity = subActivityForm.itemId
+        ? await updateBudgetItem(payload)
+        : await createBudgetItem(payload);
+
+      setSubActivityForm({ ...emptySubActivityForm, parentId: selectedMajorProject.id });
+      setSelectedSubActivityId(savedSubActivity.id);
+      setChildForm({ ...emptyChildForm, parentId: savedSubActivity.id, rowType: 'activity' });
+      await loadData(activeReportPeriodId);
+    } catch (saveError) {
+      setError(getSafeUserErrorMessage(saveError, 'ไม่สามารถบันทึกกิจกรรมย่อยได้'));
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const saveChildForm = async () => {
     if (!childForm.parentId) {
       setError('กรุณาเลือกประเภทหลักก่อนสร้างรายการงบประมาณ');
@@ -755,13 +1052,46 @@ export function BudgetUtilizationItemsPage() {
       setSaving(true);
       setError(null);
       const activeReportPeriodId = await ensureReportPeriodId();
-      const parentItem = mainBudgetItems.find((item) => item.id === childForm.parentId);
+      const parentItem = availableBudgetParents.find((item) => item.id === childForm.parentId);
       if (!parentItem) {
-        setError('ไม่พบประเภทหลักที่เลือก');
+        setError('ไม่พบประเภทหลักหรือโครงการใหญ่ที่เลือก');
         return;
       }
 
-      const payload = toItemPayload(activeReportPeriodId, childForm, childForm.parentId, getChildSequenceLabel(parentItem, childForm.itemId));
+      if (parentItem.row_type === 'sub_project') {
+        const majorProject = allBudgetItems.find((item) => item.id === parentItem.parent_id) ?? null;
+        const siblingTotal = getDescendantItems(parentItem.id)
+          .filter((item) => (item.row_type === 'activity' || item.row_type === 'line_item') && item.id !== childForm.itemId)
+          .reduce((sum, item) => sum + item.amount.planned_budget_amount, 0);
+        const nextActivityTotal = siblingTotal + toNumber(childForm.plannedBudgetAmount);
+        if (nextActivityTotal > parentItem.amount.planned_budget_amount) {
+          setError(`วงเงินรวมของกิจกรรมต้องไม่เกินวงเงินกิจกรรมย่อย ${formatBudgetAmount(parentItem.amount.planned_budget_amount)} บาท`);
+          return;
+        }
+        if (!majorProject) {
+          setError('ไม่พบโครงการใหญ่ของกิจกรรมย่อยที่เลือก');
+          return;
+        }
+      } else if (parentItem.row_type === 'major_project') {
+        const siblingTotal = getDescendantItems(parentItem.id)
+          .filter((item) => (item.row_type === 'activity' || item.row_type === 'line_item') && item.id !== childForm.itemId)
+          .reduce((sum, item) => sum + item.amount.planned_budget_amount, 0);
+        const nextSubProjectTotal = siblingTotal + toNumber(childForm.plannedBudgetAmount);
+        if (nextSubProjectTotal > parentItem.amount.planned_budget_amount) {
+          setError(`วงเงินรวมของโครงการย่อยต้องไม่เกินวงเงินโครงการใหญ่ ${formatBudgetAmount(parentItem.amount.planned_budget_amount)} บาท`);
+          return;
+        }
+      }
+
+      const rowType: BudgetUtilizationRowType = parentItem.row_type === 'sub_project'
+        ? 'activity'
+        : parentItem.row_type === 'major_project' ? 'sub_project' : 'line_item';
+      const payload = toItemPayload(
+        activeReportPeriodId,
+        { ...childForm, rowType },
+        childForm.parentId,
+        getChildSequenceLabel(parentItem, childForm.itemId),
+      );
 
       if (childForm.itemId) {
         await updateBudgetItem(payload);
@@ -769,7 +1099,7 @@ export function BudgetUtilizationItemsPage() {
         await createBudgetItem(payload);
       }
 
-      setChildForm(emptyChildForm);
+      setChildForm({ ...emptyChildForm, parentId: selectedSubActivity?.id ?? selectedCategoryId, rowType: selectedSubActivity ? 'activity' : 'line_item' });
       await loadData(activeReportPeriodId);
     } catch (saveError) {
       setError(getSafeUserErrorMessage(saveError, 'ไม่สามารถบันทึกรายการงบประมาณได้'));
@@ -780,8 +1110,8 @@ export function BudgetUtilizationItemsPage() {
 
   const confirmDelete = async () => {
     if (!deleteTarget) return;
-    if (deleteTarget.parent_id === null && getCategoryChildCount(deleteTarget.id) > 0) {
-      setError('ลบประเภทหลักไม่ได้ เนื่องจากยังมีรายการงบประมาณอยู่ภายใต้ประเภทนี้');
+    if (getDirectChildCount(deleteTarget.id) > 0) {
+      setError('ลบหัวข้อนี้ไม่ได้ เนื่องจากยังมีรายการอยู่ภายใต้หัวข้อนี้');
       setDeleteTarget(null);
       return;
     }
@@ -831,7 +1161,11 @@ export function BudgetUtilizationItemsPage() {
               {childForm.itemId ? (
                 <button
                   type="button"
-                  onClick={() => setChildForm(emptyChildForm)}
+                  onClick={() => setChildForm({
+                    ...emptyChildForm,
+                    parentId: selectedSubActivity?.id ?? selectedMainCategory?.id ?? selectedCategoryId,
+                    rowType: selectedSubActivity ? 'activity' : 'line_item',
+                  })}
                   className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 px-2.5 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-50"
                 >
                   <X className="h-3.5 w-3.5" aria-hidden="true" />
@@ -841,11 +1175,24 @@ export function BudgetUtilizationItemsPage() {
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="sm:col-span-2">
-                <span className="text-xs font-semibold text-slate-600">ประเภทหลัก</span>
+                <span className="text-xs font-semibold text-slate-600">ประเภทหลักหรือโครงการใหญ่</span>
                 <div className="mt-1 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
                   <select
-                    value={childForm.parentId}
-                    onChange={(event) => setChildForm((current) => ({ ...current, parentId: event.target.value }))}
+                    value={selectedMainCategory?.id ?? selectedCategoryId}
+                    onChange={(event) => {
+                      const categoryId = event.target.value;
+                      const category = mainBudgetItems.find((item) => item.id === categoryId) ?? null;
+                      setSelectedCategoryId(categoryId);
+                      setSelectedMajorProjectId('');
+                      setSelectedSubActivityId('');
+                      setSubActivityForm(emptySubActivityForm);
+                      setChildForm((current) => ({ ...current, parentId: categoryId, rowType: 'line_item' }));
+                      if (category?.item_name.replace(/\s+/g, '').includes('งบดำเนินงาน')) {
+                        setMajorProjectForm((current) => ({ ...current, parentId: category.id }));
+                      } else {
+                        setMajorProjectForm(emptyMajorProjectForm);
+                      }
+                    }}
                     className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
                   >
                     <option value="">เลือกประเภทหลักก่อน</option>
@@ -871,27 +1218,238 @@ export function BudgetUtilizationItemsPage() {
               </div>
               {selectedParent ? (
                 <div className="rounded-md border border-sky-100 bg-sky-50/70 px-3 py-2 text-xs text-sky-900 sm:col-span-2">
-                  <div className="font-semibold">ประเภทหลัก: {selectedParent.item_name}</div>
+                  <div className="font-semibold">
+                    {selectedParent.row_type === 'major_project' ? 'โครงการใหญ่' : selectedParent.row_type === 'sub_project' ? 'กิจกรรมย่อย' : 'ประเภทหลัก'}: {selectedParent.item_name}
+                  </div>
                   <div className="mt-1 grid gap-1 sm:grid-cols-2">
-                    <span>รวมวงเงินรายการในประเภทนี้: {formatBudgetAmount(selectedParentChildTotal)} บาท</span>
+                    <span>
+                      {selectedParent.row_type === 'major_project'
+                        ? 'วงเงินโครงการใหญ่'
+                        : selectedParent.row_type === 'sub_project' ? 'วงเงินกิจกรรมย่อย' : 'รวมวงเงินรายการภายใต้หัวข้อนี้'}:{' '}
+                      {formatBudgetAmount(
+                        selectedParent.row_type === 'major_project' || selectedParent.row_type === 'sub_project'
+                          ? selectedParent.amount.planned_budget_amount
+                          : selectedParentChildTotal,
+                      )} บาท
+                    </span>
                     <span>จำนวนรายการ: {(summary?.items ?? []).filter((item) => item.parent_id === selectedParent.id).length}</span>
                   </div>
                 </div>
               ) : null}
-              <input value={childForm.outputLabel} onChange={(event) => setChildForm((current) => ({ ...current, outputLabel: event.target.value }))} className="rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100" placeholder="ผลผลิตที่" />
-              <input value={childForm.activityLabel} onChange={(event) => setChildForm((current) => ({ ...current, activityLabel: event.target.value }))} className="rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100" placeholder="กิจกรรมหลักที่" />
-              <input value={childForm.itemName} onChange={(event) => setChildForm((current) => ({ ...current, itemName: event.target.value }))} className="rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100 sm:col-span-2" placeholder="ชื่อรายการ เช่น ค่าตอบแทนพนักงานราชการ" />
-              <input value={childForm.plannedBudgetAmount} onChange={(event) => setChildForm((current) => ({ ...current, plannedBudgetAmount: event.target.value }))} className="rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100" placeholder="วงเงินงบประมาณ" />
+              {isOperationsCategorySelected ? (
+                <div className="rounded-md border border-teal-200 bg-teal-50/40 p-3 sm:col-span-2">
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <div>
+                      <h3 className="text-sm font-semibold text-slate-950">
+                        {majorProjectForm.itemId ? 'แก้ไขโครงการใหญ่' : 'สร้างโครงการใหญ่ภายใต้งบดำเนินงาน'}
+                      </h3>
+                      <p className="mt-0.5 text-xs text-slate-500">กำหนดชื่อ วงเงิน เลขกิจกรรม และชื่อกิจกรรม ก่อนสร้างกิจกรรมย่อย</p>
+                    </div>
+                    {majorProjectForm.itemId ? (
+                      <button
+                        type="button"
+                        onClick={() => setMajorProjectForm({ ...emptyMajorProjectForm, parentId: selectedMainCategory?.id ?? '' })}
+                        className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 text-xs font-semibold text-slate-600"
+                      >
+                        <X className="h-3.5 w-3.5" aria-hidden="true" />
+                        ยกเลิก
+                      </button>
+                    ) : null}
+                  </div>
+                  <div className="grid gap-3 lg:grid-cols-[minmax(0,1.2fr)_minmax(8rem,0.4fr)_minmax(0,1fr)_minmax(10rem,0.55fr)_auto] lg:items-end">
+                    <label className="block">
+                      <span className="text-xs font-semibold text-slate-600">ชื่อโครงการใหญ่</span>
+                      <input
+                        value={majorProjectForm.itemName}
+                        onChange={(event) => setMajorProjectForm((current) => ({ ...current, parentId: selectedMainCategory?.id ?? current.parentId, itemName: event.target.value }))}
+                        className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
+                        placeholder="ชื่อโครงการใหญ่"
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="text-xs font-semibold text-slate-600">กิจกรรมที่</span>
+                      <input
+                        value={majorProjectForm.activitySequenceLabel}
+                        onChange={(event) => setMajorProjectForm((current) => ({ ...current, parentId: selectedMainCategory?.id ?? current.parentId, activitySequenceLabel: event.target.value }))}
+                        className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
+                        placeholder="เช่น 1.1"
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="text-xs font-semibold text-slate-600">ชื่อกิจกรรม</span>
+                      <input
+                        value={majorProjectForm.activityLabel}
+                        onChange={(event) => setMajorProjectForm((current) => ({ ...current, parentId: selectedMainCategory?.id ?? current.parentId, activityLabel: event.target.value }))}
+                        className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
+                        placeholder="ชื่อกิจกรรมของโครงการใหญ่"
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="text-xs font-semibold text-slate-600">วงเงินโครงการใหญ่</span>
+                      <input
+                        value={majorProjectForm.plannedBudgetAmount}
+                        onChange={(event) => setMajorProjectForm((current) => ({ ...current, parentId: selectedMainCategory?.id ?? current.parentId, plannedBudgetAmount: event.target.value }))}
+                        className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
+                        placeholder="จำนวนเงิน"
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => void saveMajorProjectForm()}
+                      disabled={saving || !majorProjectForm.itemName.trim() || !majorProjectForm.activitySequenceLabel.trim() || !majorProjectForm.activityLabel.trim() || !majorProjectForm.plannedBudgetAmount.trim()}
+                      className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-teal-700 px-4 text-sm font-semibold text-white transition hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {majorProjectForm.itemId ? <Save className="h-4 w-4" aria-hidden="true" /> : <Plus className="h-4 w-4" aria-hidden="true" />}
+                      {majorProjectForm.itemId ? 'บันทึก' : 'เพิ่มโครงการใหญ่'}
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+              {isOperationsCategorySelected && selectedCategoryMajorProjects.length > 0 ? (
+                <label className="block sm:col-span-2">
+                  <span className="text-xs font-semibold text-slate-600">เลือกโครงการใหญ่เพื่อสร้างกิจกรรมย่อย</span>
+                  <select
+                    value={selectedMajorProjectId}
+                    onChange={(event) => {
+                      const majorProjectId = event.target.value;
+                      setSelectedMajorProjectId(majorProjectId);
+                      setSelectedSubActivityId('');
+                      setSubActivityForm({ ...emptySubActivityForm, parentId: majorProjectId });
+                      setChildForm(emptyChildForm);
+                    }}
+                    className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
+                  >
+                    <option value="">เลือกโครงการใหญ่</option>
+                    {selectedCategoryMajorProjects.map((project, index) => (
+                      <option key={project.id} value={project.id}>
+                        โครงการใหญ่ลำดับที่ {index + 1}: {project.item_name}
+                        {project.activity_sequence_label ? ` · กิจกรรมที่ ${project.activity_sequence_label}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="mt-1 block text-xs text-slate-500">
+                    กิจกรรมย่อยจะถูกจัดเก็บและแสดงตามลำดับภายใต้โครงการใหญ่ที่เลือก
+                  </span>
+                </label>
+              ) : null}
+              {isOperationsCategorySelected && selectedMajorProject ? (
+                <div className="rounded-md border border-sky-200 bg-sky-50/50 p-3 sm:col-span-2">
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <div>
+                      <h3 className="text-sm font-semibold text-slate-950">
+                        {subActivityForm.itemId ? 'แก้ไขกิจกรรมย่อย' : 'สร้างโครงการย่อย'}
+                      </h3>
+                      <p className="mt-0.5 text-xs text-slate-500">กิจกรรมย่อยจะอยู่ภายใต้โครงการใหญ่: {selectedMajorProject.item_name}</p>
+                    </div>
+                    {subActivityForm.itemId ? (
+                      <button
+                        type="button"
+                        onClick={() => setSubActivityForm({ ...emptySubActivityForm, parentId: selectedMajorProject.id })}
+                        className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 text-xs font-semibold text-slate-600"
+                      >
+                        <X className="h-3.5 w-3.5" aria-hidden="true" />
+                        ยกเลิก
+                      </button>
+                    ) : null}
+                  </div>
+                  <div className="grid gap-3 lg:grid-cols-[minmax(9rem,0.4fr)_minmax(0,1fr)_minmax(10rem,0.55fr)_auto] lg:items-end">
+                    <label className="block">
+                      <span className="text-xs font-semibold text-slate-600">กิจกรรมย่อยที่</span>
+                      <input
+                        value={subActivityForm.activitySequenceLabel}
+                        onChange={(event) => setSubActivityForm((current) => ({ ...current, parentId: selectedMajorProject.id, activitySequenceLabel: event.target.value }))}
+                        className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
+                        placeholder="เช่น 1.1.1"
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="text-xs font-semibold text-slate-600">ชื่อกิจกรรมย่อย</span>
+                      <input
+                        value={subActivityForm.itemName}
+                        onChange={(event) => setSubActivityForm((current) => ({ ...current, parentId: selectedMajorProject.id, itemName: event.target.value }))}
+                        className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
+                        placeholder="ชื่อกิจกรรมย่อย"
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="text-xs font-semibold text-slate-600">วงเงินกิจกรรมย่อย</span>
+                      <input
+                        value={subActivityForm.plannedBudgetAmount}
+                        onChange={(event) => setSubActivityForm((current) => ({ ...current, parentId: selectedMajorProject.id, plannedBudgetAmount: event.target.value }))}
+                        className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
+                        placeholder="จำนวนเงิน"
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => void saveSubActivityForm()}
+                      disabled={saving || !subActivityForm.activitySequenceLabel.trim() || !subActivityForm.itemName.trim() || !subActivityForm.plannedBudgetAmount.trim()}
+                      className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-sky-700 px-4 text-sm font-semibold text-white transition hover:bg-sky-800 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {subActivityForm.itemId ? <Save className="h-4 w-4" aria-hidden="true" /> : <Plus className="h-4 w-4" aria-hidden="true" />}
+                      {subActivityForm.itemId ? 'บันทึก' : 'เพิ่มกิจกรรมย่อย'}
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+              {isOperationsCategorySelected && selectedMajorProjectSubActivities.length > 0 ? (
+                <label className="block sm:col-span-2">
+                  <span className="text-xs font-semibold text-slate-600">เลือกกิจกรรมย่อยเพื่อสร้างกิจกรรม</span>
+                  <select
+                    value={selectedSubActivityId}
+                    onChange={(event) => {
+                      const subActivityId = event.target.value;
+                      setSelectedSubActivityId(subActivityId);
+                      setChildForm({ ...emptyChildForm, parentId: subActivityId, rowType: 'activity' });
+                    }}
+                    className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                  >
+                    <option value="">เลือกกิจกรรมย่อย</option>
+                    {selectedMajorProjectSubActivities.map((subActivity, index) => (
+                      <option key={subActivity.id} value={subActivity.id}>
+                        กิจกรรมย่อยลำดับที่ {index + 1}: {subActivity.item_name}
+                        {subActivity.activity_sequence_label ? ` · ${subActivity.activity_sequence_label}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
+              {!isOperationsCategorySelected ? (
+                <>
+                  <input value={childForm.outputLabel} onChange={(event) => setChildForm((current) => ({ ...current, outputLabel: event.target.value }))} className="rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100" placeholder="ผลผลิตที่" />
+                  <input value={childForm.activityLabel} onChange={(event) => setChildForm((current) => ({ ...current, activityLabel: event.target.value }))} className="rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100" placeholder="กิจกรรมหลักที่" />
+                  <input value={childForm.itemName} onChange={(event) => setChildForm((current) => ({ ...current, itemName: event.target.value }))} className="rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100 sm:col-span-2" placeholder="ชื่อรายการ เช่น ค่าตอบแทนพนักงานราชการ" />
+                  <input value={childForm.plannedBudgetAmount} onChange={(event) => setChildForm((current) => ({ ...current, plannedBudgetAmount: event.target.value }))} className="rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100" placeholder="วงเงินงบประมาณ" />
+                </>
+              ) : null}
+              {isOperationsCategorySelected && selectedSubActivity ? (
+                <div className="grid gap-3 rounded-md border border-indigo-200 bg-indigo-50/40 p-3 sm:col-span-2 sm:grid-cols-[minmax(9rem,0.45fr)_minmax(0,1fr)_minmax(10rem,0.55fr)]">
+                  <label className="block">
+                    <span className="text-xs font-semibold text-slate-600">กิจกรรมที่</span>
+                    <input value={childForm.activitySequenceLabel} onChange={(event) => setChildForm((current) => ({ ...current, activitySequenceLabel: event.target.value }))} className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100" placeholder="เช่น 1.1.1.1" />
+                  </label>
+                  <label className="block">
+                    <span className="text-xs font-semibold text-slate-600">ชื่อกิจกรรม</span>
+                    <input value={childForm.itemName} onChange={(event) => setChildForm((current) => ({ ...current, itemName: event.target.value }))} className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100" placeholder="ชื่อกิจกรรม" />
+                  </label>
+                  <label className="block">
+                    <span className="text-xs font-semibold text-slate-600">วงเงินกิจกรรม</span>
+                    <input value={childForm.plannedBudgetAmount} onChange={(event) => setChildForm((current) => ({ ...current, plannedBudgetAmount: event.target.value }))} className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100" placeholder="จำนวนเงิน" />
+                  </label>
+                </div>
+              ) : null}
             </div>
-            <button
-              type="button"
-              onClick={() => void saveChildForm()}
-              disabled={saving || !childForm.parentId || !childForm.itemName.trim()}
-              className="mt-3 inline-flex items-center gap-2 rounded-md bg-sky-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-sky-800 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {childForm.itemId ? <Save className="h-4 w-4" aria-hidden="true" /> : <Plus className="h-4 w-4" aria-hidden="true" />}
-              {saving ? 'กำลังบันทึก...' : childForm.itemId ? 'บันทึกรายการงบประมาณ' : 'เพิ่มรายการงบประมาณ'}
-            </button>
+            {!isOperationsCategorySelected || selectedSubActivity ? (
+              <button
+                type="button"
+                onClick={() => void saveChildForm()}
+                disabled={saving || !childForm.parentId || !childForm.itemName.trim()}
+                className="mt-3 inline-flex items-center gap-2 rounded-md bg-sky-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-sky-800 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {childForm.itemId ? <Save className="h-4 w-4" aria-hidden="true" /> : <Plus className="h-4 w-4" aria-hidden="true" />}
+                {saving ? 'กำลังบันทึก...' : childForm.itemId ? 'บันทึกรายการงบประมาณ' : selectedSubActivity ? 'เพิ่มกิจกรรม' : 'เพิ่มรายการงบประมาณ'}
+              </button>
+            ) : null}
           </section>
 
           <section className="mt-4 rounded-md border border-amber-100 bg-white p-4 shadow-sm">
@@ -1220,15 +1778,25 @@ export function BudgetUtilizationItemsPage() {
           </label>
         </div>
         <div className="overflow-x-auto">
-          <table className="min-w-[2320px] divide-y divide-slate-100 text-sm">
+          <table
+            className="divide-y divide-slate-100 text-sm"
+            style={{ minWidth: `${1960 + trancheDefinitions.length * 120}px` }}
+          >
             <thead className="bg-slate-50 text-left text-xs font-semibold text-slate-700">
               <tr>
                 <th rowSpan={2} className="border border-slate-200 bg-white px-4 py-3 text-center align-middle">ชื่อโครงการ</th>
-                <th rowSpan={2} className="border border-slate-200 bg-white px-4 py-3 text-center align-middle">วงเงินตามแผน<br />ปี 2568</th>
-                <th rowSpan={2} className="border border-slate-200 bg-white px-4 py-3 text-center align-middle">รับจัดสรรงวด 1<br />(ตามแผนฯ พลางก่อน)<br />(1)</th>
-                <th rowSpan={2} className="border border-slate-200 bg-white px-4 py-3 text-center align-middle">รับจัดสรรงวด 2<br />(ตามแผนฯ)<br />(2)</th>
-                <th rowSpan={2} className="border border-slate-200 bg-white px-4 py-3 text-center align-middle">รับจัดสรรงวด 3<br />(ตามแผนฯ)<br />(3)</th>
-                <th rowSpan={2} className="border border-slate-200 bg-lime-50 px-4 py-3 text-center align-middle">ยอดสุทธิงบประมาณ<br />2567 หลังโอนเปลี่ยนแปลง<br />(1)</th>
+                <th rowSpan={2} className="border border-slate-200 bg-white px-4 py-3 text-center align-middle">วงเงินตามแผน<br />ปี {displayFiscalYear}</th>
+                {trancheDefinitions.map((tranche) => (
+                  <th
+                    key={tranche.key}
+                    rowSpan={2}
+                    className="min-w-[120px] border border-slate-200 bg-white px-3 py-3 text-center align-middle"
+                  >
+                    <span className="block whitespace-normal">{tranche.label}</span>
+                    <span className="mt-1 block font-normal text-slate-500">({tranche.trancheNumber})</span>
+                  </th>
+                ))}
+                <th rowSpan={2} className="border border-slate-200 bg-lime-50 px-4 py-3 text-center align-middle">ยอดสุทธิงบประมาณ<br />{displayFiscalYear} หลังโอนเปลี่ยนแปลง<br />(1)</th>
                 <th colSpan={2} className="border border-slate-200 bg-green-700 px-4 py-2 text-center font-bold text-white">ส่วนกลางกรมฯ</th>
                 <th colSpan={2} className="border border-slate-200 bg-green-400 px-4 py-2 text-center font-bold text-slate-950">ภายในกอง</th>
                 <th colSpan={3} className="border border-slate-200 bg-sky-400 px-4 py-2 text-center font-bold text-slate-950">ผูกพัน</th>
@@ -1254,57 +1822,86 @@ export function BudgetUtilizationItemsPage() {
             </thead>
             <tbody className="divide-y divide-slate-100">
               {loading ? (
-                <tr><td colSpan={canManage ? 21 : 20} className="px-4 py-8 text-center text-slate-500">กำลังโหลดข้อมูล...</td></tr>
+                <tr><td colSpan={trancheDefinitions.length + (canManage ? 18 : 17)} className="px-4 py-8 text-center text-slate-500">กำลังโหลดข้อมูล...</td></tr>
               ) : filteredItems.length === 0 ? (
-                <tr><td colSpan={canManage ? 21 : 20} className="px-4 py-8 text-center text-slate-500">ยังไม่มีรายการงบประมาณ</td></tr>
+                <tr><td colSpan={trancheDefinitions.length + (canManage ? 18 : 17)} className="px-4 py-8 text-center text-slate-500">ยังไม่มีรายการงบประมาณ</td></tr>
               ) : filteredItems.map((item) => {
                 const isCategory = item.parent_id === null;
-                const amountTextClass = isCategory ? 'text-slate-400' : undefined;
-                const allocationTotal =
-                  item.amount.allocation_tranche_1_amount +
-                  item.amount.allocation_tranche_2_amount +
-                  item.amount.allocation_tranche_3_amount +
-                  item.amount.central_transfer_in_amount -
-                  item.amount.central_transfer_out_amount;
-                const disbursementRate = allocationTotal > 0 ? (item.amount.disbursed_total_amount * 100) / allocationTotal : 0;
-                const utilizationTotal = item.amount.committed_total_amount + item.amount.disbursed_total_amount;
-                const utilizationRate = allocationTotal > 0 ? (utilizationTotal * 100) / allocationTotal : 0;
-                const remainingAmount = Math.max(0, allocationTotal - utilizationTotal);
+                const isMajorProject = item.row_type === 'major_project'
+                  && (item.source_import_batch_id === null || getDirectChildCount(item.id) > 0);
+                const isSubActivity = item.row_type === 'sub_project'
+                  && (item.source_import_batch_id === null || getDirectChildCount(item.id) > 0);
+                const isHeading = isCategory || isMajorProject || isSubActivity;
+                const amountTextClass = isHeading ? 'text-slate-400' : undefined;
+                const netTotal = getNetAllocationTotal(item.amount);
+                const utilizationTotal = item.amount.utilization_total_amount;
+                const remainingAmount = Math.max(0, netTotal - utilizationTotal);
+                const disbursementRate = item.amount.disbursement_rate ?? 0;
+                const utilizationRate = item.amount.utilization_with_po_rate ?? 0;
 
                 return (
-                  <tr key={item.id} className={isCategory ? 'bg-teal-50/50 font-semibold' : undefined}>
+                  <tr key={item.id} className={isCategory ? 'bg-teal-50/50 font-semibold' : isMajorProject ? 'bg-sky-50/60 font-semibold' : isSubActivity ? 'bg-indigo-50/50 font-semibold' : undefined}>
                     <td className="px-4 py-3 text-slate-900">
                       <div style={{ paddingLeft: `${item.depth * 18}px` }}>
                         <span className="text-xs text-slate-400">{item.sequence_label}</span>
                         <span className="ml-2">{item.item_name}</span>
-                        {!isCategory && (item.output_label || item.activity_label) ? (
+                        {!isCategory && (item.output_label || item.activity_sequence_label || item.activity_label) ? (
                           <p className="mt-1 text-xs font-normal text-slate-500">
-                            {item.output_label ? `ผลผลิตที่: ${item.output_label}` : null}
-                            {item.output_label && item.activity_label ? ' · ' : null}
-                            {item.activity_label ? `กิจกรรมหลักที่: ${item.activity_label}` : null}
+                            {isMajorProject || isSubActivity
+                              ? [item.activity_sequence_label ? `${isSubActivity ? 'โครงการย่อยที่' : 'กิจกรรมที่'} ${item.activity_sequence_label}` : '', item.activity_label ?? ''].filter(Boolean).join(': ')
+                              : item.row_type === 'activity'
+                                ? (item.activity_sequence_label ? `กิจกรรมที่ ${item.activity_sequence_label}` : null)
+                              : (
+                                <>
+                                  {item.output_label ? `ผลผลิตที่: ${item.output_label}` : null}
+                                  {item.output_label && item.activity_label ? ' · ' : null}
+                                  {item.activity_label ? `กิจกรรมหลักที่: ${item.activity_label}` : null}
+                                </>
+                              )}
+                          </p>
+                        ) : null}
+                        {item.source_sheet_name && item.source_row_number ? (
+                          <p className="mt-1 text-xs font-normal text-slate-400">
+                            ต้นทาง: {item.source_sheet_name} · แถว {item.source_row_number}
                           </p>
                         ) : null}
                       </div>
                     </td>
-                    <td className={`px-4 py-3 text-right ${amountTextClass ?? ''}`}>{isCategory ? '-' : formatBudgetAmount(item.amount.planned_budget_amount)}</td>
-                    <td className={`px-4 py-3 text-right ${amountTextClass ?? ''}`}>{isCategory ? '-' : formatBudgetAmount(item.amount.allocation_tranche_1_amount)}</td>
-                    <td className={`px-4 py-3 text-right ${amountTextClass ?? ''}`}>{isCategory ? '-' : formatBudgetAmount(item.amount.allocation_tranche_2_amount)}</td>
-                    <td className={`px-4 py-3 text-right ${amountTextClass ?? ''}`}>{isCategory ? '-' : formatBudgetAmount(item.amount.allocation_tranche_3_amount)}</td>
-                    <td className={`px-4 py-3 text-right font-semibold ${isCategory ? amountTextClass ?? '' : 'text-slate-900'}`}>{isCategory ? '-' : formatBudgetAmount(allocationTotal)}</td>
-                    <td className={`px-4 py-3 text-right ${amountTextClass ?? ''}`}>{isCategory ? '-' : formatBudgetAmount(item.amount.central_transfer_in_amount || 0)}</td>
-                    <td className={`px-4 py-3 text-right ${amountTextClass ?? ''}`}>{isCategory ? '-' : formatBudgetAmount(item.amount.central_transfer_out_amount || 0)}</td>
-                    <td className={`px-4 py-3 text-right ${amountTextClass ?? ''}`}>{isCategory ? '-' : formatBudgetAmount(item.amount.division_transfer_in_amount || 0)}</td>
-                    <td className={`px-4 py-3 text-right ${amountTextClass ?? ''}`}>{isCategory ? '-' : formatBudgetAmount(item.amount.division_transfer_out_amount || 0)}</td>
-                    <td className={`px-4 py-3 text-right ${amountTextClass ?? ''}`}>{isCategory ? '-' : formatBudgetAmount(item.amount.committed_po_amount || 0)}</td>
-                    <td className={`px-4 py-3 text-right ${amountTextClass ?? ''}`}>{isCategory ? '-' : formatBudgetAmount(item.amount.committed_without_po_amount || 0)}</td>
-                    <td className={`px-4 py-3 text-right ${amountTextClass ?? ''}`}>{isCategory ? '-' : formatBudgetAmount(item.amount.committed_total_amount || 0)}</td>
-                    <td className={`px-4 py-3 text-right ${amountTextClass ?? ''}`}>{isCategory ? '-' : formatBudgetAmount(item.amount.disbursed_general_amount || 0)}</td>
-                    <td className={`px-4 py-3 text-right ${amountTextClass ?? ''}`}>{isCategory ? '-' : formatBudgetAmount(item.amount.disbursed_advance_amount || 0)}</td>
-                    <td className={`px-4 py-3 text-right ${amountTextClass ?? ''}`}>{isCategory ? '-' : formatBudgetAmount(item.amount.disbursed_total_amount || 0)}</td>
-                    <td className={`px-4 py-3 text-right font-semibold ${isCategory ? amountTextClass ?? '' : 'text-slate-900'}`}>{isCategory ? '-' : formatBudgetAmount(utilizationTotal)}</td>
-                    <td className={`px-4 py-3 text-right ${amountTextClass ?? ''}`}>{isCategory ? '-' : formatBudgetAmount(remainingAmount)}</td>
-                    <td className={`px-4 py-3 text-right font-semibold ${isCategory ? 'text-slate-400' : 'text-teal-700'}`}>{isCategory ? '-' : `${formatBudgetAmount(disbursementRate)}%`}</td>
-                    <td className={`px-4 py-3 text-right font-semibold ${isCategory ? 'text-slate-400' : 'text-sky-700'}`}>{isCategory ? '-' : `${formatBudgetAmount(utilizationRate)}%`}</td>
+                    <td className={`px-4 py-3 text-right ${isCategory ? 'text-slate-400' : isMajorProject || isSubActivity ? 'font-semibold text-slate-900' : amountTextClass ?? ''}`}>
+                      {isCategory ? '-' : formatBudgetAmount(item.amount.planned_budget_amount)}
+                    </td>
+                    {trancheDefinitions.map((tranche) => {
+                      const allocation = item.allocations?.find((entry) => entry.tranche_id === tranche.key) ?? null;
+                      const legacyAmount = tranche.trancheNumber === 1
+                        ? item.amount.allocation_tranche_1_amount
+                        : tranche.trancheNumber === 2
+                          ? item.amount.allocation_tranche_2_amount
+                          : tranche.trancheNumber === 3 ? item.amount.allocation_tranche_3_amount : 0;
+                      return (
+                        <td
+                          key={tranche.key}
+                          className={`px-3 py-3 text-right ${amountTextClass ?? ''}`}
+                          title={allocation?.allocation_date ? `วันที่จัดสรร ${allocation.allocation_date}` : undefined}
+                        >
+                          {isHeading ? '-' : formatBudgetAmount(allocation?.amount ?? legacyAmount)}
+                        </td>
+                      );
+                    })}
+                    <td className={`px-4 py-3 text-right font-semibold ${isHeading ? amountTextClass ?? '' : 'text-slate-900'}`}>{isHeading ? '-' : formatBudgetAmount(netTotal)}</td>
+                    <td className={`px-4 py-3 text-right ${amountTextClass ?? ''}`}>{isHeading ? '-' : formatBudgetAmount(item.amount.central_transfer_in_amount || 0)}</td>
+                    <td className={`px-4 py-3 text-right ${amountTextClass ?? ''}`}>{isHeading ? '-' : formatBudgetAmount(item.amount.central_transfer_out_amount || 0)}</td>
+                    <td className={`px-4 py-3 text-right ${amountTextClass ?? ''}`}>{isHeading ? '-' : formatBudgetAmount(item.amount.division_transfer_in_amount || 0)}</td>
+                    <td className={`px-4 py-3 text-right ${amountTextClass ?? ''}`}>{isHeading ? '-' : formatBudgetAmount(item.amount.division_transfer_out_amount || 0)}</td>
+                    <td className={`px-4 py-3 text-right ${amountTextClass ?? ''}`}>{isHeading ? '-' : formatBudgetAmount(item.amount.committed_po_amount || 0)}</td>
+                    <td className={`px-4 py-3 text-right ${amountTextClass ?? ''}`}>{isHeading ? '-' : formatBudgetAmount(item.amount.committed_without_po_amount || 0)}</td>
+                    <td className={`px-4 py-3 text-right ${amountTextClass ?? ''}`}>{isHeading ? '-' : formatBudgetAmount(item.amount.committed_total_amount || 0)}</td>
+                    <td className={`px-4 py-3 text-right ${amountTextClass ?? ''}`}>{isHeading ? '-' : formatBudgetAmount(item.amount.disbursed_general_amount || 0)}</td>
+                    <td className={`px-4 py-3 text-right ${amountTextClass ?? ''}`}>{isHeading ? '-' : formatBudgetAmount(item.amount.disbursed_advance_amount || 0)}</td>
+                    <td className={`px-4 py-3 text-right ${amountTextClass ?? ''}`}>{isHeading ? '-' : formatBudgetAmount(item.amount.disbursed_total_amount || 0)}</td>
+                    <td className={`px-4 py-3 text-right font-semibold ${isHeading ? amountTextClass ?? '' : 'text-slate-900'}`}>{isHeading ? '-' : formatBudgetAmount(utilizationTotal)}</td>
+                    <td className={`px-4 py-3 text-right ${amountTextClass ?? ''}`}>{isHeading ? '-' : formatBudgetAmount(remainingAmount)}</td>
+                    <td className={`px-4 py-3 text-right font-semibold ${isHeading ? 'text-slate-400' : 'text-teal-700'}`}>{isHeading ? '-' : `${formatBudgetAmount(disbursementRate)}%`}</td>
+                    <td className={`px-4 py-3 text-right font-semibold ${isHeading ? 'text-slate-400' : 'text-sky-700'}`}>{isHeading ? '-' : `${formatBudgetAmount(utilizationRate)}%`}</td>
                     {canManage ? (
                       <td className="px-4 py-3 text-right">
                         <div className="flex justify-end gap-1">
@@ -1314,8 +1911,8 @@ export function BudgetUtilizationItemsPage() {
                           <button
                             type="button"
                             onClick={() => {
-                              if (isCategory && getCategoryChildCount(item.id) > 0) {
-                                setError('ลบประเภทหลักไม่ได้ เนื่องจากยังมีรายการงบประมาณอยู่ภายใต้ประเภทนี้');
+                              if (getDirectChildCount(item.id) > 0) {
+                                setError('ลบหัวข้อนี้ไม่ได้ เนื่องจากยังมีรายการอยู่ภายใต้หัวข้อนี้');
                                 return;
                               }
                               setDeleteTarget(item);
@@ -1513,7 +2110,7 @@ export function BudgetUtilizationItemsPage() {
                     <button
                       type="button"
                       onClick={saveTrancheDraft}
-                      disabled={saving || !trancheForm.label.trim() || (!trancheForm.key && trancheDrafts.length >= allocationTrancheKeys.length)}
+                      disabled={saving || !trancheForm.label.trim()}
                       className="inline-flex h-10 items-center gap-2 rounded-md bg-amber-600 px-4 text-sm font-semibold text-white transition hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       {trancheForm.key ? <Save className="h-4 w-4" aria-hidden="true" /> : <Plus className="h-4 w-4" aria-hidden="true" />}
@@ -1521,9 +2118,6 @@ export function BudgetUtilizationItemsPage() {
                     </button>
                   </div>
                 </div>
-                {!trancheForm.key && trancheDrafts.length >= allocationTrancheKeys.length ? (
-                  <p className="mt-2 text-xs text-slate-500">ตอนนี้โครงสร้างข้อมูลรองรับงวดจัดสรรได้สูงสุด 3 งวด</p>
-                ) : null}
               </div>
 
               <div className="mt-4 overflow-hidden rounded-md border border-slate-200 bg-white">
@@ -1577,7 +2171,7 @@ export function BudgetUtilizationItemsPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={saveTrancheDefinitions}
+                  onClick={() => void saveTrancheDefinitions()}
                   disabled={trancheDrafts.length === 0}
                   className="inline-flex h-10 items-center gap-2 rounded-md bg-amber-600 px-4 text-sm font-semibold text-white transition hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-50"
                 >

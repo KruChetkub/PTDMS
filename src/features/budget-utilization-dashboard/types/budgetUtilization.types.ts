@@ -32,8 +32,13 @@ export type BudgetUtilizationItem = {
   sequence_label: string | null;
   item_name: string;
   output_label: string | null;
+  activity_sequence_label: string | null;
   activity_label: string | null;
   raw_label: string | null;
+  source_import_batch_id: string | null;
+  source_sheet_name: string | null;
+  source_row_number: number | null;
+  source_row_data: string[] | null;
   created_at: string;
   updated_at: string;
 };
@@ -65,10 +70,32 @@ export type BudgetUtilizationAmount = {
   utilization_with_po_rate: number | null;
   created_at: string;
   updated_at: string;
+  allocation_total_amount?: number;
+};
+
+export type BudgetUtilizationAllocationTranche = {
+  id: string;
+  report_period_id: string;
+  tranche_number: number;
+  label: string;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type BudgetUtilizationItemAllocation = {
+  id: string;
+  item_id: string;
+  tranche_id: string;
+  amount: number;
+  allocation_date: string | null;
+  created_at: string;
+  updated_at: string;
 };
 
 export type BudgetUtilizationItemWithAmount = BudgetUtilizationItem & {
   amount: BudgetUtilizationAmount;
+  allocations?: BudgetUtilizationItemAllocation[];
 };
 
 export type BudgetUtilizationImportBatch = {
@@ -82,6 +109,11 @@ export type BudgetUtilizationImportBatch = {
   total_rows: number;
   imported_rows: number;
   rejected_rows: number;
+  source_checksum: string | null;
+  validation_status: 'pending' | 'matched' | 'mismatch' | 'approved' | 'superseded';
+  reconciliation: Record<string, unknown>;
+  validated_at: string | null;
+  validated_by: string | null;
   metadata: Record<string, unknown>;
   created_at: string;
   updated_at: string;
@@ -140,15 +172,18 @@ export type BudgetUtilizationDashboardSummary = {
   categoryItems: BudgetUtilizationItemWithAmount[];
   projectItems: BudgetUtilizationItemWithAmount[];
   totals: BudgetUtilizationAmount;
+  allocationTranches: BudgetUtilizationAllocationTranche[];
 };
 
 export type BudgetUtilizationImportPreview = {
+  sourceFormat: 'template' | 'raw_table';
   fiscalYear: number;
   reportAsOf: string | null;
   title: string;
   departmentName: string;
   sourceFileName: string;
   sourceFileSize: number;
+  sourceChecksum: string;
   rawWorkbook: BudgetUtilizationRawWorkbook | null;
   rows: BudgetUtilizationItemWithAmount[];
   errors: Array<{
@@ -177,8 +212,10 @@ export type BudgetUtilizationItemInput = {
   sequenceLabel?: string | null;
   itemName: string;
   outputLabel?: string | null;
+  activitySequenceLabel?: string | null;
   activityLabel?: string | null;
   plannedBudgetAmount: number;
+  netBudgetAfterTransferAmount?: number;
   allocationTranche1Amount?: number;
   allocationTranche1Date?: string | null;
   allocationTranche2Amount?: number;

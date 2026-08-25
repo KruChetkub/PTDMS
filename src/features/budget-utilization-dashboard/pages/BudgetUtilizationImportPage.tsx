@@ -1,11 +1,11 @@
 import { ChangeEvent, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { AlertCircle, CheckCircle2, Download, Eye, FileSpreadsheet, RefreshCw, Trash2, Upload } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Database, Download, Eye, FileSpreadsheet, RefreshCw, Trash2, Upload } from 'lucide-react';
 import { PageHeader } from '../../../components/ui/PageHeader';
 import { useAuditPageAccess } from '../../../hooks/useAuditPageAccess';
 import { useAuthStore } from '../../../stores/auth.store';
 import { getSafeUserErrorMessage } from '../../../utils/errorHandling';
-import { canManageBudgetUtilization, deleteBudgetImportFile, importBudgetPreview, listBudgetImportFiles } from '../services/budgetUtilization.service';
+import { canManageBudgetUtilization, deleteBudgetImportFile, importBudgetPreview, listBudgetImportFiles, normalizeExistingBudgetImportFile } from '../services/budgetUtilization.service';
 import { parseBudgetWorkbook } from '../services/budgetUtilizationImport';
 import type { BudgetUtilizationImportFileRecord, BudgetUtilizationImportPreview, BudgetUtilizationRawWorkbook } from '../types/budgetUtilization.types';
 import { formatBudgetAmount } from '../utils/budgetUtilizationCalculations';
@@ -17,6 +17,14 @@ function formatDateTime(value: string | null | undefined) {
     timeStyle: 'short',
   }).format(new Date(value));
 }
+
+const validationStatusLabels: Record<string, { label: string; className: string }> = {
+  pending: { label: 'รอตรวจสอบ', className: 'bg-slate-100 text-slate-700' },
+  matched: { label: 'ข้อมูลตรงกัน', className: 'bg-emerald-50 text-emerald-700' },
+  mismatch: { label: 'ข้อมูลไม่ตรงกัน', className: 'bg-red-50 text-red-700' },
+  approved: { label: 'ยืนยันแล้ว', className: 'bg-teal-50 text-teal-700' },
+  superseded: { label: 'มีชุดข้อมูลใหม่กว่า', className: 'bg-amber-50 text-amber-700' },
+};
 
 function getRawMerge(rawWorkbook: BudgetUtilizationRawWorkbook, rowIndex: number, columnIndex: number) {
   return rawWorkbook.merges.find((merge) => merge.startRow === rowIndex && merge.startCol === columnIndex) ?? null;
@@ -74,6 +82,7 @@ export function BudgetUtilizationImportPage() {
   const [loading, setLoading] = useState(false);
   const [listLoading, setListLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [normalizingBatchId, setNormalizingBatchId] = useState<string | null>(null);
   const [deletingBatchId, setDeletingBatchId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -146,6 +155,21 @@ export function BudgetUtilizationImportPage() {
       setError(getSafeUserErrorMessage(deleteError, 'ไม่สามารถลบไฟล์นำเข้าได้'));
     } finally {
       setDeletingBatchId(null);
+    }
+  };
+
+  const handleNormalizeImportFile = async (record: BudgetUtilizationImportFileRecord) => {
+    try {
+      setNormalizingBatchId(record.batch.id);
+      setError(null);
+      setMessage(null);
+      await normalizeExistingBudgetImportFile(record.batch.id);
+      setMessage(`นำข้อมูลเข้าสู่รายการงบประมาณสำเร็จ: ${record.batch.source_file_name ?? 'ไฟล์ Excel'}`);
+      await loadImportFiles();
+    } catch (normalizeError) {
+      setError(getSafeUserErrorMessage(normalizeError, 'ไม่สามารถนำข้อมูลจากไฟล์เข้าสู่รายการงบประมาณได้'));
+    } finally {
+      setNormalizingBatchId(null);
     }
   };
 
@@ -280,6 +304,11 @@ export function BudgetUtilizationImportPage() {
                   <FileSpreadsheet className="h-4 w-4 text-teal-700" aria-hidden="true" />
                   <h3 className="font-semibold text-slate-950">{record.batch.source_file_name ?? record.reportPeriod?.title ?? 'ไฟล์นำเข้าไม่ระบุชื่อ'}</h3>
                   {record.reportPeriod?.is_active ? <span className="rounded-md bg-teal-50 px-2 py-1 text-xs font-semibold text-teal-700">ใช้งานอยู่</span> : null}
+                  {record.batch.validation_status && validationStatusLabels[record.batch.validation_status] ? (
+                    <span className={`rounded-md px-2 py-1 text-xs font-semibold ${validationStatusLabels[record.batch.validation_status].className}`}>
+                      {validationStatusLabels[record.batch.validation_status].label}
+                    </span>
+                  ) : null}
                 </div>
                 <p className="mt-1 text-sm text-slate-500">
                   อัปโหลดเมื่อ {formatDateTime(record.batch.created_at)}
@@ -291,6 +320,17 @@ export function BudgetUtilizationImportPage() {
                 </p>
               </div>
               <div className="flex shrink-0 flex-wrap gap-2">
+                {!record.reportPeriod ? (
+                  <button
+                    type="button"
+                    onClick={() => void handleNormalizeImportFile(record)}
+                    disabled={normalizingBatchId === record.batch.id}
+                    className="inline-flex items-center justify-center gap-2 rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-sm font-semibold text-sky-700 transition hover:bg-sky-100 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <Database className="h-4 w-4" aria-hidden="true" />
+                    {normalizingBatchId === record.batch.id ? 'กำลังนำเข้าฐานข้อมูล...' : 'นำเข้าสู่รายการงบประมาณ'}
+                  </button>
+                ) : null}
                 <Link
                   to={`/budget-utilization/import/${record.batch.id}`}
                   className="inline-flex items-center justify-center gap-2 rounded-md border border-teal-200 px-3 py-2 text-sm font-semibold text-teal-700 transition hover:bg-teal-50"

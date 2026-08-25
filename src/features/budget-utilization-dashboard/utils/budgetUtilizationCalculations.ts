@@ -67,12 +67,17 @@ export function formatMillionBaht(value: number) {
 }
 
 export function getNetAllocationTotal(amount: Partial<BudgetUtilizationAmount>) {
-  return (
+  const allocationTotal = amount.allocation_total_amount ?? (
     toNumber(amount.allocation_tranche_1_amount) +
     toNumber(amount.allocation_tranche_2_amount) +
-    toNumber(amount.allocation_tranche_3_amount) +
+    toNumber(amount.allocation_tranche_3_amount)
+  );
+  return (
+    allocationTotal +
     toNumber(amount.central_transfer_in_amount) -
-    toNumber(amount.central_transfer_out_amount)
+    toNumber(amount.central_transfer_out_amount) +
+    toNumber(amount.division_transfer_in_amount) -
+    toNumber(amount.division_transfer_out_amount)
   );
 }
 
@@ -84,18 +89,24 @@ export function normalizeAmount(raw?: Partial<BudgetUtilizationAmount> | null): 
   const allocationTranche3 = toNumber(source.allocation_tranche_3_amount);
   const centralTransferIn = toNumber(source.central_transfer_in_amount);
   const centralTransferOut = toNumber(source.central_transfer_out_amount);
-  const netBudgetAfterTransfer = planned + centralTransferIn - centralTransferOut;
+  const divisionTransferIn = toNumber(source.division_transfer_in_amount);
+  const divisionTransferOut = toNumber(source.division_transfer_out_amount);
   const allocationTotal = getNetAllocationTotal({
     allocation_tranche_1_amount: allocationTranche1,
     allocation_tranche_2_amount: allocationTranche2,
     allocation_tranche_3_amount: allocationTranche3,
     central_transfer_in_amount: centralTransferIn,
     central_transfer_out_amount: centralTransferOut,
+    division_transfer_in_amount: divisionTransferIn,
+    division_transfer_out_amount: divisionTransferOut,
   });
+  const netBudgetAfterTransfer = toNumber(source.net_budget_after_transfer_amount) || allocationTotal;
   const committedTotal = toNumber(source.committed_total_amount) || toNumber(source.committed_po_amount) + toNumber(source.committed_without_po_amount);
   const disbursedTotal = toNumber(source.disbursed_total_amount) || toNumber(source.disbursed_general_amount) + toNumber(source.disbursed_advance_amount);
   const utilizationTotal = toNumber(source.utilization_total_amount) || committedTotal + disbursedTotal;
-  const remaining = Math.max(0, netBudgetAfterTransfer - utilizationTotal);
+  const remaining = toNumber(source.remaining_amount) || Math.max(0, netBudgetAfterTransfer - utilizationTotal);
+  const disbursementRate = toNumber(source.disbursement_rate) || percent(disbursedTotal, netBudgetAfterTransfer || allocationTotal);
+  const utilizationWithPoRate = toNumber(source.utilization_with_po_rate) || percent(utilizationTotal, netBudgetAfterTransfer || allocationTotal);
 
   return {
     ...emptyBudgetAmount,
@@ -107,8 +118,8 @@ export function normalizeAmount(raw?: Partial<BudgetUtilizationAmount> | null): 
     net_budget_after_transfer_amount: netBudgetAfterTransfer,
     central_transfer_in_amount: centralTransferIn,
     central_transfer_out_amount: centralTransferOut,
-    division_transfer_in_amount: toNumber(source.division_transfer_in_amount),
-    division_transfer_out_amount: toNumber(source.division_transfer_out_amount),
+    division_transfer_in_amount: divisionTransferIn,
+    division_transfer_out_amount: divisionTransferOut,
     committed_po_amount: toNumber(source.committed_po_amount),
     committed_without_po_amount: toNumber(source.committed_without_po_amount),
     committed_total_amount: committedTotal,
@@ -117,8 +128,8 @@ export function normalizeAmount(raw?: Partial<BudgetUtilizationAmount> | null): 
     disbursed_total_amount: disbursedTotal,
     utilization_total_amount: utilizationTotal,
     remaining_amount: remaining,
-    disbursement_rate: percent(disbursedTotal, allocationTotal),
-    utilization_with_po_rate: percent(utilizationTotal, allocationTotal),
+    disbursement_rate: disbursementRate,
+    utilization_with_po_rate: utilizationWithPoRate,
   };
 }
 
@@ -130,6 +141,12 @@ export function sumBudgetAmounts(amounts: BudgetUtilizationAmount[]) {
       allocation_tranche_1_amount: sum.allocation_tranche_1_amount + amount.allocation_tranche_1_amount,
       allocation_tranche_2_amount: sum.allocation_tranche_2_amount + amount.allocation_tranche_2_amount,
       allocation_tranche_3_amount: sum.allocation_tranche_3_amount + amount.allocation_tranche_3_amount,
+      allocation_total_amount: toNumber(sum.allocation_total_amount) + (amount.allocation_total_amount ?? (
+        amount.allocation_tranche_1_amount +
+        amount.allocation_tranche_2_amount +
+        amount.allocation_tranche_3_amount
+      )),
+      net_budget_after_transfer_amount: sum.net_budget_after_transfer_amount + amount.net_budget_after_transfer_amount,
       central_transfer_in_amount: sum.central_transfer_in_amount + amount.central_transfer_in_amount,
       central_transfer_out_amount: sum.central_transfer_out_amount + amount.central_transfer_out_amount,
       division_transfer_in_amount: sum.division_transfer_in_amount + amount.division_transfer_in_amount,
@@ -149,7 +166,27 @@ export function sumBudgetAmounts(amounts: BudgetUtilizationAmount[]) {
 
 export function summarizeBudgetItems(items: BudgetUtilizationItemWithAmount[]) {
   const totalItem = items.find((item) => item.row_type === 'total') ?? null;
-  const totals = totalItem?.amount ?? sumBudgetAmounts(items.map((item) => item.amount));
+  if (totalItem) return normalizeAmount(totalItem.amount);
+
+  const majorProjectIds = new Set(
+    items.filter((item) => item.row_type === 'major_project').map((item) => item.id),
+  );
+  const itemById = new Map(items.map((item) => [item.id, item]));
+  const hasMajorProjectAncestor = (item: BudgetUtilizationItemWithAmount) => {
+    let parentId = item.parent_id;
+    while (parentId) {
+      if (majorProjectIds.has(parentId)) return true;
+      parentId = itemById.get(parentId)?.parent_id ?? null;
+    }
+    return false;
+  };
+  const totals = sumBudgetAmounts(
+    items.map((item) => (
+      hasMajorProjectAncestor(item)
+        ? { ...item.amount, planned_budget_amount: 0 }
+        : item.amount
+    )),
+  );
 
   return normalizeAmount(totals);
 }

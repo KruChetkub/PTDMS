@@ -1,9 +1,11 @@
 import { supabase } from '../../../lib/supabase';
 import { runSupabaseQuery } from '../../../lib/supabase-query';
 import { sanitizePlainTextInput } from '../../../utils/inputSecurity';
+import { parseRawBudgetWorkbookRows } from './budgetUtilizationImport';
 import { normalizeAmount, summarizeBudgetItems } from '../utils/budgetUtilizationCalculations';
 import type {
   BudgetUtilizationAmount,
+  BudgetUtilizationAllocationTranche,
   BudgetUtilizationDashboardSummary,
   BudgetUtilizationDatasetOption,
   BudgetUtilizationImportBatch,
@@ -12,6 +14,7 @@ import type {
   BudgetUtilizationImportFileRecord,
   BudgetUtilizationImportPreview,
   BudgetUtilizationItemInput,
+  BudgetUtilizationItemAllocation,
   BudgetUtilizationItemWithAmount,
   BudgetUtilizationRawWorkbook,
   BudgetUtilizationReportPeriod,
@@ -30,12 +33,23 @@ function getRawWorkbookFromMetadata(metadata: Record<string, unknown> | null | u
   return rawWorkbook;
 }
 
+function isRawTableImport(metadata: Record<string, unknown> | null | undefined) {
+  const rawWorkbook = getRawWorkbookFromMetadata(metadata);
+  return metadata?.template === 'raw_excel_table' && Boolean(rawWorkbook && rawWorkbook.columnCount >= 26);
+}
+
 function mapJoinedItem(row: any): BudgetUtilizationItemWithAmount {
   const amountRow = Array.isArray(row.budget_utilization_amounts)
     ? row.budget_utilization_amounts[0]
     : row.budget_utilization_amounts;
 
+  const allocationRows = (row.budget_utilization_item_allocations ?? []) as BudgetUtilizationItemAllocation[];
   const normalizedAmount = normalizeAmount(amountRow as Partial<BudgetUtilizationAmount>);
+  const allocationTotal = allocationRows.length > 0
+    ? allocationRows.reduce((sum, allocation) => sum + Number(allocation.amount ?? 0), 0)
+    : normalizedAmount.allocation_tranche_1_amount
+      + normalizedAmount.allocation_tranche_2_amount
+      + normalizedAmount.allocation_tranche_3_amount;
 
   return {
     id: row.id,
@@ -48,16 +62,26 @@ function mapJoinedItem(row: any): BudgetUtilizationItemWithAmount {
     sequence_label: row.sequence_label,
     item_name: row.item_name,
     output_label: row.output_label,
+    activity_sequence_label: row.activity_sequence_label ?? null,
     activity_label: row.activity_label,
     raw_label: row.raw_label,
+    source_import_batch_id: row.source_import_batch_id ?? null,
+    source_sheet_name: row.source_sheet_name ?? null,
+    source_row_number: row.source_row_number ?? row.row_number ?? null,
+    source_row_data: Array.isArray(row.source_row_data) ? row.source_row_data : null,
     created_at: row.created_at,
     updated_at: row.updated_at,
     amount: {
       ...normalizedAmount,
+      allocation_total_amount: allocationTotal,
       allocation_tranche_1_date: amountRow?.allocation_tranche_1_date ?? null,
       allocation_tranche_2_date: amountRow?.allocation_tranche_2_date ?? null,
       allocation_tranche_3_date: amountRow?.allocation_tranche_3_date ?? null,
     },
+    allocations: allocationRows.map((allocation) => ({
+      ...allocation,
+      amount: Number(allocation.amount ?? 0),
+    })),
   };
 }
 
@@ -117,8 +141,15 @@ export async function listBudgetDatasetOptions(): Promise<BudgetUtilizationDatas
     listBudgetImportFiles(),
   ]);
   const batchById = new Map(importFiles.map((record) => [record.batch.id, record.batch]));
+  const rawWorkbookBatchIds = new Set(
+    importFiles
+      .filter((record) => isRawTableImport(record.batch.metadata))
+      .map((record) => record.batch.id),
+  );
 
-  const reportPeriodOptions: BudgetUtilizationDatasetOption[] = reportPeriods.map((reportPeriod) => {
+  const reportPeriodOptions: BudgetUtilizationDatasetOption[] = reportPeriods
+    .filter((reportPeriod) => !reportPeriod.import_batch_id || !rawWorkbookBatchIds.has(reportPeriod.import_batch_id))
+    .map((reportPeriod) => {
     const batch = reportPeriod.import_batch_id ? batchById.get(reportPeriod.import_batch_id) ?? null : null;
 
     return {
@@ -132,9 +163,9 @@ export async function listBudgetDatasetOptions(): Promise<BudgetUtilizationDatas
       uploadedAt: batch?.created_at ?? reportPeriod.created_at,
       isActive: reportPeriod.is_active,
     };
-  });
+    });
   const rawWorkbookOptions: BudgetUtilizationDatasetOption[] = importFiles
-      .filter((record) => !record.reportPeriod && getRawWorkbookFromMetadata(record.batch.metadata))
+      .filter((record) => isRawTableImport(record.batch.metadata))
       .map((record) => ({
         reportPeriodId: `batch:${record.batch.id}`,
         importBatchId: record.batch.id,
@@ -214,13 +245,26 @@ export async function listBudgetHierarchyItems(reportPeriodId: string) {
   const result = await runSupabaseQuery<any>(
     budgetClient
       .from('budget_utilization_items')
-      .select('*, budget_utilization_amounts(*)')
+      .select('*, budget_utilization_amounts(*), budget_utilization_item_allocations(*)')
       .eq('report_period_id', reportPeriodId)
       .order('sort_order', { ascending: true }),
     'โหลดรายการงบประมาณ',
   );
 
   return ((result.data ?? []) as any[]).map(mapJoinedItem);
+}
+
+export async function listBudgetAllocationTranches(reportPeriodId: string) {
+  const result = await runSupabaseQuery<any>(
+    budgetClient
+      .from('budget_utilization_allocation_tranches')
+      .select('*')
+      .eq('report_period_id', reportPeriodId)
+      .order('sort_order', { ascending: true }),
+    'โหลดงวดจัดสรร',
+  );
+
+  return (result.data ?? []) as BudgetUtilizationAllocationTranche[];
 }
 
 export async function getBudgetDashboardSummary(reportPeriodId?: string | null): Promise<BudgetUtilizationDashboardSummary> {
@@ -239,10 +283,14 @@ export async function getBudgetDashboardSummary(reportPeriodId?: string | null):
       categoryItems: [],
       projectItems: [],
       totals: normalizeAmount({}),
+      allocationTranches: [],
     };
   }
 
-  const items = await listBudgetHierarchyItems(reportPeriod.id);
+  const [items, allocationTranches] = await Promise.all([
+    listBudgetHierarchyItems(reportPeriod.id),
+    listBudgetAllocationTranches(reportPeriod.id),
+  ]);
   const totalItem = items.find((item) => item.row_type === 'total') ?? null;
 
   return {
@@ -252,7 +300,23 @@ export async function getBudgetDashboardSummary(reportPeriodId?: string | null):
     categoryItems: items.filter((item: BudgetUtilizationItemWithAmount) => item.row_type === 'budget_category'),
     projectItems: items.filter((item: BudgetUtilizationItemWithAmount) => ['major_project', 'sub_project', 'activity'].includes(item.row_type)),
     totals: summarizeBudgetItems(items),
+    allocationTranches,
   };
+}
+
+async function createDefaultBudgetAllocationTranches(reportPeriodId: string) {
+  await runSupabaseQuery(
+    budgetClient.from('budget_utilization_allocation_tranches').upsert(
+      [1, 2, 3].map((trancheNumber) => ({
+        report_period_id: reportPeriodId,
+        tranche_number: trancheNumber,
+        label: `จัดสรรงวด ${trancheNumber}`,
+        sort_order: trancheNumber,
+      })),
+      { onConflict: 'report_period_id,tranche_number' },
+    ),
+    'สร้างงวดจัดสรรเริ่มต้น',
+  );
 }
 
 export async function createBudgetReportPeriod(input: BudgetUtilizationReportPeriodInput) {
@@ -279,7 +343,99 @@ export async function createBudgetReportPeriod(input: BudgetUtilizationReportPer
     'สร้างรอบรายงานงบประมาณ',
   );
 
-  return result.data as BudgetUtilizationReportPeriod;
+  const reportPeriod = result.data as BudgetUtilizationReportPeriod;
+  await createDefaultBudgetAllocationTranches(reportPeriod.id);
+  return reportPeriod;
+}
+
+export async function saveBudgetAllocationTrancheDefinitions(
+  reportPeriodId: string,
+  definitions: Array<{ id?: string; trancheNumber: number; label: string; sortOrder: number }>,
+) {
+  const existing = await listBudgetAllocationTranches(reportPeriodId);
+  const retainedIds = new Set(definitions.map((definition) => definition.id).filter(Boolean));
+  const removedIds = existing.filter((definition) => !retainedIds.has(definition.id)).map((definition) => definition.id);
+
+  if (removedIds.length > 0) {
+    await runSupabaseQuery(
+      budgetClient.from('budget_utilization_allocation_tranches').delete().in('id', removedIds),
+      'ลบงวดจัดสรร',
+    );
+  }
+
+  for (const definition of definitions) {
+    const payload = {
+      report_period_id: reportPeriodId,
+      tranche_number: definition.trancheNumber,
+      label: sanitizePlainTextInput(definition.label, { fieldName: 'ชื่องวดจัดสรร', maxLength: 200, allowNewlines: false }),
+      sort_order: definition.sortOrder,
+    };
+    if (definition.id) {
+      await runSupabaseQuery(
+        budgetClient.from('budget_utilization_allocation_tranches').update(payload).eq('id', definition.id),
+        'แก้ไขงวดจัดสรร',
+      );
+    } else {
+      await runSupabaseQuery(
+        budgetClient.from('budget_utilization_allocation_tranches').insert(payload),
+        'เพิ่มงวดจัดสรร',
+      );
+    }
+  }
+
+  return listBudgetAllocationTranches(reportPeriodId);
+}
+
+export async function saveBudgetItemAllocation(
+  itemId: string,
+  tranche: BudgetUtilizationAllocationTranche,
+  amount: number,
+  allocationDate: string | null,
+) {
+  await runSupabaseQuery(
+    budgetClient.from('budget_utilization_item_allocations').upsert({
+      item_id: itemId,
+      tranche_id: tranche.id,
+      amount,
+      allocation_date: allocationDate,
+    }, { onConflict: 'item_id,tranche_id' }),
+    'บันทึกยอดจัดสรรตามงวด',
+  );
+
+  const [allocationsResult, amountResult] = await Promise.all([
+    runSupabaseQuery<any>(
+      budgetClient.from('budget_utilization_item_allocations').select('amount').eq('item_id', itemId),
+      'รวมยอดจัดสรรทุกงวด',
+    ),
+    runSupabaseQuery<any>(
+      budgetClient.from('budget_utilization_amounts').select('*').eq('item_id', itemId).single(),
+      'โหลดยอดรายการงบประมาณ',
+    ),
+  ]);
+  const currentAmount = normalizeAmount(amountResult.data as Partial<BudgetUtilizationAmount>);
+  const allocationTotal = (allocationsResult.data ?? []).reduce(
+    (sum: number, allocation: { amount: number | string }) => sum + Number(allocation.amount ?? 0),
+    0,
+  );
+  const netBudget = allocationTotal
+    + currentAmount.central_transfer_in_amount - currentAmount.central_transfer_out_amount
+    + currentAmount.division_transfer_in_amount - currentAmount.division_transfer_out_amount;
+  const remaining = Math.max(0, netBudget - currentAmount.utilization_total_amount);
+  const updatePayload: Record<string, number | string | null> = {
+    net_budget_after_transfer_amount: netBudget,
+    remaining_amount: remaining,
+    disbursement_rate: netBudget === 0 ? 0 : currentAmount.disbursed_total_amount * 100 / netBudget,
+    utilization_with_po_rate: netBudget === 0 ? 0 : currentAmount.utilization_total_amount * 100 / netBudget,
+  };
+  if (tranche.tranche_number >= 1 && tranche.tranche_number <= 3) {
+    updatePayload[`allocation_tranche_${tranche.tranche_number}_amount`] = amount;
+    updatePayload[`allocation_tranche_${tranche.tranche_number}_date`] = allocationDate;
+  }
+
+  await runSupabaseQuery(
+    budgetClient.from('budget_utilization_amounts').update(updatePayload).eq('item_id', itemId),
+    'อัปเดตยอดสุทธิจากทุกงวดจัดสรร',
+  );
 }
 
 export async function setActiveBudgetReportPeriod(reportPeriodId: string) {
@@ -340,6 +496,9 @@ function toBudgetItemPayload(input: BudgetUtilizationItemInput, sortOrder?: numb
     output_label: input.outputLabel
       ? sanitizePlainTextInput(input.outputLabel, { fieldName: 'ผลผลิต', maxLength: 300, allowNewlines: false })
       : null,
+    activity_sequence_label: input.activitySequenceLabel
+      ? sanitizePlainTextInput(input.activitySequenceLabel, { fieldName: 'ลำดับกิจกรรม', maxLength: 80, allowNewlines: false })
+      : null,
     activity_label: input.activityLabel
       ? sanitizePlainTextInput(input.activityLabel, { fieldName: 'กิจกรรมหลัก', maxLength: 300, allowNewlines: false })
       : null,
@@ -348,6 +507,18 @@ function toBudgetItemPayload(input: BudgetUtilizationItemInput, sortOrder?: numb
 }
 
 function toBudgetAmountPayload(input: BudgetUtilizationItemInput, itemId: string) {
+  const calculatedNetBudgetAfterTransferAmount =
+    (input.allocationTranche1Amount ?? 0) +
+    (input.allocationTranche2Amount ?? 0) +
+    (input.allocationTranche3Amount ?? 0) +
+    (input.centralTransferInAmount ?? 0) -
+    (input.centralTransferOutAmount ?? 0) +
+    (input.divisionTransferInAmount ?? 0) -
+    (input.divisionTransferOutAmount ?? 0);
+  const storedNetBudgetAfterTransferAmount = input.netBudgetAfterTransferAmount ?? 0;
+  const netBudgetAfterTransferAmount = storedNetBudgetAfterTransferAmount !== 0
+    ? storedNetBudgetAfterTransferAmount
+    : calculatedNetBudgetAfterTransferAmount;
   const disbursedGeneralAmount = input.disbursedGeneralAmount ?? 0;
   const disbursedAdvanceAmount = input.disbursedAdvanceAmount ?? 0;
   const disbursedTotalAmount = input.disbursedTotalAmount ?? disbursedGeneralAmount + disbursedAdvanceAmount;
@@ -355,9 +526,10 @@ function toBudgetAmountPayload(input: BudgetUtilizationItemInput, itemId: string
   const committedWithoutPoAmount = input.committedWithoutPoAmount ?? 0;
   const committedTotalAmount = input.committedTotalAmount ?? committedPoAmount + committedWithoutPoAmount;
   const utilizationTotalAmount = input.utilizationTotalAmount ?? committedTotalAmount + disbursedTotalAmount;
-  const remainingAmount = input.remainingAmount ?? Math.max(0, input.plannedBudgetAmount - utilizationTotalAmount);
+  const remainingAmount = Math.max(0, netBudgetAfterTransferAmount - utilizationTotalAmount);
   const normalized = normalizeAmount({
     planned_budget_amount: input.plannedBudgetAmount,
+    net_budget_after_transfer_amount: netBudgetAfterTransferAmount,
     allocation_tranche_1_amount: input.allocationTranche1Amount,
     allocation_tranche_2_amount: input.allocationTranche2Amount,
     allocation_tranche_3_amount: input.allocationTranche3Amount,
@@ -384,6 +556,7 @@ function toBudgetAmountPayload(input: BudgetUtilizationItemInput, itemId: string
     allocation_tranche_2_date: input.allocationTranche2Date || null,
     allocation_tranche_3_amount: normalized.allocation_tranche_3_amount,
     allocation_tranche_3_date: input.allocationTranche3Date || null,
+    net_budget_after_transfer_amount: normalized.net_budget_after_transfer_amount,
     central_transfer_in_amount: normalized.central_transfer_in_amount,
     central_transfer_out_amount: normalized.central_transfer_out_amount,
     division_transfer_in_amount: normalized.division_transfer_in_amount,
@@ -455,38 +628,11 @@ export async function deleteBudgetItem(itemId: string) {
   );
 }
 
-export async function importBudgetPreview(preview: BudgetUtilizationImportPreview) {
-  const { data: userData, error: userError } = await supabase.auth.getUser();
-  if (userError) throw new Error(userError.message);
-
-  const batchResult = await runSupabaseQuery<any>(
-    budgetClient
-      .from('budget_utilization_import_batches')
-      .insert({
-        fiscal_year: preview.fiscalYear,
-        report_as_of: preview.reportAsOf,
-        source_file_name: preview.sourceFileName,
-        source_file_size: preview.sourceFileSize,
-        status: preview.errors.length > 0 ? 'previewed' : 'imported',
-        imported_by: userData.user?.id ?? null,
-        total_rows: (preview.rawWorkbook?.rows.length ?? preview.rows.length) + preview.errors.length,
-        imported_rows: preview.rawWorkbook?.rows.length ?? preview.rows.length,
-        rejected_rows: preview.errors.length,
-        metadata: {
-          template: preview.rawWorkbook ? 'raw_excel_table' : 'Mmd/เวิร์กบุ๊ก1.xlsx',
-          rawWorkbook: preview.rawWorkbook,
-        },
-      })
-      .select('*')
-      .single(),
-    'สร้าง batch การนำเข้า',
-  );
-  const batch = batchResult.data;
-
-  if (preview.rows.length === 0) {
-    return { batch: batch as BudgetUtilizationImportBatch, reportPeriod: null };
-  }
-
+async function persistBudgetPreviewRows(
+  batch: BudgetUtilizationImportBatch,
+  preview: BudgetUtilizationImportPreview,
+  userId: string | null,
+) {
   const reportPeriodResult = await runSupabaseQuery<any>(
     budgetClient
       .from('budget_utilization_report_periods')
@@ -497,7 +643,7 @@ export async function importBudgetPreview(preview: BudgetUtilizationImportPrevie
         title: sanitizePlainTextInput(preview.title, { fieldName: 'ชื่อรายงาน', maxLength: 300, allowNewlines: false }),
         department_name: sanitizePlainTextInput(preview.departmentName, { fieldName: 'ชื่อหน่วยงาน', maxLength: 300, allowNewlines: false }),
         is_active: true,
-        created_by: userData.user?.id ?? null,
+        created_by: userId,
       })
       .select('*')
       .single(),
@@ -506,6 +652,8 @@ export async function importBudgetPreview(preview: BudgetUtilizationImportPrevie
   const reportPeriod = reportPeriodResult.data;
 
   await setActiveBudgetReportPeriod(reportPeriod.id);
+  await createDefaultBudgetAllocationTranches(reportPeriod.id);
+  const allocationTranches = await listBudgetAllocationTranches(reportPeriod.id);
 
   const idMap = new Map<string, string>();
   for (const row of preview.rows) {
@@ -522,8 +670,13 @@ export async function importBudgetPreview(preview: BudgetUtilizationImportPrevie
           sequence_label: row.sequence_label,
           item_name: row.item_name,
           output_label: row.output_label,
+          activity_sequence_label: row.activity_sequence_label ?? null,
           activity_label: row.activity_label,
           raw_label: row.raw_label,
+          source_import_batch_id: batch.id,
+          source_sheet_name: row.source_sheet_name,
+          source_row_number: row.source_row_number ?? row.row_number,
+          source_row_data: row.source_row_data,
         })
         .select('*')
         .single(),
@@ -542,13 +695,38 @@ export async function importBudgetPreview(preview: BudgetUtilizationImportPrevie
       }),
       'บันทึกตัวเลขงบประมาณ',
     );
+    const legacyAllocations = allocationTranches.flatMap((tranche) => {
+      const amount = tranche.tranche_number === 1
+        ? row.amount.allocation_tranche_1_amount
+        : tranche.tranche_number === 2
+          ? row.amount.allocation_tranche_2_amount
+          : row.amount.allocation_tranche_3_amount;
+      const allocationDate = tranche.tranche_number === 1
+        ? row.amount.allocation_tranche_1_date
+        : tranche.tranche_number === 2
+          ? row.amount.allocation_tranche_2_date
+          : row.amount.allocation_tranche_3_date;
+      return amount !== 0 || allocationDate
+        ? [{ item_id: item.id, tranche_id: tranche.id, amount, allocation_date: allocationDate }]
+        : [];
+    });
+    if (legacyAllocations.length > 0) {
+      await runSupabaseQuery(
+        budgetClient.from('budget_utilization_item_allocations').insert(legacyAllocations),
+        'บันทึกยอดจัดสรรจากไฟล์นำเข้า',
+      );
+    }
   }
 
-  if (preview.errors.length > 0) {
+  return reportPeriod as BudgetUtilizationReportPeriod;
+}
+
+async function persistBudgetImportErrors(batchId: string, errors: BudgetUtilizationImportPreview['errors']) {
+  if (errors.length > 0) {
     await runSupabaseQuery(
       budgetClient.from('budget_utilization_import_errors').insert(
-        preview.errors.map((error) => ({
-          import_batch_id: batch.id,
+        errors.map((error) => ({
+          import_batch_id: batchId,
           row_number: error.rowNumber,
           column_name: error.columnName ?? null,
           error_code: error.errorCode,
@@ -559,6 +737,167 @@ export async function importBudgetPreview(preview: BudgetUtilizationImportPrevie
       'บันทึกข้อผิดพลาดการนำเข้า',
     );
   }
+}
 
-  return { batch: batch as BudgetUtilizationImportBatch, reportPeriod: reportPeriod as BudgetUtilizationReportPeriod };
+const reconciliationFields: Array<keyof BudgetUtilizationAmount> = [
+  'planned_budget_amount',
+  'allocation_tranche_1_amount',
+  'allocation_tranche_2_amount',
+  'allocation_tranche_3_amount',
+  'net_budget_after_transfer_amount',
+  'central_transfer_in_amount',
+  'central_transfer_out_amount',
+  'division_transfer_in_amount',
+  'division_transfer_out_amount',
+  'committed_total_amount',
+  'disbursed_total_amount',
+  'utilization_total_amount',
+  'remaining_amount',
+  'disbursement_rate',
+  'utilization_with_po_rate',
+];
+
+async function reconcilePersistedBudgetImport(
+  batch: BudgetUtilizationImportBatch,
+  reportPeriod: BudgetUtilizationReportPeriod,
+  preview: BudgetUtilizationImportPreview,
+) {
+  const persistedItems = await listBudgetHierarchyItems(reportPeriod.id);
+  const sourceTotal = preview.rows.find((item) => item.row_type === 'total')?.amount ?? null;
+  const persistedTotal = persistedItems.find((item) => item.row_type === 'total')?.amount ?? null;
+  const differences = sourceTotal && persistedTotal
+    ? reconciliationFields.flatMap((field) => {
+        const sourceValue = Number(sourceTotal[field] ?? 0);
+        const persistedValue = Number(persistedTotal[field] ?? 0);
+        return Math.abs(sourceValue - persistedValue) > 0.01
+          ? [{ field, sourceValue, persistedValue }]
+          : [];
+      })
+    : [];
+  const rowCountMatches = persistedItems.length === preview.rows.length;
+  const validationStatus = preview.errors.length === 0 && rowCountMatches && differences.length === 0 ? 'matched' : 'mismatch';
+  const reconciliation = {
+    source_row_count: preview.rawWorkbook?.rows.length ?? preview.rows.length,
+    normalized_item_count: preview.rows.length,
+    persisted_item_count: persistedItems.length,
+    rejected_row_count: preview.errors.length,
+    row_count_matches: rowCountMatches,
+    total_row_compared: Boolean(sourceTotal && persistedTotal),
+    differences,
+  };
+
+  const result = await runSupabaseQuery<any>(
+    budgetClient
+      .from('budget_utilization_import_batches')
+      .update({ validation_status: validationStatus, reconciliation })
+      .eq('id', batch.id)
+      .select('*')
+      .single(),
+    'ตรวจสอบยอดไฟล์นำเข้ากับฐานข้อมูล',
+  );
+
+  return result.data as BudgetUtilizationImportBatch;
+}
+
+export async function importBudgetPreview(preview: BudgetUtilizationImportPreview) {
+  const { data: userData, error: userError } = await supabase.auth.getUser();
+  if (userError) throw new Error(userError.message);
+
+  const sourceRowCount = preview.rawWorkbook?.rows.length ?? preview.rows.length;
+  const validationStatus = preview.errors.length === 0 && preview.rows.length > 0 ? 'matched' : 'mismatch';
+  const batchResult = await runSupabaseQuery<any>(
+    budgetClient
+      .from('budget_utilization_import_batches')
+      .insert({
+        fiscal_year: preview.fiscalYear,
+        report_as_of: preview.reportAsOf,
+        source_file_name: preview.sourceFileName,
+        source_file_size: preview.sourceFileSize,
+        source_checksum: preview.sourceChecksum || null,
+        status: preview.errors.length > 0 ? 'previewed' : 'imported',
+        validation_status: validationStatus,
+        reconciliation: {
+          source_row_count: sourceRowCount,
+          normalized_item_count: preview.rows.length,
+          rejected_row_count: preview.errors.length,
+        },
+        imported_by: userData.user?.id ?? null,
+        total_rows: sourceRowCount,
+        imported_rows: preview.rows.length,
+        rejected_rows: preview.errors.length,
+        metadata: {
+          template: preview.sourceFormat === 'raw_table' ? 'raw_excel_table' : 'budget_utilization_template',
+          rawWorkbook: preview.rawWorkbook,
+        },
+      })
+      .select('*')
+      .single(),
+    'สร้าง batch การนำเข้า',
+  );
+  let batch = batchResult.data as BudgetUtilizationImportBatch;
+
+  await persistBudgetImportErrors(batch.id, preview.errors);
+
+  if (preview.rows.length === 0) {
+    return { batch, reportPeriod: null };
+  }
+
+  const reportPeriod = await persistBudgetPreviewRows(batch, preview, userData.user?.id ?? null);
+  batch = await reconcilePersistedBudgetImport(batch, reportPeriod, preview);
+
+  return { batch, reportPeriod };
+}
+
+export async function normalizeExistingBudgetImportFile(importBatchId: string) {
+  const detail = await getBudgetImportFileDetail(importBatchId);
+  if (detail.reportPeriod) return detail.reportPeriod;
+  if (!detail.rawWorkbook) {
+    throw new Error('ไฟล์นี้ไม่มีตาราง Excel ต้นฉบับสำหรับนำเข้าสู่ฐานข้อมูล');
+  }
+
+  const normalized = parseRawBudgetWorkbookRows(detail.rawWorkbook);
+  if (normalized.rows.length === 0) {
+    throw new Error('ไม่พบรายการงบประมาณที่สามารถแปลงเข้าสู่ฐานข้อมูลได้');
+  }
+
+  const { data: userData, error: userError } = await supabase.auth.getUser();
+  if (userError) throw new Error(userError.message);
+
+  await persistBudgetImportErrors(detail.batch.id, normalized.errors);
+  const preview: BudgetUtilizationImportPreview = {
+    sourceFormat: 'raw_table',
+    fiscalYear: detail.batch.fiscal_year,
+    reportAsOf: detail.batch.report_as_of,
+    title: `รายงานการใช้จ่ายงบประมาณ ปีงบประมาณ ${detail.batch.fiscal_year}`,
+    departmentName: 'กองยุทธศาสตร์และแผนงาน',
+    sourceFileName: detail.batch.source_file_name ?? 'ไฟล์ Excel',
+    sourceFileSize: detail.batch.source_file_size ?? 0,
+    sourceChecksum: detail.batch.source_checksum ?? '',
+    rawWorkbook: detail.rawWorkbook,
+    rows: normalized.rows,
+    errors: normalized.errors,
+  };
+  const reportPeriod = await persistBudgetPreviewRows(detail.batch, preview, userData.user?.id ?? null);
+
+  await runSupabaseQuery(
+    budgetClient
+      .from('budget_utilization_import_batches')
+      .update({
+        status: normalized.errors.length > 0 ? 'previewed' : 'imported',
+        validation_status: normalized.errors.length > 0 ? 'mismatch' : 'matched',
+        imported_rows: normalized.rows.length,
+        rejected_rows: normalized.errors.length,
+        reconciliation: {
+          source_row_count: detail.rawWorkbook.rows.length,
+          normalized_item_count: normalized.rows.length,
+          rejected_row_count: normalized.errors.length,
+        },
+      })
+      .eq('id', detail.batch.id),
+    'อัปเดตผลการนำไฟล์เดิมเข้าสู่ฐานข้อมูล',
+  );
+
+  await reconcilePersistedBudgetImport(detail.batch, reportPeriod, preview);
+
+  return reportPeriod;
 }

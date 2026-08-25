@@ -75,6 +75,268 @@ function readRawWorkbook(sheetName: string, rows: unknown[][], sheet: Record<str
   };
 }
 
+type RawTableColumns = {
+  headerRowIndex: number;
+  majorProject: number | null;
+  sequence: number | null;
+  category: number | null;
+  output: number | null;
+  activity: number | null;
+  itemName: number;
+  planned: number;
+  allocation1: number;
+  allocation2: number;
+  allocation3: number;
+  netTotal: number;
+  centralIn: number;
+  centralOut: number;
+  divisionIn: number;
+  divisionOut: number;
+  committedPo: number;
+  committedWithoutPo: number;
+  committedTotal: number;
+  disbursedGeneral: number;
+  disbursedAdvance: number;
+  disbursedTotal: number;
+  utilizationTotal: number;
+  remaining: number;
+  disbursementRate: number;
+  utilizationWithPoRate: number;
+};
+
+function findHeaderIndex(row: unknown[], matcher: (value: string) => boolean) {
+  const index = row.findIndex((cell) => matcher(normalizeLabel(String(cell ?? ''))));
+  return index >= 0 ? index : null;
+}
+
+function getRawTableColumns(rows: unknown[][]): RawTableColumns {
+  const headerRowIndex = rows.slice(0, 4).findIndex((row) => row.some((cell) => normalizeLabel(String(cell ?? '')).includes('วงเงินตามแผน')));
+  if (headerRowIndex < 0) {
+    throw new Error('ไม่พบหัวตารางวงเงินตามแผนในไฟล์ Excel');
+  }
+
+  const header = rows[headerRowIndex];
+  const planned = findHeaderIndex(header, (value) => value.includes('วงเงินตามแผน'));
+  const itemName = findHeaderIndex(header, (value) => value.includes('ชื่อโครงการย่อย'))
+    ?? findHeaderIndex(header, (value) => value === 'ชื่อโครงการ');
+
+  if (planned === null || itemName === null) {
+    throw new Error('หัวตาราง Excel ไม่ตรงกับโครงสร้างงบประมาณที่รองรับ');
+  }
+
+  const category = findHeaderIndex(header, (value) => value === 'ชื่อโครงการ');
+
+  return {
+    headerRowIndex,
+    majorProject: findHeaderIndex(header, (value) => value.includes('ชื่อโครงการใหญ่')),
+    sequence: findHeaderIndex(header, (value) => value.includes('ลำดับที่')),
+    category: category === itemName ? null : category,
+    output: findHeaderIndex(header, (value) => value.includes('ผลผลิตที่')),
+    activity: findHeaderIndex(header, (value) => value.includes('กิจกรรมหลักที่')),
+    itemName,
+    planned,
+    allocation1: planned + 1,
+    allocation2: planned + 2,
+    allocation3: planned + 3,
+    netTotal: planned + 4,
+    centralIn: planned + 5,
+    centralOut: planned + 6,
+    divisionIn: planned + 7,
+    divisionOut: planned + 8,
+    committedPo: planned + 9,
+    committedWithoutPo: planned + 10,
+    committedTotal: planned + 11,
+    disbursedGeneral: planned + 12,
+    disbursedAdvance: planned + 13,
+    disbursedTotal: planned + 14,
+    utilizationTotal: planned + 15,
+    remaining: planned + 16,
+    disbursementRate: planned + 17,
+    utilizationWithPoRate: planned + 18,
+  };
+}
+
+function stripCategoryTotalLabel(value: string) {
+  return value.replace(/\s*\(\s*รวม\s*\)\s*/g, '').trim();
+}
+
+function getRawAmount(row: string[], columns: RawTableColumns) {
+  return normalizeAmount({
+    planned_budget_amount: toNumber(row[columns.planned]),
+    allocation_tranche_1_amount: toNumber(row[columns.allocation1]),
+    allocation_tranche_2_amount: toNumber(row[columns.allocation2]),
+    allocation_tranche_3_amount: toNumber(row[columns.allocation3]),
+    net_budget_after_transfer_amount: toNumber(row[columns.netTotal]),
+    central_transfer_in_amount: toNumber(row[columns.centralIn]),
+    central_transfer_out_amount: toNumber(row[columns.centralOut]),
+    division_transfer_in_amount: toNumber(row[columns.divisionIn]),
+    division_transfer_out_amount: toNumber(row[columns.divisionOut]),
+    committed_po_amount: toNumber(row[columns.committedPo]),
+    committed_without_po_amount: toNumber(row[columns.committedWithoutPo]),
+    committed_total_amount: toNumber(row[columns.committedTotal]),
+    disbursed_general_amount: toNumber(row[columns.disbursedGeneral]),
+    disbursed_advance_amount: toNumber(row[columns.disbursedAdvance]),
+    disbursed_total_amount: toNumber(row[columns.disbursedTotal]),
+    utilization_total_amount: toNumber(row[columns.utilizationTotal]),
+    remaining_amount: toNumber(row[columns.remaining]),
+    disbursement_rate: toNumber(row[columns.disbursementRate]),
+    utilization_with_po_rate: toNumber(row[columns.utilizationWithPoRate]),
+  });
+}
+
+function hasRawBudgetNumbers(row: string[], columns: RawTableColumns) {
+  return row.slice(columns.planned, columns.utilizationWithPoRate + 1).some((value) => toNumber(value) !== 0);
+}
+
+export function parseRawBudgetWorkbookRows(rawWorkbook: BudgetUtilizationRawWorkbook) {
+  const columns = getRawTableColumns(rawWorkbook.rows);
+  const parsedRows: BudgetUtilizationItemWithAmount[] = [];
+  const errors: BudgetUtilizationImportPreview['errors'] = [];
+  const categoryIds = new Map<string, string>();
+  const outputActivityIds = new Map<string, string>();
+  let latestCategoryKey = '';
+
+  const pushRow = (input: {
+    row: string[];
+    rowIndex: number;
+    itemName: string;
+    rowType: BudgetUtilizationRowType;
+    parentId?: string | null;
+    depth: number;
+    sequenceLabel?: string | null;
+    outputLabel?: string | null;
+    activityLabel?: string | null;
+  }) => {
+    const rowNumber = input.rowIndex + 1;
+    const temporaryId = `preview-${rowNumber}-${parsedRows.length + 1}`;
+    const safeItemName = sanitizePlainTextInput(input.itemName, {
+      fieldName: `ชื่อรายการ แถว ${rowNumber}`,
+      maxLength: 500,
+      allowNewlines: false,
+    });
+
+    parsedRows.push({
+      id: temporaryId,
+      report_period_id: '',
+      parent_id: input.parentId ?? null,
+      row_number: rowNumber,
+      sort_order: parsedRows.length + 1,
+      depth: input.depth,
+      row_type: input.rowType,
+      sequence_label: input.sequenceLabel ?? null,
+      item_name: safeItemName,
+      output_label: input.outputLabel ?? null,
+      activity_sequence_label: null,
+      activity_label: input.activityLabel ?? null,
+      raw_label: input.row.filter(Boolean).join(' | '),
+      source_import_batch_id: null,
+      source_sheet_name: rawWorkbook.sheetName,
+      source_row_number: rowNumber,
+      source_row_data: input.row,
+      created_at: '',
+      updated_at: '',
+      amount: getRawAmount(input.row, columns),
+    });
+
+    return temporaryId;
+  };
+
+  rawWorkbook.rows.forEach((row, rowIndex) => {
+    if (rowIndex <= columns.headerRowIndex + 1) return;
+
+    try {
+      const majorProject = columns.majorProject === null ? '' : readCell(row, columns.majorProject);
+      const categoryCell = columns.category === null ? '' : readCell(row, columns.category);
+      const outputLabel = columns.output === null ? '' : readCell(row, columns.output);
+      const activityLabel = columns.activity === null ? '' : readCell(row, columns.activity);
+      const detailName = readCell(row, columns.itemName);
+      const sequenceLabel = columns.sequence === null ? '' : readCell(row, columns.sequence);
+      const structuralLabel = majorProject || categoryCell || detailName;
+      const totalLabel = row.find((cell) => /รวมทั้งสิ้น/.test(cell)) ?? '';
+
+      if (!structuralLabel && !totalLabel && !hasRawBudgetNumbers(row, columns)) return;
+
+      if (totalLabel) {
+        pushRow({ row, rowIndex, itemName: totalLabel, rowType: 'total', depth: 0 });
+        return;
+      }
+
+      const categorySummary = [majorProject, categoryCell, detailName].find((value) => /งบ.+\(\s*รวม\s*\)/.test(value));
+      if (categorySummary) {
+        const categoryName = stripCategoryTotalLabel(categorySummary);
+        const categoryKey = normalizeLabel(categoryName);
+        const categoryId = pushRow({ row, rowIndex, itemName: categoryName, rowType: 'budget_category', depth: 0 });
+        categoryIds.set(categoryKey, categoryId);
+        latestCategoryKey = categoryKey;
+        return;
+      }
+
+      const categoryName = stripCategoryTotalLabel(categoryCell) || stripCategoryTotalLabel(majorProject) || latestCategoryKey;
+      const categoryKey = normalizeLabel(categoryName);
+      let categoryId = categoryIds.get(categoryKey) ?? categoryIds.get(latestCategoryKey) ?? null;
+
+      if (!categoryId && categoryName) {
+        categoryId = pushRow({
+          row: [],
+          rowIndex,
+          itemName: categoryName,
+          rowType: 'budget_category',
+          depth: 0,
+        });
+        categoryIds.set(categoryKey, categoryId);
+      }
+      if (categoryKey) latestCategoryKey = categoryKey;
+
+      const isOutputActivity = /ผลผลิตที่.*กิจกรรมหลักที่/.test(normalizeLabel(detailName));
+      const groupKey = `${categoryKey || latestCategoryKey}|${outputLabel}|${activityLabel}`;
+      if (isOutputActivity) {
+        const groupId = pushRow({
+          row,
+          rowIndex,
+          itemName: detailName,
+          rowType: 'output_activity',
+          parentId: categoryId,
+          depth: categoryId ? 1 : 0,
+          outputLabel,
+          activityLabel,
+        });
+        outputActivityIds.set(groupKey, groupId);
+        return;
+      }
+
+      if (!detailName && !majorProject) return;
+
+      const parentId = outputActivityIds.get(groupKey) ?? categoryId;
+      pushRow({
+        row,
+        rowIndex,
+        itemName: detailName || majorProject,
+        rowType: majorProject || /โครงการใหญ่/.test(detailName) ? 'major_project' : 'line_item',
+        parentId,
+        depth: parentId ? (outputActivityIds.has(groupKey) ? 2 : 1) : 0,
+        sequenceLabel: sequenceLabel || null,
+        outputLabel: outputLabel || null,
+        activityLabel: activityLabel || null,
+      });
+    } catch (error) {
+      errors.push({
+        rowNumber: rowIndex + 1,
+        errorCode: 'invalid_raw_row',
+        errorMessage: error instanceof Error ? error.message : 'ไม่สามารถแปลงแถวจากตาราง Excel ได้',
+        rawValue: JSON.stringify(row),
+      });
+    }
+  });
+
+  return { rows: parsedRows, errors };
+}
+
+async function calculateFileChecksum(buffer: ArrayBuffer) {
+  if (!globalThis.crypto?.subtle) return '';
+  const digest = await globalThis.crypto.subtle.digest('SHA-256', buffer);
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
 function classifyRowType(label: string, sequenceLabel: string | null, depth: number): BudgetUtilizationRowType {
   const normalized = label.replace(/\s+/g, '');
 
@@ -170,7 +432,8 @@ function getSequenceLabel(row: unknown[]) {
 
 export async function parseBudgetWorkbook(file: File): Promise<BudgetUtilizationImportPreview> {
   const XLSX = await import('xlsx');
-  const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array', cellDates: true });
+  const fileBuffer = await file.arrayBuffer();
+  const workbook = XLSX.read(fileBuffer, { type: 'array', cellDates: true });
   const sheetName = workbook.SheetNames[0];
   const sheet = workbook.Sheets[sheetName];
   const rows = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, blankrows: false, raw: false });
@@ -183,16 +446,19 @@ export async function parseBudgetWorkbook(file: File): Promise<BudgetUtilization
   let latestCategoryId: string | null = null;
 
   if (isRawTableWorkbook(rows)) {
+    const normalizedRaw = parseRawBudgetWorkbookRows(rawWorkbook);
     return {
+      sourceFormat: 'raw_table',
       fiscalYear,
       reportAsOf,
       title: `รายงานการใช้จ่ายงบประมาณ ปีงบประมาณ ${fiscalYear}`,
       departmentName: 'กองยุทธศาสตร์และแผนงาน',
       sourceFileName: file.name,
       sourceFileSize: file.size,
+      sourceChecksum: await calculateFileChecksum(fileBuffer),
       rawWorkbook,
-      rows: [],
-      errors,
+      rows: normalizedRaw.rows,
+      errors: normalizedRaw.errors,
     };
   }
 
@@ -233,7 +499,9 @@ export async function parseBudgetWorkbook(file: File): Promise<BudgetUtilization
         toNumber(row[4]) +
         toNumber(row[5]) +
         toNumber(row[7]) -
-        toNumber(row[8]);
+        toNumber(row[8]) +
+        toNumber(row[9]) -
+        toNumber(row[10]);
 
       parsedRows.push({
         id: temporaryId,
@@ -246,8 +514,13 @@ export async function parseBudgetWorkbook(file: File): Promise<BudgetUtilization
         sequence_label: sequenceLabel,
         item_name: safeItemName,
         output_label: null,
+        activity_sequence_label: null,
         activity_label: null,
         raw_label: [sequenceLabel, itemName].filter(Boolean).join(' '),
+        source_import_batch_id: null,
+        source_sheet_name: sheetName,
+        source_row_number: rowNumber,
+        source_row_data: row.map((cell) => String(cell ?? '')),
         created_at: '',
         updated_at: '',
         amount: normalizeAmount({
@@ -283,12 +556,14 @@ export async function parseBudgetWorkbook(file: File): Promise<BudgetUtilization
   });
 
   return {
+    sourceFormat: 'template',
     fiscalYear,
     reportAsOf,
     title: `รายงานการใช้จ่ายงบประมาณ ปีงบประมาณ ${fiscalYear}`,
     departmentName: 'กองยุทธศาสตร์และแผนงาน',
     sourceFileName: file.name,
     sourceFileSize: file.size,
+    sourceChecksum: await calculateFileChecksum(fileBuffer),
     rawWorkbook,
     rows: parsedRows,
     errors,

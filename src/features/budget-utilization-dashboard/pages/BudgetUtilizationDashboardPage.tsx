@@ -5,11 +5,33 @@ import { Bar, BarChart, CartesianGrid, Cell, LabelList, Legend, Pie, PieChart, R
 import { PageHeader } from '../../../components/ui/PageHeader';
 import { useAuditPageAccess } from '../../../hooks/useAuditPageAccess';
 import { getBudgetDashboardSummary, getBudgetImportFileDetail, listBudgetDatasetOptions } from '../services/budgetUtilization.service';
-import { formatBudgetAmount, getNetAllocationTotal, percent, sumBudgetAmounts, toNumber } from '../utils/budgetUtilizationCalculations';
+import { formatBudgetAmount, getNetAllocationTotal, normalizeAmount, percent, sumBudgetAmounts, toNumber } from '../utils/budgetUtilizationCalculations';
 import type { BudgetUtilizationAmount, BudgetUtilizationDashboardSummary, BudgetUtilizationDatasetOption, BudgetUtilizationImportFileDetail, BudgetUtilizationItemWithAmount, BudgetUtilizationRawWorkbook } from '../types/budgetUtilization.types';
 import { getSafeUserErrorMessage } from '../../../utils/errorHandling';
 
 const chartColors = ['#2563eb', '#8b5cf6', '#f59e0b', '#0f766e', '#e11d48'];
+const selectedDatasetStorageKey = 'budget-utilization:selected-report-period';
+
+function getRememberedDatasetId() {
+  try {
+    return window.sessionStorage.getItem(selectedDatasetStorageKey) ?? '';
+  } catch {
+    return '';
+  }
+}
+
+function rememberDatasetId(reportPeriodId: string) {
+  try {
+    if (reportPeriodId) {
+      window.sessionStorage.setItem(selectedDatasetStorageKey, reportPeriodId);
+    } else {
+      window.sessionStorage.removeItem(selectedDatasetStorageKey);
+    }
+  } catch {
+    // The URL still preserves the selection when browser storage is unavailable.
+  }
+}
+
 const quarterColors = {
   q1: 'bg-emerald-100 text-emerald-950',
   q2: 'bg-yellow-100 text-yellow-950',
@@ -184,11 +206,50 @@ function getCategoryAmount(category: BudgetUtilizationItemWithAmount, items: Bud
     }
   }
 
-  const childAmounts = items
-    .filter((item) => descendantIds.has(item.id) && item.id !== category.id)
-    .map((item) => item.amount);
+  const descendants = items.filter((item) => descendantIds.has(item.id) && item.id !== category.id);
+  const itemById = new Map(items.map((item) => [item.id, item]));
+  const amountFields = [
+    'planned_budget_amount',
+    'allocation_tranche_1_amount',
+    'allocation_tranche_2_amount',
+    'allocation_tranche_3_amount',
+    'allocation_total_amount',
+    'central_transfer_in_amount',
+    'central_transfer_out_amount',
+    'division_transfer_in_amount',
+    'division_transfer_out_amount',
+    'committed_po_amount',
+    'committed_without_po_amount',
+    'committed_total_amount',
+    'disbursed_general_amount',
+    'disbursed_advance_amount',
+    'disbursed_total_amount',
+    'utilization_total_amount',
+  ] as const;
 
-  return sumBudgetAmounts(childAmounts.length ? childAmounts : [category.amount]);
+  const aggregatedAmount = Object.fromEntries(amountFields.map((field) => {
+    const categoryValue = toNumber(category.amount[field]);
+    if (categoryValue !== 0) return [field, categoryValue];
+
+    const value = descendants.reduce((total, item) => {
+      const itemValue = toNumber(item.amount[field]);
+      if (itemValue === 0) return total;
+
+      let parentId = item.parent_id;
+      while (parentId && parentId !== category.id) {
+        const parent = itemById.get(parentId);
+        if (!parent) break;
+        if (toNumber(parent.amount[field]) !== 0) return total;
+        parentId = parent.parent_id;
+      }
+
+      return total + itemValue;
+    }, 0);
+
+    return [field, value];
+  })) as Partial<BudgetUtilizationAmount>;
+
+  return normalizeAmount(aggregatedAmount);
 }
 
 function isInvestmentCategory(name: string) {
@@ -216,7 +277,10 @@ function mapRawBudgetRow(row: string[], index: number): RawBudgetRow {
   const committedTotal = toNumber(row[19]) || toNumber(row[17]) + toNumber(row[18]);
   const disbursedTotal = toNumber(row[22]) || toNumber(row[20]) + toNumber(row[21]);
   const utilizationTotal = toNumber(row[23]) || committedTotal + disbursedTotal;
-  const netTotal = toNumber(row[12]) || toNumber(row[9]) + toNumber(row[10]) + toNumber(row[11]) + toNumber(row[13]) - toNumber(row[14]);
+  const netTotal = toNumber(row[12])
+    || toNumber(row[9]) + toNumber(row[10]) + toNumber(row[11])
+      + toNumber(row[13]) - toNumber(row[14])
+      + toNumber(row[15]) - toNumber(row[16]);
 
   return {
     id: `raw-${index}`,
@@ -387,6 +451,131 @@ function isCoveredRawCell(rawWorkbook: BudgetUtilizationRawWorkbook, rowIndex: n
   ));
 }
 
+function buildDatabaseWorkbook(summary: BudgetUtilizationDashboardSummary | null): BudgetUtilizationRawWorkbook | null {
+  if (!summary?.reportPeriod || summary.items.length === 0) return null;
+
+  const toRow = (
+    firstCell: string,
+    categoryName: string,
+    itemName: string,
+    amount: BudgetUtilizationAmount,
+    output = '',
+    activity = '',
+  ) => {
+    const netTotal = getNetAllocationTotal(amount);
+    const remaining = Math.max(0, netTotal - amount.utilization_total_amount);
+    const row = Array.from({ length: 27 }, () => '');
+    row[0] = firstCell;
+    row[2] = categoryName;
+    row[3] = output;
+    row[4] = activity;
+    row[5] = itemName;
+    row[8] = String(amount.planned_budget_amount);
+    row[9] = String(amount.allocation_tranche_1_amount);
+    row[10] = String(amount.allocation_tranche_2_amount);
+    row[11] = String(amount.allocation_tranche_3_amount);
+    row[12] = String(netTotal);
+    row[13] = String(amount.central_transfer_in_amount);
+    row[14] = String(amount.central_transfer_out_amount);
+    row[15] = String(amount.division_transfer_in_amount);
+    row[16] = String(amount.division_transfer_out_amount);
+    row[17] = String(amount.committed_po_amount);
+    row[18] = String(amount.committed_without_po_amount);
+    row[19] = String(amount.committed_total_amount);
+    row[20] = String(amount.disbursed_general_amount);
+    row[21] = String(amount.disbursed_advance_amount);
+    row[22] = String(amount.disbursed_total_amount);
+    row[23] = String(amount.utilization_total_amount);
+    row[24] = String(remaining);
+    row[25] = String(percent(amount.disbursed_total_amount, netTotal));
+    row[26] = String(percent(amount.utilization_total_amount, netTotal));
+    return row;
+  };
+
+  const rows: string[][] = [
+    ['รายการ', '', 'หมวดงบประมาณ', 'ผลผลิต', 'กิจกรรมหลัก', 'ชื่อโครงการ', '', '', 'วงเงินตามแผน', 'รับจัดสรรงวด 1', 'รับจัดสรรงวด 2', 'รับจัดสรรงวด 3', 'ยอดสุทธิ', 'ส่วนกลางรับโอน', 'ส่วนกลางโอนออก', 'ภายในกองรับโอน', 'ภายในกองโอนออก', 'มี PO', 'ไม่มี PO', 'ผูกพันรวม', 'เบิกจ่ายทั่วไป', 'เงินยืมราชการ', 'เบิกจ่ายรวม', 'รวม', 'คงเหลือ', 'ร้อยละเบิกจ่าย', 'ร้อยละรวม'],
+    toRow('รวมทั้งสิ้น', '', 'รวมทั้งสิ้น', summary.totals),
+  ];
+  const itemById = new Map(summary.items.map((item) => [item.id, item]));
+  const categoryByItemId = new Map<string, BudgetUtilizationItemWithAmount>();
+  const findCategory = (item: BudgetUtilizationItemWithAmount) => {
+    if (categoryByItemId.has(item.id)) return categoryByItemId.get(item.id) ?? null;
+    let current: BudgetUtilizationItemWithAmount | null = item;
+    while (current && current.row_type !== 'budget_category') {
+      current = current.parent_id ? itemById.get(current.parent_id) ?? null : null;
+    }
+    if (current) categoryByItemId.set(item.id, current);
+    return current;
+  };
+  const isProjectItem = (item: BudgetUtilizationItemWithAmount) => {
+    let current: BudgetUtilizationItemWithAmount | null = item;
+    while (current) {
+      if (current.row_type === 'major_project' || /โครงการใหญ่/.test(current.item_name)) return true;
+      current = current.parent_id ? itemById.get(current.parent_id) ?? null : null;
+    }
+    return false;
+  };
+
+  const categoryAmounts = summary.categoryItems.map((category) => ({
+    category,
+    amount: getCategoryAmount(category, summary.items),
+  }));
+  if (categoryAmounts.length > 0) {
+    rows[1] = toRow('รวมทั้งสิ้น', '', 'รวมทั้งสิ้น', sumBudgetAmounts(categoryAmounts.map(({ amount }) => amount)));
+  }
+
+  for (const { category, amount: categoryAmount } of categoryAmounts) {
+    const compactName = category.item_name.replace(/\s+/g, '');
+    const categoryTotalLabel = compactName.includes('งบดำเนินงาน')
+      ? 'งบดำเนินงาน(รวม)'
+      : `${category.item_name} (รวม)`;
+    rows.push(toRow(categoryTotalLabel, category.item_name, category.item_name, categoryAmount));
+  }
+
+  const detailItems = summary.items.filter((item) => (
+    item.row_type !== 'total'
+    && item.row_type !== 'budget_category'
+    && !summary.items.some((candidate) => candidate.parent_id === item.id)
+  ));
+  const operationsDetails = detailItems.filter((item) => /งบดำเนินงาน/.test(findCategory(item)?.item_name ?? ''));
+  const regularOperations = operationsDetails.filter((item) => !isProjectItem(item));
+  const projectOperations = operationsDetails.filter(isProjectItem);
+  const majorProjectAmounts = summary.items
+    .filter((item) => item.row_type === 'major_project' && /งบดำเนินงาน/.test(findCategory(item)?.item_name ?? ''))
+    .map((item) => getCategoryAmount(item, summary.items));
+  if (regularOperations.length > 0) {
+    rows.push(toRow('งบดำเนินงาน', 'งบดำเนินงาน', 'งบดำเนินงาน', sumBudgetAmounts(regularOperations.map((item) => item.amount))));
+  }
+  if (majorProjectAmounts.length > 0 || projectOperations.length > 0) {
+    const projectAmount = majorProjectAmounts.length > 0
+      ? sumBudgetAmounts(majorProjectAmounts)
+      : sumBudgetAmounts(projectOperations.map((item) => item.amount));
+    rows.push(toRow('งบโครงการ (รวม)', 'งบโครงการ', 'งบโครงการ (รวม)', projectAmount));
+  }
+
+  for (const item of detailItems) {
+    const category = findCategory(item);
+    const categoryName = /งบดำเนินงาน/.test(category?.item_name ?? '')
+      ? isProjectItem(item) ? 'งบโครงการ' : 'งบดำเนินงาน'
+      : category?.item_name ?? '';
+    rows.push(toRow(
+      item.sequence_label ?? '',
+      categoryName,
+      item.item_name,
+      item.amount,
+      item.output_label ?? '',
+      item.activity_label ?? item.activity_sequence_label ?? '',
+    ));
+  }
+
+  return {
+    sheetName: 'ฐานข้อมูลงบประมาณปัจจุบัน',
+    columnCount: 27,
+    rows,
+    merges: [],
+  };
+}
+
 function RawWorkbookTable({ rawWorkbook }: { rawWorkbook: BudgetUtilizationRawWorkbook }) {
   return (
     <div className="overflow-x-auto">
@@ -434,10 +623,11 @@ function RawWorkbookTable({ rawWorkbook }: { rawWorkbook: BudgetUtilizationRawWo
 export function BudgetUtilizationDashboardPage() {
   useAuditPageAccess({ module: 'budget_utilization', action: 'budget_dashboard_access', route: '/budget-utilization' });
   const [searchParams, setSearchParams] = useSearchParams();
+  const initialReportPeriodId = searchParams.get('reportPeriodId') ?? getRememberedDatasetId();
   const [summary, setSummary] = useState<BudgetUtilizationDashboardSummary | null>(null);
   const [rawDetail, setRawDetail] = useState<BudgetUtilizationImportFileDetail | null>(null);
   const [datasetOptions, setDatasetOptions] = useState<BudgetUtilizationDatasetOption[]>([]);
-  const [selectedReportPeriodId, setSelectedReportPeriodId] = useState(searchParams.get('reportPeriodId') ?? '');
+  const [selectedReportPeriodId, setSelectedReportPeriodId] = useState(initialReportPeriodId);
   const [selectedQuarter, setSelectedQuarter] = useState<QuarterKey>('q4');
   const [selectedRawPlanCategoryKey, setSelectedRawPlanCategoryKey] = useState('personnel');
   const [showProjectBar, setShowProjectBar] = useState<boolean>(false);
@@ -489,11 +679,12 @@ export function BudgetUtilizationDashboardPage() {
   };
 
   useEffect(() => {
-    void loadData(searchParams.get('reportPeriodId') ?? '');
+    void loadData(initialReportPeriodId);
   }, []);
 
   const handleDatasetChange = (reportPeriodId: string) => {
     setSelectedReportPeriodId(reportPeriodId);
+    rememberDatasetId(reportPeriodId);
     setSearchParams(reportPeriodId ? { reportPeriodId } : {});
     setShowProjectBar(false);
     setShowBottomTable(false);
@@ -503,7 +694,8 @@ export function BudgetUtilizationDashboardPage() {
   };
 
   const totals = summary?.totals ?? null;
-  const rawWorkbook = rawDetail?.rawWorkbook ?? null;
+  const databaseWorkbook = useMemo(() => buildDatabaseWorkbook(summary), [summary]);
+  const rawWorkbook = rawDetail?.rawWorkbook ?? databaseWorkbook;
   const rawDashboard = useMemo(() => getRawDashboardRows(rawWorkbook), [rawWorkbook]);
   const rawTotal = rawDashboard.total;
   const rawCategoryData = rawDashboard.categories;
@@ -637,6 +829,33 @@ export function BudgetUtilizationDashboardPage() {
       actualDisbursement: actual?.disbursementRate ?? 0,
     };
   }), [rawCategoryData, rawTotal, selectedQuarter]);
+  const displayedAllocationData = useMemo(() => {
+    if (!summary || rawDetail?.rawWorkbook) {
+      return [
+        { name: 'รับจัดสรรงวด 1', value: rawTotal?.allocation1 ?? 0 },
+        { name: 'รับจัดสรรงวด 2', value: rawTotal?.allocation2 ?? 0 },
+        { name: 'รับจัดสรรงวด 3', value: rawTotal?.allocation3 ?? 0 },
+      ].filter((item) => item.value > 0);
+    }
+
+    const childItemIds = new Set(
+      summary.items
+        .map((item) => item.parent_id)
+        .filter((parentId): parentId is string => Boolean(parentId)),
+    );
+    const leafAllocationSource = summary.items.filter((item) => (
+      item.row_type !== 'total' && !childItemIds.has(item.id)
+    ));
+
+    return summary.allocationTranches.map((tranche) => ({
+      name: tranche.label,
+      value: leafAllocationSource.some((item) => item.allocations?.some((allocation) => allocation.tranche_id === tranche.id))
+        ? leafAllocationSource.reduce((total, item) => (
+            total + (item.allocations?.find((allocation) => allocation.tranche_id === tranche.id)?.amount ?? 0)
+          ), 0)
+        : summary.totalItem?.allocations?.find((allocation) => allocation.tranche_id === tranche.id)?.amount ?? 0,
+    })).filter((item) => item.value > 0);
+  }, [rawDetail?.rawWorkbook, rawTotal, summary]);
   const dashboardMetrics = totals ? getDashboardAmountMetrics(totals) : null;
   const allocationData = useMemo(() => [
     { name: 'รับจัดสรร(งวด 1)', value: totals?.allocation_tranche_1_amount ?? 0 },
@@ -832,18 +1051,14 @@ export function BudgetUtilizationDashboardPage() {
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
                       <Pie
-                        data={[
-                          { name: 'รับจัดสรรงวด 1', value: rawTotal.allocation1 },
-                          { name: 'รับจัดสรรงวด 2', value: rawTotal.allocation2 },
-                          { name: 'รับจัดสรรงวด 3', value: rawTotal.allocation3 },
-                        ].filter((item) => item.value > 0)}
+                        data={displayedAllocationData}
                         dataKey="value"
                         nameKey="name"
                         innerRadius={58}
                         outerRadius={88}
                         paddingAngle={2}
                       >
-                        {[rawTotal.allocation1, rawTotal.allocation2, rawTotal.allocation3].filter((value) => value > 0).map((_, index) => (
+                        {displayedAllocationData.map((_, index) => (
                           <Cell key={index} fill={chartColors[index % chartColors.length]} />
                         ))}
                       </Pie>
@@ -859,11 +1074,7 @@ export function BudgetUtilizationDashboardPage() {
                   </div>
                 </div>
                 <div className="space-y-2">
-                  {[
-                    { name: 'รับจัดสรรงวด 1', value: rawTotal.allocation1 },
-                    { name: 'รับจัดสรรงวด 2', value: rawTotal.allocation2 },
-                    { name: 'รับจัดสรรงวด 3', value: rawTotal.allocation3 },
-                  ].filter((item) => item.value > 0).map((item) => (
+                  {displayedAllocationData.map((item) => (
                     <div key={item.name} className="flex items-center justify-between gap-3 text-xs">
                       <span className="min-w-0 truncate text-slate-900">{item.name}</span>
                       <span className="shrink-0 font-semibold text-slate-950">{formatBudgetAmount(item.value, 0)} บาท</span>
@@ -1136,7 +1347,7 @@ export function BudgetUtilizationDashboardPage() {
         </div>
       ) : null}
 
-      {summary && totals ? (
+      {summary && totals && !rawWorkbook ? (
         <div className="space-y-6">
           <section className="grid gap-5 xl:grid-cols-[360px_minmax(0,1fr)]">
             <div className="space-y-4">
