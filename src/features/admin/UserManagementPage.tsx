@@ -253,58 +253,6 @@ function parseDelimitedText(text: string) {
   return rows;
 }
 
-const htmlEntityMap: Record<string, string> = {
-  amp: '&',
-  apos: "'",
-  gt: '>',
-  lt: '<',
-  nbsp: ' ',
-  quot: '"',
-};
-
-function decodeHtmlText(value: string) {
-  return value.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (entity, token: string) => {
-    const normalizedToken = token.toLowerCase();
-
-    if (normalizedToken.startsWith('#x')) {
-      const codePoint = Number.parseInt(normalizedToken.slice(2), 16);
-      return Number.isFinite(codePoint) ? String.fromCodePoint(codePoint) : entity;
-    }
-
-    if (normalizedToken.startsWith('#')) {
-      const codePoint = Number.parseInt(normalizedToken.slice(1), 10);
-      return Number.isFinite(codePoint) ? String.fromCodePoint(codePoint) : entity;
-    }
-
-    return htmlEntityMap[normalizedToken] ?? entity;
-  });
-}
-
-function getHtmlCellText(value: string) {
-  return decodeHtmlText(
-    value
-      .replace(/<br\s*\/?>/gi, '\n')
-      .replace(/<[^>]*>/g, '')
-      .replace(/\s+/g, ' '),
-  ).trim();
-}
-
-function parseHtmlTable(text: string) {
-  const rowMatches = text.match(/<tr\b[^>]*>[\s\S]*?<\/tr>/gi) ?? [];
-  return rowMatches.map((rowHtml) => {
-    const cells: string[] = [];
-    const cellPattern = /<t[hd]\b[^>]*>([\s\S]*?)<\/t[hd]>/gi;
-    let cellMatch: RegExpExecArray | null = cellPattern.exec(rowHtml);
-
-    while (cellMatch) {
-      cells.push(getHtmlCellText(cellMatch[1]));
-      cellMatch = cellPattern.exec(rowHtml);
-    }
-
-    return cells;
-  }).filter((row) => row.some((cell) => cell.length > 0));
-}
-
 function rowsToImportRows(rows: string[][]): UserImportRow[] {
   const [headerRow, ...bodyRows] = rows;
   if (!headerRow) return [];
