@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { AlertCircle, BarChart3, Coins, DatabaseZap, RefreshCw, TrendingUp, WalletCards } from 'lucide-react';
-import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { Bar, BarChart, CartesianGrid, Cell, LabelList, Legend, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { PageHeader } from '../../../components/ui/PageHeader';
 import { useAuditPageAccess } from '../../../hooks/useAuditPageAccess';
 import { getBudgetDashboardSummary, getBudgetImportFileDetail, listBudgetDatasetOptions } from '../services/budgetUtilization.service';
@@ -515,8 +515,62 @@ export function BudgetUtilizationDashboardPage() {
     if (showProjectBar) {
       keys.push("project");
     }
-    return rawPlanCategoryData.filter((item) => keys.includes(item.key));
-  }, [rawPlanCategoryData, showProjectBar]);
+
+    const visibleCategories = rawPlanCategoryData.filter((item) => keys.includes(item.key));
+    if (!showProjectBar || !showBottomTable) return visibleCategories;
+
+    const projectCategory = rawPlanCategoryData.find((item) => item.key === "project");
+    if (!projectCategory) return visibleCategories;
+
+    return visibleCategories.map((item) => {
+      if (item.key !== "operations_total") return item;
+
+      const netTotal = item.netTotal - projectCategory.netTotal;
+      const disbursedTotal = item.disbursedTotal - projectCategory.disbursedTotal;
+      const utilizationTotal = item.utilizationTotal - projectCategory.utilizationTotal;
+
+      return {
+        ...item,
+        planned: item.planned - projectCategory.planned,
+        allocation1: item.allocation1 - projectCategory.allocation1,
+        allocation2: item.allocation2 - projectCategory.allocation2,
+        allocation3: item.allocation3 - projectCategory.allocation3,
+        netTotal,
+        centralIn: item.centralIn - projectCategory.centralIn,
+        centralOut: item.centralOut - projectCategory.centralOut,
+        divisionIn: item.divisionIn - projectCategory.divisionIn,
+        divisionOut: item.divisionOut - projectCategory.divisionOut,
+        committedPo: item.committedPo - projectCategory.committedPo,
+        committedWithoutPo: item.committedWithoutPo - projectCategory.committedWithoutPo,
+        committedTotal: item.committedTotal - projectCategory.committedTotal,
+        disbursedGeneral: item.disbursedGeneral - projectCategory.disbursedGeneral,
+        disbursedAdvance: item.disbursedAdvance - projectCategory.disbursedAdvance,
+        disbursedTotal,
+        utilizationTotal,
+        remaining: item.remaining - projectCategory.remaining,
+        disbursementRate: percent(disbursedTotal, netTotal),
+        utilizationWithPoRate: percent(utilizationTotal, netTotal),
+      };
+    });
+  }, [rawPlanCategoryData, showBottomTable, showProjectBar]);
+
+  const visiblePlanChartData = useMemo(() => visiblePlanCategoryData.map((item) => {
+    const allocatedBudget = item.netTotal;
+    const remainingFromAllocation = allocatedBudget - item.disbursedTotal;
+    const remainingFromAllocationRate = allocatedBudget > 0 ? (remainingFromAllocation * 100) / allocatedBudget : 0;
+    const disbursementRate = allocatedBudget > 0 ? (item.disbursedTotal * 100) / allocatedBudget : 0;
+
+    return {
+      ...item,
+      allocatedBudget,
+      remainingFromAllocation,
+      remainingFromAllocationRate,
+      disbursementRateLabel: `เบิก ${formatBudgetAmount(disbursementRate)}%`,
+      remainingFromAllocationLabel: remainingFromAllocation >= 0
+        ? `เหลือ ${formatBudgetAmount(remainingFromAllocationRate)}%`
+        : `เกิน ${formatBudgetAmount(Math.abs(remainingFromAllocationRate))}%`,
+    };
+  }), [visiblePlanCategoryData]);
 
   const selectedRawPlanCategory = rawPlanCategoryData.find((item) => item.key === selectedRawPlanCategoryKey) ?? rawPlanCategoryData[0] ?? rawTotal;
   const selectedRawPlanDetailRows = useMemo(() => {
@@ -528,7 +582,8 @@ export function BudgetUtilizationDashboardPage() {
     const fallback = { netTotal: rawTotal?.netTotal ?? 0, disbursedTotal: rawTotal?.disbursedTotal ?? 0, remaining: rawTotal?.remaining ?? 0, disbursementRate: rawTotal?.disbursementRate ?? 0 };
     if (!hasPlanBarClicked) return fallback;
     const activeKey = showBottomTable ? "project" : selectedRawPlanCategoryKey;
-    const cat = rawPlanCategoryData.find((item) => item.key === activeKey);
+    const categorySource = showBottomTable ? visiblePlanCategoryData : rawPlanCategoryData;
+    const cat = categorySource.find((item) => item.key === activeKey);
     if (!cat) return fallback;
     return {
       netTotal: cat.netTotal,
@@ -536,7 +591,7 @@ export function BudgetUtilizationDashboardPage() {
       remaining: cat.remaining,
       disbursementRate: cat.disbursementRate,
     };
-  }, [hasPlanBarClicked, showBottomTable, selectedRawPlanCategoryKey, rawPlanCategoryData, rawTotal]);
+  }, [hasPlanBarClicked, showBottomTable, showProjectBar, selectedRawPlanCategoryKey, rawPlanCategoryData, rawTotal, visiblePlanCategoryData]);
 
   const projectPlanDetailRows = useMemo(() => {
     return getRawPlanDetailRows(rawWorkbook, "project");
@@ -608,7 +663,6 @@ export function BudgetUtilizationDashboardPage() {
   const dbInvestmentPlanned = useMemo(() => categoryData.find(item => /ลงทุน/.test(item.name))?.amount.planned_budget_amount ?? 0, [categoryData]);
   const dbOperationsPlanned = useMemo(() => categoryData.find(item => /ดำเนินงาน/.test(item.name))?.amount.planned_budget_amount ?? 0, [categoryData]);
   const dbPlannedTotal = useMemo(() => dbPersonnelPlanned + dbInvestmentPlanned + dbOperationsPlanned, [dbPersonnelPlanned, dbInvestmentPlanned, dbOperationsPlanned]);
-
   const assessmentRows = useMemo(() => assessmentGroupOrder.map((group) => {
     const actual = totals ? getActualByGroup(group, totals, categoryData) : null;
     const target = assessmentTargets[group][selectedQuarter];
@@ -623,6 +677,28 @@ export function BudgetUtilizationDashboardPage() {
   }), [categoryData, selectedQuarter, totals]);
 
   const hasData = Boolean((summary?.reportPeriod && totals) || rawTotal);
+
+  const handlePlanCategoryClick = (key: string) => {
+    setHasPlanBarClicked(true);
+    if (key === 'operations_total') {
+      setSelectedRawPlanCategoryKey('operations_total');
+      setShowProjectBar(true);
+      setShowBottomTable(false);
+    } else if (key === 'project') {
+      setShowBottomTable(true);
+    } else {
+      setSelectedRawPlanCategoryKey(key);
+      setShowProjectBar(false);
+      setShowBottomTable(false);
+    }
+  };
+
+  const handleAllocationOverviewClick = () => {
+    setHasPlanBarClicked(false);
+    setSelectedRawPlanCategoryKey('personnel');
+    setShowProjectBar(false);
+    setShowBottomTable(false);
+  };
 
   return (
     <div>
@@ -739,7 +815,20 @@ export function BudgetUtilizationDashboardPage() {
 
               <div className="rounded-md border border-slate-200 bg-white p-4 shadow-sm">
                 <h2 className="text-base font-semibold text-slate-950">งบประมาณที่รับจัดสรร</h2>
-                <div className="relative mt-3 h-56">
+                <div
+                  className="relative mt-3 h-56 cursor-pointer rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-2"
+                  role="button"
+                  tabIndex={0}
+                  title="กลับสู่ภาพรวมงบประมาณที่รับจัดสรร"
+                  aria-label="กลับสู่ภาพรวมงบประมาณที่รับจัดสรร"
+                  onClick={handleAllocationOverviewClick}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      handleAllocationOverviewClick();
+                    }
+                  }}
+                >
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
                       <Pie
@@ -786,31 +875,27 @@ export function BudgetUtilizationDashboardPage() {
             </div>
 
             <div className="flex flex-col gap-4">
-              {(() => {
-                const activeStatLabel = !hasPlanBarClicked ? "ยอดรวมทั้งหมด" : showBottomTable ? "งบโครงการ (รวม)" : (selectedRawPlanCategory?.name ?? "ยอดรวมทั้งหมด");
-                return (
-                  <div className="order-1 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                    <StatCard title="ยอดรวมสุทธิ" value={formatExactBaht(selectedPlanStats.netTotal)} subtext={activeStatLabel} icon={Coins} tone="bg-blue-50 text-blue-700 ring-blue-100" />
-                    <StatCard title="เบิกจ่ายรวม" value={formatExactBaht(selectedPlanStats.disbursedTotal)} subtext={activeStatLabel} icon={WalletCards} tone="bg-emerald-50 text-emerald-700 ring-emerald-100" />
-                    <StatCard title="คงเหลือ" value={formatExactBaht(selectedPlanStats.remaining)} subtext={activeStatLabel} icon={BarChart3} tone="bg-slate-50 text-slate-700 ring-slate-200" />
-                    <StatCard title="ร้อยละเบิกจ่าย" value={`${formatBudgetAmount(selectedPlanStats.disbursementRate)}%`} subtext={activeStatLabel} icon={TrendingUp} tone="bg-amber-50 text-amber-700 ring-amber-100" />
-                  </div>
-                );
-              })()}
+              <div className="order-1 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                <StatCard title="ยอดรวมสุทธิ" value={formatExactBaht(selectedPlanStats.netTotal)} icon={Coins} tone="bg-blue-50 text-blue-700 ring-blue-100" />
+                <StatCard title="เบิกจ่ายรวม" value={formatExactBaht(selectedPlanStats.disbursedTotal)} icon={WalletCards} tone="bg-emerald-50 text-emerald-700 ring-emerald-100" />
+                <StatCard title="คงเหลือ" value={formatExactBaht(selectedPlanStats.remaining)} icon={BarChart3} tone="bg-slate-50 text-slate-700 ring-slate-200" />
+                <StatCard title="ร้อยละเบิกจ่าย" value={`${formatBudgetAmount(selectedPlanStats.disbursementRate)}%`} icon={TrendingUp} tone="bg-amber-50 text-amber-700 ring-amber-100" />
+              </div>
 
               <div className="order-2 rounded-md border border-slate-200 bg-white p-4 shadow-sm">
-                <h2 className="text-base font-semibold text-slate-950">วงเงินตามแผนปฏิบัติราชการ</h2>
+                <h2 className="text-base font-bold text-slate-950">เปรียบเทียบงบประมาณที่รับจัดสรรและผลเบิกจ่ายรวม</h2>
                 <div className="mt-4 grid items-start gap-4 xl:grid-cols-[minmax(540px,0.9fr)_minmax(520px,1fr)]">
                   <div>
-                    <div className="h-96">
+                    <div className="h-96 xl:h-[500px]">
                       <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={visiblePlanCategoryData} margin={{ bottom: 28, left: 18, right: 12, top: 10 }}>
-                          <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                          <XAxis dataKey="name" tick={{ fontSize: 13, fontWeight: 600 }} interval={0} angle={-8} textAnchor="end" height={42} />
-                          <YAxis tick={{ fontSize: 13, fontWeight: 600 }} tickFormatter={(value) => `${Number(value) / 1_000_000}ล.`} />
-                          <Tooltip formatter={(value) => formatBudgetAmount(Number(value))} />
-                          <Bar dataKey="planned" name="วงเงินตามแผน" radius={[4, 4, 0, 0]}>
-                            {visiblePlanCategoryData.map((item) => {
+                        <BarChart data={visiblePlanChartData} margin={{ bottom: 16, left: 18, right: 12, top: 28 }} barGap={4}>
+                          <CartesianGrid stroke="#cbd5e1" strokeDasharray="3 4" vertical={false} />
+                          <XAxis dataKey="name" tick={{ fontSize: 15, fontWeight: 400, fill: '#334155' }} interval={0} angle={-8} textAnchor="end" height={48} />
+                          <YAxis tick={{ fontSize: 14, fontWeight: 400, fill: '#64748b' }} tickFormatter={(value) => `${Number(value) / 1_000_000}ล.`} />
+                          <Tooltip formatter={(value) => formatExactBaht(Number(value))} />
+                          <Legend verticalAlign="bottom" iconType="square" wrapperStyle={{ color: '#334155', fontSize: 14, fontWeight: 400, paddingTop: 8 }} />
+                          <Bar dataKey="allocatedBudget" name="งบประมาณที่รับจัดสรร" fill="#1d4ed8" radius={[5, 5, 0, 0]} animationDuration={450}>
+                            {visiblePlanChartData.map((item) => {
                               const isActive = showBottomTable
                                 ? item.key === "project"
                                 : item.key === selectedRawPlanCategoryKey;
@@ -818,28 +903,54 @@ export function BudgetUtilizationDashboardPage() {
                               return (
                                 <Cell
                                   key={item.key}
-                                  fill={item.color}
-                                  fillOpacity={isActive ? 1 : 0.45}
-                                  stroke={isActive ? "#0f172a" : item.color}
+                                  fill="#1d4ed8"
+                                  fillOpacity={isActive ? 1 : 0.58}
+                                  stroke={isActive ? "#172554" : "#1d4ed8"}
                                   strokeWidth={isActive ? 2 : 1}
                                   className="cursor-pointer"
-                                  onClick={() => {
-                                    setHasPlanBarClicked(true);
-                                    if (item.key === "operations_total") {
-                                      setSelectedRawPlanCategoryKey("operations_total");
-                                      setShowProjectBar(true);
-                                      setShowBottomTable(false);
-                                    } else if (item.key === "project") {
-                                      setShowBottomTable(true);
-                                    } else {
-                                      setSelectedRawPlanCategoryKey(item.key);
-                                      setShowProjectBar(false);
-                                      setShowBottomTable(false);
-                                    }
-                                  }}
+                                  onClick={() => handlePlanCategoryClick(item.key)}
                                 />
                               );
                             })}
+                            <LabelList
+                              dataKey="remainingFromAllocationLabel"
+                              position="top"
+                              fill="#1e3a8a"
+                              fontSize={13}
+                              fontWeight="normal"
+                              stroke="none"
+                              strokeWidth={0}
+                              style={{ fontWeight: 400 }}
+                            />
+                          </Bar>
+                          <Bar dataKey="disbursedTotal" name="ผลเบิกจ่ายรวม" fill="#ea580c" radius={[5, 5, 0, 0]} animationDuration={450}>
+                            {visiblePlanChartData.map((item) => {
+                              const isActive = showBottomTable
+                                ? item.key === "project"
+                                : item.key === selectedRawPlanCategoryKey;
+
+                              return (
+                                <Cell
+                                  key={item.key}
+                                  fill="#ea580c"
+                                  fillOpacity={isActive ? 1 : 0.58}
+                                  stroke={isActive ? "#7c2d12" : "#ea580c"}
+                                  strokeWidth={isActive ? 2 : 1}
+                                  className="cursor-pointer"
+                                  onClick={() => handlePlanCategoryClick(item.key)}
+                                />
+                              );
+                            })}
+                            <LabelList
+                              dataKey="disbursementRateLabel"
+                              position="top"
+                              fill="#9a3412"
+                              fontSize={13}
+                              fontWeight="normal"
+                              stroke="none"
+                              strokeWidth={0}
+                              style={{ fontWeight: 400 }}
+                            />
                           </Bar>
                         </BarChart>
                       </ResponsiveContainer>
@@ -849,14 +960,14 @@ export function BudgetUtilizationDashboardPage() {
                   <div className="flex flex-col gap-4">
                     <div className="rounded-md border border-slate-200 bg-slate-50 shadow-sm">
                       <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-3 py-2">
-                        <h3 className="text-sm font-semibold text-slate-950">
+                        <h3 className="text-sm font-bold text-slate-950">
                           {selectedRawPlanCategoryKey === "operations_total" ? "รายการงบดำเนินงาน (ดำเนินงานปกติ)" : `รายการ${selectedRawPlanCategory?.name ?? "งบประมาณ"}`}
                         </h3>
                         <span className="text-xs font-medium text-slate-500">{selectedRawPlanDetailRows.length.toLocaleString()} รายการ</span>
                       </div>
-                      <div className="max-h-56 overflow-auto">
+                      <div className="max-h-72 overflow-auto">
                         <table className="w-full min-w-[480px] divide-y divide-slate-200 text-xs">
-                          <thead className="sticky top-0 bg-slate-100 text-left font-semibold text-slate-600">
+                          <thead className="sticky top-0 bg-slate-100 text-left font-bold text-slate-700">
                             <tr>
                               <th className="w-[40%] px-2 py-2">รายการ</th>
                               <th className="w-[15%] px-2 py-2 text-right">ผูกพัน รวม PO</th>
@@ -868,7 +979,7 @@ export function BudgetUtilizationDashboardPage() {
                           <tbody className="divide-y divide-slate-100 bg-white">
                             {selectedRawPlanDetailRows.length ? selectedRawPlanDetailRows.map((item) => (
                               <tr key={item.id}>
-                                <td className="w-[40%] max-w-0 px-2 py-2 font-medium text-slate-900">
+                                <td className="w-[40%] max-w-0 px-2 py-2 font-semibold text-slate-900">
                                   <span className="line-clamp-2">{item.name}</span>
                                   <span className="mt-0.5 block text-[11px] font-normal text-slate-500">
                                     ผลผลิตที่ {item.output || "-"} · กิจกรรมหลักที่ {item.activity || "-"}
