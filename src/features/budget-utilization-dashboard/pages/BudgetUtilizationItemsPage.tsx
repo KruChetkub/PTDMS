@@ -5,7 +5,7 @@ import { ConfirmModal } from '../../../components/ui/ConfirmModal';
 import { useAuditPageAccess } from '../../../hooks/useAuditPageAccess';
 import { useAuthStore } from '../../../stores/auth.store';
 import { canManageBudgetUtilization, createBudgetItem, createBudgetReportPeriod, deleteBudgetItem, getBudgetDashboardSummary, saveBudgetAllocationTrancheDefinitions, saveBudgetItemAllocation, updateBudgetItem, updateBudgetItemAmounts, updateBudgetItemDetails } from '../services/budgetUtilization.service';
-import { formatBudgetAmount, getNetAllocationTotal, toNumber } from '../utils/budgetUtilizationCalculations';
+import { formatBudgetAmount, getNetAllocationTotal, percent, toNumber } from '../utils/budgetUtilizationCalculations';
 import type { BudgetUtilizationDashboardSummary, BudgetUtilizationItemInput, BudgetUtilizationItemWithAmount, BudgetUtilizationRowType } from '../types/budgetUtilization.types';
 import { getSafeUserErrorMessage } from '../../../utils/errorHandling';
 
@@ -2144,7 +2144,7 @@ export function BudgetUtilizationItemsPage() {
                 const utilizationTotal = item.amount.utilization_total_amount;
                 const remainingAmount = netTotal - utilizationTotal;
                 const disbursementRate = item.amount.disbursement_rate ?? 0;
-                const utilizationRate = item.amount.utilization_with_po_rate ?? 0;
+                const utilizationRate = percent(utilizationTotal, netTotal);
 
                 return (
                   <tr
