@@ -628,6 +628,80 @@ export async function updateBudgetItem(input: BudgetUtilizationItemInput) {
   return itemResult.data;
 }
 
+export async function updateBudgetItemAmounts(input: BudgetUtilizationItemInput) {
+  if (!input.itemId) throw new Error('ไม่พบรายการที่ต้องการแก้ไขตัวเลข');
+  const allocationsResult = await runSupabaseQuery<any>(
+    budgetClient
+      .from('budget_utilization_item_allocations')
+      .select('amount')
+      .eq('item_id', input.itemId),
+    'รวมยอดจัดสรรทุกงวดก่อนแก้ไขตัวเลข',
+  );
+  const dynamicAllocations = (allocationsResult.data ?? []) as Array<{ amount: number | string }>;
+  const allocationTotal = dynamicAllocations.length > 0
+    ? dynamicAllocations.reduce((sum, allocation) => sum + Number(allocation.amount ?? 0), 0)
+    : (input.allocationTranche1Amount ?? 0)
+      + (input.allocationTranche2Amount ?? 0)
+      + (input.allocationTranche3Amount ?? 0);
+  const committedTotal = (input.committedPoAmount ?? 0) + (input.committedWithoutPoAmount ?? 0);
+  const disbursedTotal = (input.disbursedGeneralAmount ?? 0) + (input.disbursedAdvanceAmount ?? 0);
+  const utilizationTotal = committedTotal + disbursedTotal;
+  const netBudget = allocationTotal
+    + (input.centralTransferInAmount ?? 0)
+    - (input.centralTransferOutAmount ?? 0)
+    + (input.departmentRequestIncreaseAmount ?? 0)
+    - (input.departmentTransferOutAmount ?? 0)
+    + (input.divisionTransferInAmount ?? 0)
+    - (input.divisionTransferOutAmount ?? 0)
+    + committedTotal;
+  const amountPayload = toBudgetAmountPayload(input, input.itemId);
+
+  await runSupabaseQuery(
+    budgetClient
+      .from('budget_utilization_amounts')
+      .update({
+        ...amountPayload,
+        net_budget_after_transfer_amount: netBudget,
+        committed_total_amount: committedTotal,
+        disbursed_total_amount: disbursedTotal,
+        utilization_total_amount: utilizationTotal,
+        remaining_amount: Math.max(0, netBudget - utilizationTotal),
+        disbursement_rate: netBudget === 0 ? 0 : disbursedTotal * 100 / netBudget,
+        utilization_with_po_rate: netBudget === 0 ? 0 : utilizationTotal * 100 / netBudget,
+      })
+      .eq('item_id', input.itemId),
+    'แก้ไขตัวเลขรายการงบประมาณ',
+  );
+}
+
+export async function updateBudgetItemDetails(input: BudgetUtilizationItemInput) {
+  if (!input.itemId) throw new Error('ไม่พบรายการที่ต้องการแก้ไข');
+  const itemPayload = toBudgetItemPayload(input);
+
+  await runSupabaseQuery(
+    budgetClient
+      .from('budget_utilization_items')
+      .update({
+        sequence_label: itemPayload.sequence_label,
+        item_name: itemPayload.item_name,
+        output_label: itemPayload.output_label,
+        activity_sequence_label: itemPayload.activity_sequence_label,
+        activity_label: itemPayload.activity_label,
+        raw_label: itemPayload.raw_label,
+      })
+      .eq('id', input.itemId),
+    'แก้ไขรายละเอียดรายการงบประมาณ',
+  );
+
+  await runSupabaseQuery(
+    budgetClient
+      .from('budget_utilization_amounts')
+      .update({ planned_budget_amount: input.plannedBudgetAmount })
+      .eq('item_id', input.itemId),
+    'แก้ไขวงเงินตามแผนของรายการงบประมาณ',
+  );
+}
+
 export async function deleteBudgetItem(itemId: string) {
   await runSupabaseQuery<any>(
     budgetClient.from('budget_utilization_items').delete().eq('id', itemId),

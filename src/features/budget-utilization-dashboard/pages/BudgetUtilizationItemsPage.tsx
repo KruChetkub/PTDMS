@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type MouseEvent } from 'react';
 import { AlertCircle, Edit3, Plus, RefreshCw, Save, Search, Settings2, Trash2, X } from 'lucide-react';
 import { PageHeader } from '../../../components/ui/PageHeader';
 import { ConfirmModal } from '../../../components/ui/ConfirmModal';
 import { useAuditPageAccess } from '../../../hooks/useAuditPageAccess';
 import { useAuthStore } from '../../../stores/auth.store';
-import { canManageBudgetUtilization, createBudgetItem, createBudgetReportPeriod, deleteBudgetItem, getBudgetDashboardSummary, saveBudgetAllocationTrancheDefinitions, saveBudgetItemAllocation, updateBudgetItem } from '../services/budgetUtilization.service';
+import { canManageBudgetUtilization, createBudgetItem, createBudgetReportPeriod, deleteBudgetItem, getBudgetDashboardSummary, saveBudgetAllocationTrancheDefinitions, saveBudgetItemAllocation, updateBudgetItem, updateBudgetItemAmounts, updateBudgetItemDetails } from '../services/budgetUtilization.service';
 import { formatBudgetAmount, getNetAllocationTotal, toNumber } from '../utils/budgetUtilizationCalculations';
 import type { BudgetUtilizationDashboardSummary, BudgetUtilizationItemInput, BudgetUtilizationItemWithAmount, BudgetUtilizationRowType } from '../types/budgetUtilization.types';
 import { getSafeUserErrorMessage } from '../../../utils/errorHandling';
@@ -79,6 +79,30 @@ type CommitmentForm = {
   itemId: string;
   committedPoAmount: string;
   committedWithoutPoAmount: string;
+};
+
+type EditableAmountField =
+  | 'centralTransferInAmount'
+  | 'centralTransferOutAmount'
+  | 'departmentRequestIncreaseAmount'
+  | 'departmentTransferOutAmount'
+  | 'divisionTransferInAmount'
+  | 'divisionTransferOutAmount'
+  | 'committedPoAmount'
+  | 'committedWithoutPoAmount'
+  | 'disbursedGeneralAmount'
+  | 'disbursedAdvanceAmount';
+
+type CellEditTone = 'amber' | 'cyan' | 'blue' | 'orange' | 'purple' | 'emerald';
+
+type CellEditState = {
+  item: BudgetUtilizationItemWithAmount;
+  label: string;
+  value: string;
+  field?: EditableAmountField;
+  tranche?: TrancheDefinition;
+  allocationDate: string;
+  tone: CellEditTone;
 };
 
 type TrancheDefinition = {
@@ -189,6 +213,65 @@ const emptyTrancheForm: TrancheForm = {
   label: '',
 };
 
+const cellEditToneClasses: Record<CellEditTone, {
+  border: string;
+  heading: string;
+  input: string;
+  note: string;
+  button: string;
+}> = {
+  amber: {
+    border: 'border-t-4 border-t-amber-500',
+    heading: 'text-amber-800',
+    input: 'focus:border-amber-500 focus:ring-amber-100',
+    note: 'border-amber-200 bg-amber-50 text-amber-700',
+    button: 'bg-amber-600 hover:bg-amber-700',
+  },
+  cyan: {
+    border: 'border-t-4 border-t-cyan-600',
+    heading: 'text-cyan-800',
+    input: 'focus:border-cyan-500 focus:ring-cyan-100',
+    note: 'border-cyan-200 bg-cyan-50 text-cyan-700',
+    button: 'bg-cyan-700 hover:bg-cyan-800',
+  },
+  blue: {
+    border: 'border-t-4 border-t-blue-600',
+    heading: 'text-blue-800',
+    input: 'focus:border-blue-500 focus:ring-blue-100',
+    note: 'border-blue-200 bg-blue-50 text-blue-700',
+    button: 'bg-blue-700 hover:bg-blue-800',
+  },
+  orange: {
+    border: 'border-t-4 border-t-orange-500',
+    heading: 'text-orange-800',
+    input: 'focus:border-orange-500 focus:ring-orange-100',
+    note: 'border-orange-200 bg-orange-50 text-orange-700',
+    button: 'bg-orange-600 hover:bg-orange-700',
+  },
+  purple: {
+    border: 'border-t-4 border-t-purple-600',
+    heading: 'text-purple-800',
+    input: 'focus:border-purple-500 focus:ring-purple-100',
+    note: 'border-purple-200 bg-purple-50 text-purple-700',
+    button: 'bg-purple-700 hover:bg-purple-800',
+  },
+  emerald: {
+    border: 'border-t-4 border-t-emerald-600',
+    heading: 'text-emerald-800',
+    input: 'focus:border-emerald-500 focus:ring-emerald-100',
+    note: 'border-emerald-200 bg-emerald-50 text-emerald-700',
+    button: 'bg-emerald-700 hover:bg-emerald-800',
+  },
+};
+
+function getAmountFieldTone(field: EditableAmountField): CellEditTone {
+  if (field.startsWith('central')) return 'cyan';
+  if (field.startsWith('department')) return 'blue';
+  if (field.startsWith('division')) return 'orange';
+  if (field.startsWith('committed')) return 'purple';
+  return 'emerald';
+}
+
 function formFromItem(item: BudgetUtilizationItemWithAmount): ItemForm {
   return {
     itemId: item.id,
@@ -289,6 +372,11 @@ export function BudgetUtilizationItemsPage() {
   const [trancheForm, setTrancheForm] = useState<TrancheForm>(emptyTrancheForm);
   const [isCategoryManagerOpen, setIsCategoryManagerOpen] = useState(false);
   const [isTrancheManagerOpen, setIsTrancheManagerOpen] = useState(false);
+  const [editModalItem, setEditModalItem] = useState<BudgetUtilizationItemWithAmount | null>(null);
+  const [editModalForm, setEditModalForm] = useState<ItemForm>(emptyMainForm);
+  const [editModalError, setEditModalError] = useState<string | null>(null);
+  const [cellEdit, setCellEdit] = useState<CellEditState | null>(null);
+  const [cellEditError, setCellEditError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<BudgetUtilizationItemWithAmount | null>(null);
   const [loading, setLoading] = useState(true);
@@ -632,71 +720,126 @@ export function BudgetUtilizationItemsPage() {
   };
 
   const startEdit = (item: BudgetUtilizationItemWithAmount) => {
-    if (item.row_type === 'major_project' && (item.source_import_batch_id === null || getDirectChildCount(item.id) > 0)) {
-      setMajorProjectForm(formFromItem(item));
-      setSelectedMajorProjectId(item.id);
-      setSelectedSubActivityId('');
-      setSubActivityForm({ ...emptySubActivityForm, parentId: item.id });
-      setChildForm(emptyChildForm);
-      setSelectedCategoryId(item.parent_id ?? '');
-      setMainForm(emptyMainForm);
+    setEditModalItem(item);
+    setEditModalForm(formFromItem(item));
+    setEditModalError(null);
+  };
+
+  const closeEditModal = () => {
+    if (saving) return;
+    setEditModalItem(null);
+    setEditModalForm(emptyMainForm);
+    setEditModalError(null);
+  };
+
+  const saveEditModal = async () => {
+    if (!editModalItem || !editModalForm.itemName.trim()) {
+      setEditModalError('กรุณาระบุชื่อรายการงบประมาณ');
       return;
     }
 
-    if (item.row_type === 'sub_project' && (item.source_import_batch_id === null || getDirectChildCount(item.id) > 0)) {
-      const majorProject = allBudgetItems.find((candidate) => candidate.id === item.parent_id) ?? null;
-      setSubActivityForm(formFromItem(item));
-      setSelectedMajorProjectId(majorProject?.id ?? '');
-      setSelectedSubActivityId(item.id);
-      setChildForm({ ...emptyChildForm, parentId: item.id, rowType: 'activity' });
-      setSelectedCategoryId(majorProject?.parent_id ?? '');
-      setMajorProjectForm(emptyMajorProjectForm);
-      setMainForm(emptyMainForm);
-      return;
+    try {
+      setSaving(true);
+      setEditModalError(null);
+      const activeReportPeriodId = await ensureReportPeriodId();
+      await updateBudgetItemDetails(toItemPayload(
+        activeReportPeriodId,
+        editModalForm,
+        editModalItem.parent_id,
+        editModalForm.sequenceLabel || editModalItem.sequence_label || '',
+      ));
+      setEditModalItem(null);
+      setEditModalForm(emptyMainForm);
+      await loadData(activeReportPeriodId);
+    } catch (saveError) {
+      setEditModalError(getSafeUserErrorMessage(saveError, 'ไม่สามารถบันทึกการแก้ไขรายการได้'));
+    } finally {
+      setSaving(false);
     }
+  };
 
-    if (item.parent_id) {
-      setChildForm(formFromItem(item));
-      const directParent = allBudgetItems.find((candidate) => candidate.id === item.parent_id) ?? null;
-      const majorProject = directParent?.row_type === 'sub_project'
-        ? allBudgetItems.find((candidate) => candidate.id === directParent.parent_id) ?? null
-        : directParent?.row_type === 'major_project' ? directParent : null;
-      setSelectedMajorProjectId(majorProject?.id ?? '');
-      setSelectedSubActivityId(directParent?.row_type === 'sub_project' ? directParent.id : '');
-      setSelectedCategoryId(majorProject?.parent_id ?? directParent?.id ?? '');
-      setAllocationForm((current) => ({ ...current, itemId: item.id }));
-      setDisbursementForm({
-        itemId: item.id,
-        disbursedGeneralAmount: String(item.amount.disbursed_general_amount || ''),
-        disbursedAdvanceAmount: String(item.amount.disbursed_advance_amount || ''),
-      });
-      setCentralTransferForm({
-        itemId: item.id,
-        centralTransferInAmount: String(item.amount.central_transfer_in_amount || ''),
-        centralTransferOutAmount: String(item.amount.central_transfer_out_amount || ''),
-      });
-      setDepartmentTransferForm({
-        itemId: item.id,
-        departmentRequestIncreaseAmount: String(item.amount.department_request_increase_amount || ''),
-        departmentTransferOutAmount: String(item.amount.department_transfer_out_amount || ''),
-      });
-      setDivisionTransferForm({
-        itemId: item.id,
-        divisionTransferInAmount: String(item.amount.division_transfer_in_amount || ''),
-        divisionTransferOutAmount: String(item.amount.division_transfer_out_amount || ''),
-      });
-      setCommitmentForm({
-        itemId: item.id,
-        committedPoAmount: String(item.amount.committed_po_amount || ''),
-        committedWithoutPoAmount: String(item.amount.committed_without_po_amount || ''),
-      });
-      setMainForm(emptyMainForm);
-      return;
+  const openAmountCellEdit = (
+    event: MouseEvent<HTMLButtonElement>,
+    item: BudgetUtilizationItemWithAmount,
+    field: EditableAmountField,
+    label: string,
+    value: number,
+  ) => {
+    event.stopPropagation();
+    setCellEdit({ item, field, label, value: String(value || ''), allocationDate: '', tone: getAmountFieldTone(field) });
+    setCellEditError(null);
+  };
+
+  const openAllocationCellEdit = (
+    event: MouseEvent<HTMLButtonElement>,
+    item: BudgetUtilizationItemWithAmount,
+    tranche: TrancheDefinition,
+  ) => {
+    event.stopPropagation();
+    const allocation = item.allocations?.find((entry) => entry.tranche_id === tranche.key) ?? null;
+    const legacyAmount = tranche.trancheNumber === 1
+      ? item.amount.allocation_tranche_1_amount
+      : tranche.trancheNumber === 2
+        ? item.amount.allocation_tranche_2_amount
+        : tranche.trancheNumber === 3 ? item.amount.allocation_tranche_3_amount : 0;
+    const legacyDate = tranche.trancheNumber === 1
+      ? item.amount.allocation_tranche_1_date
+      : tranche.trancheNumber === 2
+        ? item.amount.allocation_tranche_2_date
+        : tranche.trancheNumber === 3 ? item.amount.allocation_tranche_3_date : null;
+
+    setCellEdit({
+      item,
+      tranche,
+      label: tranche.label,
+      value: String(allocation?.amount || legacyAmount || ''),
+      allocationDate: allocation?.allocation_date ?? legacyDate ?? '',
+      tone: 'amber',
+    });
+    setCellEditError(null);
+  };
+
+  const closeCellEdit = () => {
+    if (saving) return;
+    setCellEdit(null);
+    setCellEditError(null);
+  };
+
+  const saveCellEdit = async () => {
+    if (!cellEdit) return;
+
+    try {
+      setSaving(true);
+      setCellEditError(null);
+      const activeReportPeriodId = await ensureReportPeriodId();
+
+      if (cellEdit.tranche) {
+        const selectedTranche = summary?.allocationTranches.find((tranche) => tranche.id === cellEdit.tranche?.key);
+        if (!selectedTranche) throw new Error('ไม่พบงวดจัดสรรที่เลือก');
+        await saveBudgetItemAllocation(
+          cellEdit.item.id,
+          selectedTranche,
+          toNumber(cellEdit.value),
+          cellEdit.allocationDate || null,
+        );
+      } else if (cellEdit.field) {
+        const nextForm = formFromItem(cellEdit.item);
+        nextForm[cellEdit.field] = cellEdit.value;
+        await updateBudgetItemAmounts(toItemPayload(
+          activeReportPeriodId,
+          nextForm,
+          cellEdit.item.parent_id,
+          cellEdit.item.sequence_label ?? '',
+        ));
+      }
+
+      setCellEdit(null);
+      await loadData(activeReportPeriodId);
+    } catch (saveError) {
+      setCellEditError(getSafeUserErrorMessage(saveError, 'ไม่สามารถบันทึกตัวเลขรายการได้'));
+    } finally {
+      setSaving(false);
     }
-
-    setMainForm(formFromItem(item));
-    setChildForm(emptyChildForm);
-    setIsCategoryManagerOpen(true);
   };
 
   const applySelectedAllocationItemValue = (item: BudgetUtilizationItemWithAmount | null, trancheKey: AllocationTrancheKey) => {
@@ -818,7 +961,7 @@ export function BudgetUtilizationItemsPage() {
       nextForm.utilizationTotalAmount = String(utilizationTotal || '');
       nextForm.remainingAmount = String(remainingAmount || '');
 
-      await updateBudgetItem(toItemPayload(activeReportPeriodId, nextForm, selectedDisbursementItem.parent_id, selectedDisbursementItem.sequence_label ?? ''));
+      await updateBudgetItemAmounts(toItemPayload(activeReportPeriodId, nextForm, selectedDisbursementItem.parent_id, selectedDisbursementItem.sequence_label ?? ''));
       await loadData(activeReportPeriodId);
     } catch (saveError) {
       setError(getSafeUserErrorMessage(saveError, 'ไม่สามารถบันทึกเบิก-จ่ายได้'));
@@ -855,7 +998,7 @@ export function BudgetUtilizationItemsPage() {
       nextForm.utilizationTotalAmount = String(utilizationTotal || '');
       nextForm.remainingAmount = String(remainingAmount || '');
 
-      await updateBudgetItem(toItemPayload(activeReportPeriodId, nextForm, selectedCentralTransferItem.parent_id, selectedCentralTransferItem.sequence_label ?? ''));
+      await updateBudgetItemAmounts(toItemPayload(activeReportPeriodId, nextForm, selectedCentralTransferItem.parent_id, selectedCentralTransferItem.sequence_label ?? ''));
       await loadData(activeReportPeriodId);
     } catch (saveError) {
       setError(getSafeUserErrorMessage(saveError, 'ไม่สามารถบันทึกส่วนกลางกรมฯ ได้'));
@@ -890,7 +1033,7 @@ export function BudgetUtilizationItemsPage() {
       nextForm.netBudgetAfterTransferAmount = String(effectiveBudget || '');
       nextForm.remainingAmount = String(remainingAmount || '');
 
-      await updateBudgetItem(toItemPayload(activeReportPeriodId, nextForm, selectedDivisionTransferItem.parent_id, selectedDivisionTransferItem.sequence_label ?? ''));
+      await updateBudgetItemAmounts(toItemPayload(activeReportPeriodId, nextForm, selectedDivisionTransferItem.parent_id, selectedDivisionTransferItem.sequence_label ?? ''));
       await loadData(activeReportPeriodId);
     } catch (saveError) {
       setError(getSafeUserErrorMessage(saveError, 'ไม่สามารถบันทึกภายในกองได้'));
@@ -925,7 +1068,7 @@ export function BudgetUtilizationItemsPage() {
       nextForm.netBudgetAfterTransferAmount = String(effectiveBudget || '');
       nextForm.remainingAmount = String(remainingAmount || '');
 
-      await updateBudgetItem(toItemPayload(activeReportPeriodId, nextForm, selectedDepartmentTransferItem.parent_id, selectedDepartmentTransferItem.sequence_label ?? ''));
+      await updateBudgetItemAmounts(toItemPayload(activeReportPeriodId, nextForm, selectedDepartmentTransferItem.parent_id, selectedDepartmentTransferItem.sequence_label ?? ''));
       await loadData(activeReportPeriodId);
     } catch (saveError) {
       setError(getSafeUserErrorMessage(saveError, 'ไม่สามารถบันทึกภายในกรมได้'));
@@ -959,7 +1102,7 @@ export function BudgetUtilizationItemsPage() {
       nextForm.utilizationTotalAmount = String(utilizationTotal || '');
       nextForm.remainingAmount = String(remainingAmount || '');
 
-      await updateBudgetItem(toItemPayload(activeReportPeriodId, nextForm, selectedCommitmentItem.parent_id, selectedCommitmentItem.sequence_label ?? ''));
+      await updateBudgetItemAmounts(toItemPayload(activeReportPeriodId, nextForm, selectedCommitmentItem.parent_id, selectedCommitmentItem.sequence_label ?? ''));
       await loadData(activeReportPeriodId);
     } catch (saveError) {
       setError(getSafeUserErrorMessage(saveError, 'ไม่สามารถบันทึกผูกพันได้'));
@@ -1525,8 +1668,9 @@ export function BudgetUtilizationItemsPage() {
             ) : null}
           </section>
 
-          <section className="mt-4 rounded-md border border-amber-100 bg-white p-4 shadow-sm">
-            <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="mt-4 grid items-stretch gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
+          <section className="flex min-w-0 flex-col rounded-md border border-amber-200 bg-amber-50/40 p-4 shadow-sm">
+            <div className="mb-3 space-y-3">
               <div>
                 <h2 className="text-base font-semibold text-slate-950">จัดสรรงวด</h2>
                 <p className="mt-1 text-xs text-slate-500">บันทึกยอดจัดสรรแยกเป็นงวด พร้อมวันที่กำกับของแต่ละรายการงบประมาณ</p>
@@ -1538,13 +1682,13 @@ export function BudgetUtilizationItemsPage() {
                   setTrancheForm(emptyTrancheForm);
                   setIsTrancheManagerOpen(true);
                 }}
-                className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                className="inline-flex h-9 w-full items-center justify-center gap-2 rounded-md border border-amber-300 bg-white px-3 text-sm font-semibold text-amber-800 transition hover:bg-amber-50"
               >
                 <Settings2 className="h-4 w-4" aria-hidden="true" />
                 จัดการงวด
               </button>
             </div>
-            <div className="grid gap-3 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,0.8fr)_minmax(0,0.8fr)_minmax(0,0.8fr)_auto] lg:items-end">
+            <div className="flex flex-1 flex-col gap-3">
               <label className="block">
                 <span className="text-xs font-semibold text-slate-600">รายการงบประมาณ</span>
                 <select
@@ -1603,7 +1747,7 @@ export function BudgetUtilizationItemsPage() {
                 type="button"
                 onClick={() => void saveAllocationForm()}
                 disabled={saving || !allocationForm.itemId}
-                className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-amber-600 px-4 text-sm font-semibold text-white transition hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-50"
+                className="mt-auto inline-flex h-10 w-full items-center justify-center gap-2 rounded-md bg-amber-600 px-4 text-sm font-semibold text-white transition hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Save className="h-4 w-4" aria-hidden="true" />
                 บันทึกงวด
@@ -1611,12 +1755,12 @@ export function BudgetUtilizationItemsPage() {
             </div>
           </section>
 
-          <section className="mt-4 rounded-md border border-cyan-100 bg-white p-4 shadow-sm">
+          <section className="flex min-w-0 flex-col rounded-md border border-cyan-200 bg-cyan-50/40 p-4 shadow-sm">
             <div className="mb-3">
               <h2 className="text-base font-semibold text-slate-950">ส่วนกลางกรมฯ</h2>
               <p className="mt-1 text-xs text-slate-500">บันทึกยอดรับโอนและโอนออกจากส่วนกลางกรมฯ สำหรับคำนวณงบสุทธิและคงเหลือ</p>
             </div>
-            <div className="grid gap-3 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,0.8fr)_minmax(0,0.8fr)_auto] lg:items-end">
+            <div className="flex flex-1 flex-col gap-3">
               <label className="block">
                 <span className="text-xs font-semibold text-slate-600">รายการงบประมาณ</span>
                 <select
@@ -1659,7 +1803,7 @@ export function BudgetUtilizationItemsPage() {
                 type="button"
                 onClick={() => void saveCentralTransferForm()}
                 disabled={saving || !centralTransferForm.itemId}
-                className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-cyan-700 px-4 text-sm font-semibold text-white transition hover:bg-cyan-800 disabled:cursor-not-allowed disabled:opacity-50"
+                className="mt-auto inline-flex h-10 w-full items-center justify-center gap-2 rounded-md bg-cyan-700 px-4 text-sm font-semibold text-white transition hover:bg-cyan-800 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Save className="h-4 w-4" aria-hidden="true" />
                 บันทึกส่วนกลาง
@@ -1667,12 +1811,12 @@ export function BudgetUtilizationItemsPage() {
             </div>
           </section>
 
-          <section className="mt-4 rounded-md border border-blue-100 bg-white p-4 shadow-sm">
+          <section className="flex min-w-0 flex-col rounded-md border border-blue-200 bg-blue-50/40 p-4 shadow-sm">
             <div className="mb-3">
               <h2 className="text-base font-semibold text-slate-950">ภายในกรม</h2>
               <p className="mt-1 text-xs text-slate-500">บันทึกยอดขอเพิ่มและโอนออกภายในกรม สำหรับคำนวณงบสุทธิและคงเหลือ</p>
             </div>
-            <div className="grid gap-3 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,0.8fr)_minmax(0,0.8fr)_auto] lg:items-end">
+            <div className="flex flex-1 flex-col gap-3">
               <label className="block">
                 <span className="text-xs font-semibold text-slate-600">รายการงบประมาณ</span>
                 <select
@@ -1715,7 +1859,7 @@ export function BudgetUtilizationItemsPage() {
                 type="button"
                 onClick={() => void saveDepartmentTransferForm()}
                 disabled={saving || !departmentTransferForm.itemId}
-                className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-blue-700 px-4 text-sm font-semibold text-white transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-50"
+                className="mt-auto inline-flex h-10 w-full items-center justify-center gap-2 rounded-md bg-blue-700 px-4 text-sm font-semibold text-white transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Save className="h-4 w-4" aria-hidden="true" />
                 บันทึกภายในกรม
@@ -1723,12 +1867,12 @@ export function BudgetUtilizationItemsPage() {
             </div>
           </section>
 
-          <section className="mt-4 rounded-md border border-orange-100 bg-white p-4 shadow-sm">
+          <section className="flex min-w-0 flex-col rounded-md border border-orange-200 bg-orange-50/40 p-4 shadow-sm">
             <div className="mb-3">
               <h2 className="text-base font-semibold text-slate-950">ภายในกอง</h2>
               <p className="mt-1 text-xs text-slate-500">บันทึกยอดรับโอนและโอนออกภายในกอง สำหรับแสดงในรายการงบประมาณทั้งหมด</p>
             </div>
-            <div className="grid gap-3 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,0.8fr)_minmax(0,0.8fr)_auto] lg:items-end">
+            <div className="flex flex-1 flex-col gap-3">
               <label className="block">
                 <span className="text-xs font-semibold text-slate-600">รายการงบประมาณ</span>
                 <select
@@ -1771,7 +1915,7 @@ export function BudgetUtilizationItemsPage() {
                 type="button"
                 onClick={() => void saveDivisionTransferForm()}
                 disabled={saving || !divisionTransferForm.itemId}
-                className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-orange-600 px-4 text-sm font-semibold text-white transition hover:bg-orange-700 disabled:cursor-not-allowed disabled:opacity-50"
+                className="mt-auto inline-flex h-10 w-full items-center justify-center gap-2 rounded-md bg-orange-600 px-4 text-sm font-semibold text-white transition hover:bg-orange-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Save className="h-4 w-4" aria-hidden="true" />
                 บันทึกภายในกอง
@@ -1779,12 +1923,12 @@ export function BudgetUtilizationItemsPage() {
             </div>
           </section>
 
-          <section className="mt-4 rounded-md border border-purple-100 bg-white p-4 shadow-sm">
+          <section className="flex min-w-0 flex-col rounded-md border border-purple-200 bg-purple-50/40 p-4 shadow-sm">
             <div className="mb-3">
               <h2 className="text-base font-semibold text-slate-950">ผูกพัน</h2>
               <p className="mt-1 text-xs text-slate-500">บันทึกยอดผูกพันแบบมี PO และไม่มี PO ระบบจะรวมยอดไปแสดงในช่องผูกพันรวม</p>
             </div>
-            <div className="grid gap-3 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,0.8fr)_minmax(0,0.8fr)_auto] lg:items-end">
+            <div className="flex flex-1 flex-col gap-3">
               <label className="block">
                 <span className="text-xs font-semibold text-slate-600">รายการงบประมาณ</span>
                 <select
@@ -1827,7 +1971,7 @@ export function BudgetUtilizationItemsPage() {
                 type="button"
                 onClick={() => void saveCommitmentForm()}
                 disabled={saving || !commitmentForm.itemId}
-                className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-purple-700 px-4 text-sm font-semibold text-white transition hover:bg-purple-800 disabled:cursor-not-allowed disabled:opacity-50"
+                className="mt-auto inline-flex h-10 w-full items-center justify-center gap-2 rounded-md bg-purple-700 px-4 text-sm font-semibold text-white transition hover:bg-purple-800 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Save className="h-4 w-4" aria-hidden="true" />
                 บันทึกผูกพัน
@@ -1835,12 +1979,12 @@ export function BudgetUtilizationItemsPage() {
             </div>
           </section>
 
-          <section className="mt-4 rounded-md border border-emerald-100 bg-white p-4 shadow-sm">
+          <section className="flex min-w-0 flex-col rounded-md border border-emerald-200 bg-emerald-50/40 p-4 shadow-sm">
             <div className="mb-3">
               <h2 className="text-base font-semibold text-slate-950">เบิก-จ่าย</h2>
               <p className="mt-1 text-xs text-slate-500">บันทึกยอดเบิกจ่ายทั่วไปและเงินยืมราชการ ระบบจะรวมยอดไปแสดงในช่องเบิกจ่ายรวม</p>
             </div>
-            <div className="grid gap-3 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,0.8fr)_minmax(0,0.8fr)_auto] lg:items-end">
+            <div className="flex flex-1 flex-col gap-3">
               <label className="block">
                 <span className="text-xs font-semibold text-slate-600">รายการงบประมาณ</span>
                 <select
@@ -1883,13 +2027,14 @@ export function BudgetUtilizationItemsPage() {
                 type="button"
                 onClick={() => void saveDisbursementForm()}
                 disabled={saving || !disbursementForm.itemId}
-                className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-emerald-700 px-4 text-sm font-semibold text-white transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-50"
+                className="mt-auto inline-flex h-10 w-full items-center justify-center gap-2 rounded-md bg-emerald-700 px-4 text-sm font-semibold text-white transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Save className="h-4 w-4" aria-hidden="true" />
                 บันทึกเบิก-จ่าย
               </button>
             </div>
           </section>
+          </div>
         </div>
       ) : null}
 
@@ -1919,18 +2064,18 @@ export function BudgetUtilizationItemsPage() {
                   <th
                     key={tranche.key}
                     rowSpan={2}
-                    className="min-w-[120px] border border-slate-200 bg-white px-3 py-3 text-center align-middle"
+                    className="min-w-[120px] border border-amber-300 bg-amber-600 px-3 py-3 text-center align-middle text-white"
                   >
                     <span className="block whitespace-normal">{tranche.label}</span>
-                    <span className="mt-1 block font-normal text-slate-500">({tranche.trancheNumber})</span>
+                    <span className="mt-1 block font-normal text-amber-50">({tranche.trancheNumber})</span>
                   </th>
                 ))}
                 <th rowSpan={2} className="border border-slate-200 bg-lime-50 px-4 py-3 text-center align-middle">ยอดสุทธิงบประมาณ<br />{displayFiscalYear} หลังโอนเปลี่ยนแปลง<br />(1)</th>
-                <th colSpan={2} className="border border-slate-200 bg-green-700 px-4 py-2 text-center font-bold text-white">ส่วนกลางกรมฯ</th>
-                <th colSpan={2} className="border border-slate-200 bg-blue-500 px-4 py-2 text-center font-bold text-white">ภายในกรม</th>
-                <th colSpan={2} className="border border-slate-200 bg-green-400 px-4 py-2 text-center font-bold text-slate-950">ภายในกอง</th>
-                <th colSpan={3} className="border border-slate-200 bg-sky-400 px-4 py-2 text-center font-bold text-slate-950">ผูกพัน</th>
-                <th colSpan={3} className="border border-slate-200 bg-lime-500 px-4 py-2 text-center font-bold text-slate-950">เบิก-จ่าย</th>
+                <th colSpan={2} className="border border-cyan-300 bg-cyan-700 px-4 py-2 text-center font-bold text-white">ส่วนกลางกรมฯ</th>
+                <th colSpan={2} className="border border-blue-300 bg-blue-700 px-4 py-2 text-center font-bold text-white">ภายในกรม</th>
+                <th colSpan={2} className="border border-orange-300 bg-orange-600 px-4 py-2 text-center font-bold text-white">ภายในกอง</th>
+                <th colSpan={3} className="border border-purple-300 bg-purple-700 px-4 py-2 text-center font-bold text-white">ผูกพัน</th>
+                <th colSpan={3} className="border border-emerald-300 bg-emerald-700 px-4 py-2 text-center font-bold text-white">เบิก-จ่าย</th>
                 <th rowSpan={2} className="border border-slate-200 bg-white px-4 py-3 text-center align-middle">รวม<br />(10)<br />=(6)+(9)</th>
                 <th rowSpan={2} className="border border-slate-200 bg-white px-4 py-3 text-center align-middle">คงเหลือ<br />(11)<br />(1)-(10)</th>
                 <th rowSpan={2} className="border border-slate-200 bg-white px-4 py-3 text-center align-middle">เบิกจ่ายตามจัดสรร<br />ร้อยละ<br />(12)<br />(9)*100/(1)</th>
@@ -1938,18 +2083,18 @@ export function BudgetUtilizationItemsPage() {
                 {canManage ? <th rowSpan={2} className="border border-slate-200 bg-white px-4 py-3 text-center align-middle">จัดการ</th> : null}
               </tr>
               <tr>
-                <th className="border border-slate-200 bg-white px-4 py-2 text-center text-slate-700">รับโอน<br />(2)</th>
-                <th className="border border-slate-200 bg-white px-4 py-2 text-center text-slate-700">โอนออก<br />(3)</th>
-                <th className="border border-slate-200 bg-white px-4 py-2 text-center text-slate-700">ขอเพิ่ม</th>
-                <th className="border border-slate-200 bg-white px-4 py-2 text-center text-slate-700">โอนออก</th>
-                <th className="border border-slate-200 bg-white px-4 py-2 text-center text-slate-700">รับโอน<br />(2)</th>
-                <th className="border border-slate-200 bg-white px-4 py-2 text-center text-slate-700">โอนออก<br />(3)</th>
-                <th className="border border-slate-200 bg-white px-4 py-2 text-center text-slate-700">มี PO<br />(4)</th>
-                <th className="border border-slate-200 bg-white px-4 py-2 text-center text-slate-700">ไม่มี PO<br />(5)</th>
-                <th className="border border-slate-200 bg-white px-4 py-2 text-center text-slate-700">รวม<br />(6)<br />=(4)+(5)</th>
-                <th className="border border-slate-200 bg-white px-4 py-2 text-center text-slate-700">เบิกจ่ายทั่วไป<br />(7)</th>
-                <th className="border border-slate-200 bg-white px-4 py-2 text-center text-slate-700">เงินยืมราชการ<br />(8)</th>
-                <th className="border border-slate-200 bg-white px-4 py-2 text-center text-slate-700">รวม<br />(9)<br />=(7)+(8)</th>
+                <th className="border border-cyan-200 bg-cyan-50 px-4 py-2 text-center text-cyan-900">รับโอน<br />(2)</th>
+                <th className="border border-cyan-200 bg-cyan-50 px-4 py-2 text-center text-cyan-900">โอนออก<br />(3)</th>
+                <th className="border border-blue-200 bg-blue-50 px-4 py-2 text-center text-blue-900">ขอเพิ่ม</th>
+                <th className="border border-blue-200 bg-blue-50 px-4 py-2 text-center text-blue-900">โอนออก</th>
+                <th className="border border-orange-200 bg-orange-50 px-4 py-2 text-center text-orange-900">รับโอน<br />(2)</th>
+                <th className="border border-orange-200 bg-orange-50 px-4 py-2 text-center text-orange-900">โอนออก<br />(3)</th>
+                <th className="border border-purple-200 bg-purple-50 px-4 py-2 text-center text-purple-900">มี PO<br />(4)</th>
+                <th className="border border-purple-200 bg-purple-50 px-4 py-2 text-center text-purple-900">ไม่มี PO<br />(5)</th>
+                <th className="border border-purple-200 bg-purple-50 px-4 py-2 text-center text-purple-900">รวม<br />(6)<br />=(4)+(5)</th>
+                <th className="border border-emerald-200 bg-emerald-50 px-4 py-2 text-center text-emerald-900">เบิกจ่ายทั่วไป<br />(7)</th>
+                <th className="border border-emerald-200 bg-emerald-50 px-4 py-2 text-center text-emerald-900">เงินยืมราชการ<br />(8)</th>
+                <th className="border border-emerald-200 bg-emerald-50 px-4 py-2 text-center text-emerald-900">รวม<br />(9)<br />=(7)+(8)</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -1972,9 +2117,19 @@ export function BudgetUtilizationItemsPage() {
                 const utilizationRate = item.amount.utilization_with_po_rate ?? 0;
 
                 return (
-                  <tr key={item.id} className={isCategory ? 'bg-teal-50/50 font-semibold' : isMajorProject ? 'bg-sky-50/60 font-semibold' : isSubActivity ? 'bg-indigo-50/50 font-semibold' : undefined}>
+                  <tr
+                    key={item.id}
+                    className={`${isCategory ? 'bg-teal-50/50 font-semibold' : isMajorProject ? 'bg-sky-50/60 font-semibold' : isSubActivity ? 'bg-indigo-50/50 font-semibold' : ''}`}
+                  >
                     <td className="px-4 py-3 text-slate-900">
-                      <div style={{ paddingLeft: `${item.depth * 18}px` }}>
+                      <button
+                        type="button"
+                        onClick={canManage ? () => startEdit(item) : undefined}
+                        disabled={!canManage}
+                        className={`block w-full rounded-md p-1 text-left ${canManage ? 'transition hover:bg-sky-50 focus:outline-none focus:ring-2 focus:ring-sky-200' : ''}`}
+                        style={{ paddingLeft: `${item.depth * 18}px` }}
+                        title={canManage ? 'แก้ไขรายละเอียดรายการงบประมาณ' : undefined}
+                      >
                         <span className="text-xs text-slate-400">{item.sequence_label}</span>
                         <span className="ml-2">{item.item_name}</span>
                         {!isCategory && (item.output_label || item.activity_sequence_label || item.activity_label) ? (
@@ -1997,10 +2152,20 @@ export function BudgetUtilizationItemsPage() {
                             ต้นทาง: {item.source_sheet_name} · แถว {item.source_row_number}
                           </p>
                         ) : null}
-                      </div>
+                      </button>
                     </td>
                     <td className={`px-4 py-3 text-right ${isCategory ? 'text-slate-400' : isMajorProject || isSubActivity ? 'font-semibold text-slate-900' : amountTextClass ?? ''}`}>
-                      {isCategory ? '-' : formatBudgetAmount(item.amount.planned_budget_amount)}
+                      {isCategory ? '-' : (
+                        <button
+                          type="button"
+                          onClick={canManage ? () => startEdit(item) : undefined}
+                          disabled={!canManage}
+                          className={`w-full rounded px-1 py-1 text-right ${canManage ? 'transition hover:bg-sky-50 hover:text-sky-800 focus:outline-none focus:ring-2 focus:ring-sky-200' : ''}`}
+                          title={canManage ? 'แก้ไขวงเงินตามแผน' : undefined}
+                        >
+                          {formatBudgetAmount(item.amount.planned_budget_amount)}
+                        </button>
+                      )}
                     </td>
                     {trancheDefinitions.map((tranche) => {
                       const allocation = item.allocations?.find((entry) => entry.tranche_id === tranche.key) ?? null;
@@ -2015,22 +2180,26 @@ export function BudgetUtilizationItemsPage() {
                           className={`px-3 py-3 text-right ${amountTextClass ?? ''}`}
                           title={allocation?.allocation_date ? `วันที่จัดสรร ${allocation.allocation_date}` : undefined}
                         >
-                          {isHeading ? '-' : formatBudgetAmount(allocation?.amount ?? legacyAmount)}
+                          {isHeading ? '-' : (
+                            <button type="button" onClick={(event) => openAllocationCellEdit(event, item, tranche)} className="w-full rounded px-1 py-1 text-right transition hover:bg-amber-50 hover:text-amber-800 focus:outline-none focus:ring-2 focus:ring-amber-300" title={`แก้ไข ${tranche.label}`}>
+                              {formatBudgetAmount(allocation?.amount ?? legacyAmount)}
+                            </button>
+                          )}
                         </td>
                       );
                     })}
                     <td className={`px-4 py-3 text-right font-semibold ${isHeading ? amountTextClass ?? '' : 'text-slate-900'}`}>{isHeading ? '-' : formatBudgetAmount(netTotal)}</td>
-                    <td className={`px-4 py-3 text-right ${amountTextClass ?? ''}`}>{isHeading ? '-' : formatBudgetAmount(item.amount.central_transfer_in_amount || 0)}</td>
-                    <td className={`px-4 py-3 text-right ${amountTextClass ?? ''}`}>{isHeading ? '-' : formatBudgetAmount(item.amount.central_transfer_out_amount || 0)}</td>
-                    <td className={`px-4 py-3 text-right ${amountTextClass ?? ''}`}>{isHeading ? '-' : formatBudgetAmount(item.amount.department_request_increase_amount || 0)}</td>
-                    <td className={`px-4 py-3 text-right ${amountTextClass ?? ''}`}>{isHeading ? '-' : formatBudgetAmount(item.amount.department_transfer_out_amount || 0)}</td>
-                    <td className={`px-4 py-3 text-right ${amountTextClass ?? ''}`}>{isHeading ? '-' : formatBudgetAmount(item.amount.division_transfer_in_amount || 0)}</td>
-                    <td className={`px-4 py-3 text-right ${amountTextClass ?? ''}`}>{isHeading ? '-' : formatBudgetAmount(item.amount.division_transfer_out_amount || 0)}</td>
-                    <td className={`px-4 py-3 text-right ${amountTextClass ?? ''}`}>{isHeading ? '-' : formatBudgetAmount(item.amount.committed_po_amount || 0)}</td>
-                    <td className={`px-4 py-3 text-right ${amountTextClass ?? ''}`}>{isHeading ? '-' : formatBudgetAmount(item.amount.committed_without_po_amount || 0)}</td>
+                    <td className={`px-4 py-3 text-right ${amountTextClass ?? ''}`}>{isHeading ? '-' : <button type="button" onClick={(event) => openAmountCellEdit(event, item, 'centralTransferInAmount', 'ส่วนกลางกรมฯ รับโอน', item.amount.central_transfer_in_amount)} className="w-full rounded px-1 py-1 text-right transition hover:bg-cyan-50 hover:text-cyan-800 focus:outline-none focus:ring-2 focus:ring-cyan-300">{formatBudgetAmount(item.amount.central_transfer_in_amount || 0)}</button>}</td>
+                    <td className={`px-4 py-3 text-right ${amountTextClass ?? ''}`}>{isHeading ? '-' : <button type="button" onClick={(event) => openAmountCellEdit(event, item, 'centralTransferOutAmount', 'ส่วนกลางกรมฯ โอนออก', item.amount.central_transfer_out_amount)} className="w-full rounded px-1 py-1 text-right transition hover:bg-cyan-50 hover:text-cyan-800 focus:outline-none focus:ring-2 focus:ring-cyan-300">{formatBudgetAmount(item.amount.central_transfer_out_amount || 0)}</button>}</td>
+                    <td className={`px-4 py-3 text-right ${amountTextClass ?? ''}`}>{isHeading ? '-' : <button type="button" onClick={(event) => openAmountCellEdit(event, item, 'departmentRequestIncreaseAmount', 'ภายในกรม ขอเพิ่ม', item.amount.department_request_increase_amount)} className="w-full rounded px-1 py-1 text-right transition hover:bg-blue-50 hover:text-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-300">{formatBudgetAmount(item.amount.department_request_increase_amount || 0)}</button>}</td>
+                    <td className={`px-4 py-3 text-right ${amountTextClass ?? ''}`}>{isHeading ? '-' : <button type="button" onClick={(event) => openAmountCellEdit(event, item, 'departmentTransferOutAmount', 'ภายในกรม โอนออก', item.amount.department_transfer_out_amount)} className="w-full rounded px-1 py-1 text-right transition hover:bg-blue-50 hover:text-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-300">{formatBudgetAmount(item.amount.department_transfer_out_amount || 0)}</button>}</td>
+                    <td className={`px-4 py-3 text-right ${amountTextClass ?? ''}`}>{isHeading ? '-' : <button type="button" onClick={(event) => openAmountCellEdit(event, item, 'divisionTransferInAmount', 'ภายในกอง รับโอน', item.amount.division_transfer_in_amount)} className="w-full rounded px-1 py-1 text-right transition hover:bg-orange-50 hover:text-orange-800 focus:outline-none focus:ring-2 focus:ring-orange-300">{formatBudgetAmount(item.amount.division_transfer_in_amount || 0)}</button>}</td>
+                    <td className={`px-4 py-3 text-right ${amountTextClass ?? ''}`}>{isHeading ? '-' : <button type="button" onClick={(event) => openAmountCellEdit(event, item, 'divisionTransferOutAmount', 'ภายในกอง โอนออก', item.amount.division_transfer_out_amount)} className="w-full rounded px-1 py-1 text-right transition hover:bg-orange-50 hover:text-orange-800 focus:outline-none focus:ring-2 focus:ring-orange-300">{formatBudgetAmount(item.amount.division_transfer_out_amount || 0)}</button>}</td>
+                    <td className={`px-4 py-3 text-right ${amountTextClass ?? ''}`}>{isHeading ? '-' : <button type="button" onClick={(event) => openAmountCellEdit(event, item, 'committedPoAmount', 'ผูกพัน มี PO', item.amount.committed_po_amount)} className="w-full rounded px-1 py-1 text-right transition hover:bg-purple-50 hover:text-purple-800 focus:outline-none focus:ring-2 focus:ring-purple-300">{formatBudgetAmount(item.amount.committed_po_amount || 0)}</button>}</td>
+                    <td className={`px-4 py-3 text-right ${amountTextClass ?? ''}`}>{isHeading ? '-' : <button type="button" onClick={(event) => openAmountCellEdit(event, item, 'committedWithoutPoAmount', 'ผูกพัน ไม่มี PO', item.amount.committed_without_po_amount)} className="w-full rounded px-1 py-1 text-right transition hover:bg-purple-50 hover:text-purple-800 focus:outline-none focus:ring-2 focus:ring-purple-300">{formatBudgetAmount(item.amount.committed_without_po_amount || 0)}</button>}</td>
                     <td className={`px-4 py-3 text-right ${amountTextClass ?? ''}`}>{isHeading ? '-' : formatBudgetAmount(item.amount.committed_total_amount || 0)}</td>
-                    <td className={`px-4 py-3 text-right ${amountTextClass ?? ''}`}>{isHeading ? '-' : formatBudgetAmount(item.amount.disbursed_general_amount || 0)}</td>
-                    <td className={`px-4 py-3 text-right ${amountTextClass ?? ''}`}>{isHeading ? '-' : formatBudgetAmount(item.amount.disbursed_advance_amount || 0)}</td>
+                    <td className={`px-4 py-3 text-right ${amountTextClass ?? ''}`}>{isHeading ? '-' : <button type="button" onClick={(event) => openAmountCellEdit(event, item, 'disbursedGeneralAmount', 'เบิกจ่ายทั่วไป', item.amount.disbursed_general_amount)} className="w-full rounded px-1 py-1 text-right transition hover:bg-emerald-50 hover:text-emerald-800 focus:outline-none focus:ring-2 focus:ring-emerald-300">{formatBudgetAmount(item.amount.disbursed_general_amount || 0)}</button>}</td>
+                    <td className={`px-4 py-3 text-right ${amountTextClass ?? ''}`}>{isHeading ? '-' : <button type="button" onClick={(event) => openAmountCellEdit(event, item, 'disbursedAdvanceAmount', 'เงินยืมราชการ', item.amount.disbursed_advance_amount)} className="w-full rounded px-1 py-1 text-right transition hover:bg-emerald-50 hover:text-emerald-800 focus:outline-none focus:ring-2 focus:ring-emerald-300">{formatBudgetAmount(item.amount.disbursed_advance_amount || 0)}</button>}</td>
                     <td className={`px-4 py-3 text-right ${amountTextClass ?? ''}`}>{isHeading ? '-' : formatBudgetAmount(item.amount.disbursed_total_amount || 0)}</td>
                     <td className={`px-4 py-3 text-right font-semibold ${isHeading ? amountTextClass ?? '' : 'text-slate-900'}`}>{isHeading ? '-' : formatBudgetAmount(utilizationTotal)}</td>
                     <td className={`px-4 py-3 text-right ${amountTextClass ?? ''}`}>{isHeading ? '-' : formatBudgetAmount(remainingAmount)}</td>
@@ -2039,12 +2208,13 @@ export function BudgetUtilizationItemsPage() {
                     {canManage ? (
                       <td className="px-4 py-3 text-right">
                         <div className="flex justify-end gap-1">
-                          <button type="button" onClick={() => startEdit(item)} className="rounded-md border border-slate-200 p-2 text-slate-600 transition hover:bg-slate-50" aria-label="แก้ไขรายการ">
+                          <button type="button" onClick={(event) => { event.stopPropagation(); startEdit(item); }} className="rounded-md border border-slate-200 p-2 text-slate-600 transition hover:bg-slate-50" aria-label="แก้ไขรายการ">
                             <Edit3 className="h-4 w-4" aria-hidden="true" />
                           </button>
                           <button
                             type="button"
-                            onClick={() => {
+                            onClick={(event) => {
+                              event.stopPropagation();
                               if (getDirectChildCount(item.id) > 0) {
                                 setError('ลบหัวข้อนี้ไม่ได้ เนื่องจากยังมีรายการอยู่ภายใต้หัวข้อนี้');
                                 return;
@@ -2066,6 +2236,115 @@ export function BudgetUtilizationItemsPage() {
           </table>
         </div>
       </section>
+
+      {cellEdit ? (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="budget-cell-edit-title">
+          <button type="button" className="absolute inset-0 bg-slate-950/55 backdrop-blur-sm" onClick={closeCellEdit} aria-label="ปิดหน้าต่างแก้ไขตัวเลข" />
+          <div className={`relative w-full max-w-lg overflow-hidden rounded-md bg-white shadow-2xl ${cellEditToneClasses[cellEdit.tone].border}`}>
+            <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
+              <div className="min-w-0">
+                <h2 id="budget-cell-edit-title" className={`text-lg font-bold ${cellEditToneClasses[cellEdit.tone].heading}`}>แก้ไข{cellEdit.label}</h2>
+                <p className="mt-1 text-sm text-slate-600">
+                  {cellEdit.item.sequence_label ? `${cellEdit.item.sequence_label} ` : ''}{cellEdit.item.item_name}
+                </p>
+              </div>
+              <button type="button" onClick={closeCellEdit} disabled={saving} className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-slate-200 text-slate-600 transition hover:bg-slate-50 disabled:opacity-50" title="ปิด">
+                <X className="h-4 w-4" aria-hidden="true" />
+              </button>
+            </div>
+            <div className="space-y-4 bg-slate-50 p-5">
+              <label className="block">
+                <span className="text-sm font-medium text-slate-700">จำนวนเงิน</span>
+                <input
+                  value={cellEdit.value}
+                  onChange={(event) => setCellEdit((current) => current ? { ...current, value: event.target.value } : current)}
+                  inputMode="decimal"
+                  autoFocus
+                  className={`mt-1 h-11 w-full rounded-md border border-slate-300 bg-white px-3 text-right text-base outline-none focus:ring-2 ${cellEditToneClasses[cellEdit.tone].input}`}
+                  placeholder="0.00"
+                />
+              </label>
+              {cellEdit.tranche ? (
+                <label className="block">
+                  <span className="text-sm font-medium text-slate-700">วันที่จัดสรร</span>
+                  <input
+                    type="date"
+                    value={cellEdit.allocationDate}
+                    onChange={(event) => setCellEdit((current) => current ? { ...current, allocationDate: event.target.value } : current)}
+                    className={`mt-1 h-11 w-full rounded-md border border-slate-300 bg-white px-3 text-sm outline-none focus:ring-2 ${cellEditToneClasses[cellEdit.tone].input}`}
+                  />
+                </label>
+              ) : null}
+              <p className={`rounded-md border px-3 py-2 text-xs ${cellEditToneClasses[cellEdit.tone].note}`}>ระบบจะคำนวณยอดสุทธิ ผลรวม คงเหลือ และร้อยละใหม่หลังบันทึก</p>
+              {cellEditError ? <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700">{cellEditError}</p> : null}
+            </div>
+            <div className="flex justify-end gap-3 border-t border-slate-200 px-5 py-4">
+              <button type="button" onClick={closeCellEdit} disabled={saving} className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50">ยกเลิก</button>
+              <button type="button" onClick={() => void saveCellEdit()} disabled={saving} className={`inline-flex items-center gap-2 rounded-md px-5 py-2 text-sm font-semibold text-white transition disabled:opacity-50 ${cellEditToneClasses[cellEdit.tone].button}`}>
+                <Save className="h-4 w-4" aria-hidden="true" />
+                {saving ? 'กำลังบันทึก...' : 'บันทึกตัวเลข'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {editModalItem ? (
+        <div className="fixed inset-0 z-[65] flex items-center justify-center p-3 sm:p-6" role="dialog" aria-modal="true" aria-labelledby="budget-item-edit-title">
+          <button type="button" className="absolute inset-0 bg-slate-950/55 backdrop-blur-sm" onClick={closeEditModal} aria-label="ปิดหน้าต่างแก้ไข" />
+          <div className="relative flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-md bg-white shadow-2xl">
+            <div className="flex shrink-0 items-center justify-between border-b border-slate-200 px-4 py-3 sm:px-6">
+              <div className="min-w-0">
+                <h2 id="budget-item-edit-title" className="text-lg font-bold text-slate-950">แก้ไขรายการงบประมาณ</h2>
+                <p className="mt-1 truncate text-xs text-slate-500">{editModalItem.sequence_label ? `${editModalItem.sequence_label} ` : ''}{editModalItem.item_name}</p>
+              </div>
+              <button type="button" onClick={closeEditModal} disabled={saving} className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-slate-200 text-slate-600 transition hover:bg-slate-50 disabled:opacity-50" title="ปิด">
+                <X className="h-4 w-4" aria-hidden="true" />
+              </button>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto bg-slate-50 p-4 sm:p-6">
+              <div className="grid gap-4 rounded-md border border-slate-200 bg-white p-4 sm:grid-cols-2">
+                <label className="block">
+                  <span className="text-sm font-medium text-slate-700">ลำดับรายการ</span>
+                  <input value={editModalForm.sequenceLabel} onChange={(event) => setEditModalForm((current) => ({ ...current, sequenceLabel: event.target.value }))} className="mt-1 h-10 w-full rounded-md border border-slate-300 px-3 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100" />
+                </label>
+                <label className="block sm:col-span-2">
+                  <span className="text-sm font-medium text-slate-700">ชื่อรายการงบประมาณ</span>
+                  <input value={editModalForm.itemName} onChange={(event) => setEditModalForm((current) => ({ ...current, itemName: event.target.value }))} className="mt-1 h-10 w-full rounded-md border border-slate-300 px-3 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100" />
+                </label>
+                {editModalItem.row_type !== 'budget_category' ? (
+                  <>
+                    <label className="block">
+                      <span className="text-sm font-medium text-slate-700">ผลผลิต</span>
+                      <input value={editModalForm.outputLabel} onChange={(event) => setEditModalForm((current) => ({ ...current, outputLabel: event.target.value }))} className="mt-1 h-10 w-full rounded-md border border-slate-300 px-3 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100" />
+                    </label>
+                    <label className="block">
+                      <span className="text-sm font-medium text-slate-700">ลำดับกิจกรรม</span>
+                      <input value={editModalForm.activitySequenceLabel} onChange={(event) => setEditModalForm((current) => ({ ...current, activitySequenceLabel: event.target.value }))} className="mt-1 h-10 w-full rounded-md border border-slate-300 px-3 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100" />
+                    </label>
+                    <label className="block sm:col-span-2">
+                      <span className="text-sm font-medium text-slate-700">ชื่อกิจกรรม</span>
+                      <input value={editModalForm.activityLabel} onChange={(event) => setEditModalForm((current) => ({ ...current, activityLabel: event.target.value }))} className="mt-1 h-10 w-full rounded-md border border-slate-300 px-3 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100" />
+                    </label>
+                    <label className="block">
+                      <span className="text-sm font-medium text-slate-700">วงเงินตามแผน</span>
+                      <input value={editModalForm.plannedBudgetAmount} onChange={(event) => setEditModalForm((current) => ({ ...current, plannedBudgetAmount: event.target.value }))} className="mt-1 h-10 w-full rounded-md border border-slate-300 px-3 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100" inputMode="decimal" />
+                    </label>
+                  </>
+                ) : null}
+              </div>
+              {editModalError ? <p className="mt-4 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">{editModalError}</p> : null}
+            </div>
+            <div className="flex shrink-0 justify-end gap-3 border-t border-slate-200 bg-white px-4 py-3 sm:px-6">
+              <button type="button" onClick={closeEditModal} disabled={saving} className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50">ยกเลิก</button>
+              <button type="button" onClick={() => void saveEditModal()} disabled={saving || !editModalForm.itemName.trim()} className="inline-flex items-center gap-2 rounded-md bg-sky-700 px-5 py-2 text-sm font-semibold text-white transition hover:bg-sky-800 disabled:opacity-50">
+                <Save className="h-4 w-4" aria-hidden="true" />
+                {saving ? 'กำลังบันทึก...' : 'บันทึกการแก้ไข'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {isCategoryManagerOpen ? (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-3 sm:p-6" role="dialog" aria-modal="true" aria-labelledby="budget-category-manager-title">
