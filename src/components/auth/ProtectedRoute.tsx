@@ -4,6 +4,7 @@ import { useAuthStore } from '../../stores/auth.store';
 import type { UserRole } from '../../types/roles';
 import { canAccess } from '../../types/roles';
 import { useAutoLogoutTimer } from '../../features/auth/hooks/useAutoLogoutTimer';
+import { ForcedPasswordChangeGate } from './ForcedPasswordChangeGate';
 
 type ProtectedRouteProps = {
   allowedRoles?: UserRole[];
@@ -11,12 +12,34 @@ type ProtectedRouteProps = {
 
 export function ProtectedRoute({ allowedRoles }: ProtectedRouteProps) {
   const location = useLocation();
-  const { initialize, initialized, loading, user, profile } = useAuthStore();
-  useAutoLogoutTimer(Boolean(initialized && user && profile?.status === 'active'));
+  const { initialize, initialized, loading, user, profile, refreshProfile } = useAuthStore();
+  useAutoLogoutTimer(Boolean(initialized && user && profile?.status === 'active' && !profile.force_password_change));
 
   useEffect(() => {
     void initialize();
   }, [initialize]);
+
+  useEffect(() => {
+    if (!initialized || !user) return undefined;
+
+    const refresh = () => {
+      void refreshProfile();
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') refresh();
+    };
+    const intervalId = window.setInterval(refresh, 30_000);
+
+    window.addEventListener('focus', refresh);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    refresh();
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', refresh);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [initialized, location.pathname, refreshProfile, user]);
 
   if (!initialized || loading) {
     return (
@@ -63,6 +86,10 @@ export function ProtectedRoute({ allowedRoles }: ProtectedRouteProps) {
         </div>
       </div>
     );
+  }
+
+  if (profile.force_password_change) {
+    return <ForcedPasswordChangeGate />;
   }
 
   if (!canAccess(profile.role, allowedRoles)) {

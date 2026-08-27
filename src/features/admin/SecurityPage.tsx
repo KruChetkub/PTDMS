@@ -10,9 +10,11 @@ import {
   CloudUpload,
   Loader2,
   RotateCcw,
+  KeyRound,
 } from 'lucide-react';
 import { PageHeader } from '../../components/ui/PageHeader';
 import { BackupRestorePanel } from './BackupRestorePanel';
+import { ForceChangePasswordPanel } from './ForceChangePasswordPanel';
 import {
   exportAuditLogsToGoogleSheet,
   listLoginHistory,
@@ -22,7 +24,7 @@ import {
 import { getSafeUserErrorMessage } from '../../utils/errorHandling';
 
 const loginHistoryPageSize = 10;
-type SecurityTab = 'history' | 'backup';
+type SecurityTab = 'history' | 'backup' | 'force-password';
 
 function downloadAuditArchive(fileName: string, content: string) {
   if (typeof window === 'undefined') return;
@@ -109,6 +111,7 @@ export function SecurityPage() {
         {[
           { value: 'history', label: 'Security & Login History', icon: LogIn },
           { value: 'backup', label: 'Backup / Restore', icon: RotateCcw },
+          { value: 'force-password', label: 'Force Change Password', icon: KeyRound },
         ].map((tab) => {
           const Icon = tab.icon;
           return (
@@ -320,8 +323,10 @@ export function SecurityPage() {
           </div>
         </div>
       </div>
-      ) : (
+      ) : activeTab === 'backup' ? (
         <BackupRestorePanel />
+      ) : (
+        <ForceChangePasswordPanel />
       )}
     </div>
   );

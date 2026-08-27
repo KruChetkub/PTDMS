@@ -2,7 +2,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { Mail } from 'lucide-react';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { ConfiguredNotice } from '../../../components/auth/ConfiguredNotice';
 import { ConfirmModal } from '../../../components/ui/ConfirmModal';
 import { useAuthStore } from '../../../stores/auth.store';
@@ -11,6 +11,8 @@ import { reportClientError } from '../../../utils/errorHandling';
 
 export function ForgotPasswordPage() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const forcedState = location.state as { forcedPasswordChange?: boolean; email?: string } | null;
   const [submitted, setSubmitted] = useState(false);
   const { requestPasswordReset, loading, error, clearError } = useAuthStore();
   const {
@@ -20,7 +22,7 @@ export function ForgotPasswordPage() {
   } = useForm<ForgotPasswordFormValues>({
     resolver: zodResolver(forgotPasswordSchema),
     defaultValues: {
-      email: '',
+      email: forcedState?.email ?? '',
     },
   });
 
@@ -49,6 +51,12 @@ export function ForgotPasswordPage() {
         </div>
 
         <ConfiguredNotice />
+
+        {forcedState?.forcedPasswordChange ? (
+          <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            บัญชีนี้ถูกกำหนดให้เปลี่ยนรหัสผ่าน กรุณาส่งลิงก์ Reset Password และตั้งรหัสผ่านใหม่ก่อนเข้าใช้งานระบบ
+          </div>
+        ) : null}
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 rounded-md border border-slate-200 bg-white p-6 shadow-sm">
           {error ? <div className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div> : null}

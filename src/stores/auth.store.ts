@@ -107,7 +107,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const { data, error } = await supabase
       .from('profiles')
       .select(
-        'user_id, employee_code, full_name, position, department, work_group, gender, education, birth_date, start_work_date, generation, employment_type, role, status, avatar_url, created_at, updated_at',
+        'user_id, employee_code, full_name, position, department, work_group, gender, education, birth_date, start_work_date, generation, employment_type, role, status, avatar_url, force_password_change, force_password_change_requested_at, force_password_change_requested_by, password_changed_at, created_at, updated_at',
       )
       .eq('user_id', userId)
       .maybeSingle();
@@ -203,7 +203,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       throw error;
     }
 
-    set({ loading: false });
+    const { error: completionError } = await supabase.rpc('complete_forced_password_change');
+    if (completionError) {
+      set({ error: completionError.message, loading: false });
+      throw completionError;
+    }
+
+    const profile = await get().refreshProfile();
+    set({ profile, loading: false });
   },
 
   signOut: async () => {

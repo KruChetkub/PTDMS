@@ -16,6 +16,10 @@ export type Profile = {
   role: UserRole;
   status: ProfileStatus;
   avatar_url: string | null;
+  force_password_change: boolean;
+  force_password_change_requested_at: string | null;
+  force_password_change_requested_by: string | null;
+  password_changed_at: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -475,6 +479,10 @@ export type Database = {
           role?: UserRole;
           status?: ProfileStatus;
           avatar_url?: string | null;
+          force_password_change?: boolean;
+          force_password_change_requested_at?: string | null;
+          force_password_change_requested_by?: string | null;
+          password_changed_at?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -1132,6 +1140,31 @@ export type Database = {
           source_survey_id: string;
         };
         Returns: string;
+      };
+      list_force_password_change_users: {
+        Args: Record<string, never>;
+        Returns: Array<{
+          user_id: string;
+          full_name: string;
+          email: string | null;
+          role: UserRole;
+          status: ProfileStatus;
+          force_password_change: boolean;
+          force_password_change_requested_at: string | null;
+          force_password_change_requested_by: string | null;
+          password_changed_at: string | null;
+        }>;
+      };
+      set_force_password_change: {
+        Args: {
+          target_user_ids?: string[] | null;
+          force_change?: boolean;
+        };
+        Returns: number;
+      };
+      complete_forced_password_change: {
+        Args: Record<string, never>;
+        Returns: undefined;
       };
     };
     Enums: {

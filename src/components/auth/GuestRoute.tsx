@@ -24,6 +24,9 @@ export function GuestRoute() {
   }
 
   if (user && profile) {
+    if (profile.force_password_change) {
+      return <Outlet />;
+    }
     return <Navigate to={profile.status === 'pending' ? '/pending-approval' : '/portal'} replace />;
   }
 

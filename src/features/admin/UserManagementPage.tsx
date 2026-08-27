@@ -900,6 +900,10 @@ export function UserManagementPage() {
               generation: null,
               employment_type: imported.employment_type ?? null,
               avatar_url: null,
+              force_password_change: false,
+              force_password_change_requested_at: null,
+              force_password_change_requested_by: null,
+              password_changed_at: null,
               created_at: new Date().toISOString(),
               updated_at: new Date().toISOString(),
             });
