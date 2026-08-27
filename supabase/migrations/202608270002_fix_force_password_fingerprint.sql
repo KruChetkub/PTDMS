@@ -1,134 +1,6 @@
--- Allow super administrators to require password changes without storing passwords.
+-- Remove the pgcrypto digest dependency from forced-password credential tracking.
 
 begin;
-
-alter table public.profiles
-  add column if not exists force_password_change boolean not null default false,
-  add column if not exists force_password_change_requested_at timestamptz,
-  add column if not exists force_password_change_requested_by uuid references public.profiles(user_id) on delete set null,
-  add column if not exists password_changed_at timestamptz;
-
-create schema if not exists private;
-revoke all on schema private from public, anon, authenticated;
-
-create table if not exists private.force_password_change_credentials (
-  user_id uuid primary key references auth.users(id) on delete cascade,
-  credential_fingerprint text not null,
-  requested_at timestamptz not null default now()
-);
-
-revoke all on private.force_password_change_credentials from public, anon, authenticated;
-
-create index if not exists idx_profiles_force_password_change
-on public.profiles(force_password_change)
-where force_password_change = true;
-
-create or replace function public.current_user_role()
-returns public.user_role
-language sql
-stable
-security definer
-set search_path = public
-as $$
-  select role
-  from public.profiles
-  where user_id = auth.uid()
-    and status = 'active'
-    and force_password_change = false
-  limit 1;
-$$;
-
-create or replace function public.protect_force_password_change_fields()
-returns trigger
-language plpgsql
-security definer
-set search_path = public, pg_temp
-as $$
-declare
-  caller_is_super_admin boolean;
-  is_password_completion boolean;
-begin
-  if new.force_password_change is not distinct from old.force_password_change
-    and new.force_password_change_requested_at is not distinct from old.force_password_change_requested_at
-    and new.force_password_change_requested_by is not distinct from old.force_password_change_requested_by
-    and new.password_changed_at is not distinct from old.password_changed_at
-  then
-    return new;
-  end if;
-
-  select exists (
-    select 1
-    from public.profiles caller
-    where caller.user_id = auth.uid()
-      and caller.role = 'super_admin'
-      and caller.status = 'active'
-  ) into caller_is_super_admin;
-
-  is_password_completion := coalesce(
-    current_setting('app.force_password_change_completion', true),
-    ''
-  ) = 'allowed';
-
-  if not caller_is_super_admin and not is_password_completion then
-    raise exception 'Only super administrators can change password enforcement status.' using errcode = '42501';
-  end if;
-
-  return new;
-end;
-$$;
-
-drop trigger if exists protect_force_password_change_fields on public.profiles;
-create trigger protect_force_password_change_fields
-before update of force_password_change, force_password_change_requested_at,
-  force_password_change_requested_by, password_changed_at
-on public.profiles
-for each row
-execute function public.protect_force_password_change_fields();
-
-create or replace function public.list_force_password_change_users()
-returns table (
-  user_id uuid,
-  full_name text,
-  email text,
-  role public.user_role,
-  status public.profile_status,
-  force_password_change boolean,
-  force_password_change_requested_at timestamptz,
-  force_password_change_requested_by uuid,
-  password_changed_at timestamptz
-)
-language plpgsql
-security definer
-set search_path = public, auth, pg_temp
-as $$
-begin
-  if auth.uid() is null or not exists (
-    select 1
-    from public.profiles caller
-    where caller.user_id = auth.uid()
-      and caller.role = 'super_admin'
-      and caller.status = 'active'
-      and caller.force_password_change = false
-  ) then
-    raise exception 'Only active super administrators can view password enforcement.' using errcode = '42501';
-  end if;
-
-  return query
-  select
-    profile.user_id,
-    profile.full_name,
-    auth_user.email::text,
-    profile.role,
-    profile.status,
-    profile.force_password_change,
-    profile.force_password_change_requested_at,
-    profile.force_password_change_requested_by,
-    profile.password_changed_at
-  from public.profiles profile
-  left join auth.users auth_user on auth_user.id = profile.user_id
-  order by profile.full_name, auth_user.email;
-end;
-$$;
 
 create or replace function public.set_force_password_change(
   target_user_ids uuid[] default null,
@@ -274,11 +146,9 @@ begin
 end;
 $$;
 
-revoke all on function public.list_force_password_change_users() from public, anon;
 revoke all on function public.set_force_password_change(uuid[], boolean) from public, anon;
 revoke all on function public.complete_forced_password_change() from public, anon;
 
-grant execute on function public.list_force_password_change_users() to authenticated;
 grant execute on function public.set_force_password_change(uuid[], boolean) to authenticated;
 grant execute on function public.complete_forced_password_change() to authenticated;
 
