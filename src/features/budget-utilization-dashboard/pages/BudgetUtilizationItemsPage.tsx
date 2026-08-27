@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type MouseEvent } from 'react';
-import { AlertCircle, Edit3, Plus, RefreshCw, Save, Search, Settings2, Trash2, X } from 'lucide-react';
+import { AlertCircle, Edit3, Plus, RefreshCw, Save, Search, Settings2, Table2, Trash2, WalletCards, X } from 'lucide-react';
 import { PageHeader } from '../../../components/ui/PageHeader';
 import { ConfirmModal } from '../../../components/ui/ConfirmModal';
 import { useAuditPageAccess } from '../../../hooks/useAuditPageAccess';
@@ -43,6 +43,7 @@ type ItemForm = {
 };
 
 type AllocationTrancheKey = string;
+type ItemsPageTab = 'transactions' | 'items';
 
 type AllocationForm = {
   itemId: string;
@@ -354,6 +355,7 @@ export function BudgetUtilizationItemsPage() {
   const [reportPeriodId, setReportPeriodId] = useState('');
   const [summary, setSummary] = useState<BudgetUtilizationDashboardSummary | null>(null);
   const [keyword, setKeyword] = useState('');
+  const [activeTab, setActiveTab] = useState<ItemsPageTab>('transactions');
   const [mainForm, setMainForm] = useState<ItemForm>(emptyMainForm);
   const [majorProjectForm, setMajorProjectForm] = useState<ItemForm>(emptyMajorProjectForm);
   const [subActivityForm, setSubActivityForm] = useState<ItemForm>(emptySubActivityForm);
@@ -1668,7 +1670,33 @@ export function BudgetUtilizationItemsPage() {
             ) : null}
           </section>
 
-          <div className="mt-4 grid items-stretch gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
+          <div className="mt-4 border-b border-slate-200" role="tablist" aria-label="ส่วนงานรายการงบประมาณ">
+            <div className="flex min-w-max gap-6 overflow-x-auto px-1">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={activeTab === 'transactions'}
+                onClick={() => setActiveTab('transactions')}
+                className={`inline-flex h-11 items-center gap-2 border-b-2 px-1 text-sm font-semibold transition ${activeTab === 'transactions' ? 'border-sky-700 text-sky-800' : 'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-800'}`}
+              >
+                <WalletCards className="h-4 w-4" aria-hidden="true" />
+                บันทึกข้อมูลงบประมาณ
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={activeTab === 'items'}
+                onClick={() => setActiveTab('items')}
+                className={`inline-flex h-11 items-center gap-2 border-b-2 px-1 text-sm font-semibold transition ${activeTab === 'items' ? 'border-sky-700 text-sky-800' : 'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-800'}`}
+              >
+                <Table2 className="h-4 w-4" aria-hidden="true" />
+                รายการงบประมาณทั้งหมด
+              </button>
+            </div>
+          </div>
+
+          {activeTab === 'transactions' ? (
+          <div className="mt-4 grid items-stretch gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6" role="tabpanel">
           <section className="flex min-w-0 flex-col rounded-md border border-amber-200 bg-amber-50/40 p-4 shadow-sm">
             <div className="mb-3 space-y-3">
               <div>
@@ -2035,9 +2063,11 @@ export function BudgetUtilizationItemsPage() {
             </div>
           </section>
           </div>
+          ) : null}
         </div>
       ) : null}
 
+      {!canManage || activeTab === 'items' ? (
       <section className="overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm">
         <div className="flex flex-col gap-3 border-b border-slate-100 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
           <h2 className="text-base font-semibold text-slate-950">รายการงบประมาณทั้งหมด</h2>
@@ -2051,12 +2081,12 @@ export function BudgetUtilizationItemsPage() {
             />
           </label>
         </div>
-        <div className="overflow-x-auto">
+        <div className="max-h-[72vh] overflow-auto">
           <table
             className="divide-y divide-slate-100 text-sm"
             style={{ minWidth: `${2200 + trancheDefinitions.length * 120}px` }}
           >
-            <thead className="bg-slate-50 text-left text-xs font-semibold text-slate-700">
+            <thead className="sticky top-0 z-20 bg-slate-50 text-left text-xs font-semibold text-slate-700 shadow-sm">
               <tr>
                 <th rowSpan={2} className="border border-slate-200 bg-white px-4 py-3 text-center align-middle">ชื่อโครงการ</th>
                 <th rowSpan={2} className="border border-slate-200 bg-white px-4 py-3 text-center align-middle">วงเงินตามแผน<br />ปี {displayFiscalYear}</th>
@@ -2238,6 +2268,7 @@ export function BudgetUtilizationItemsPage() {
           </table>
         </div>
       </section>
+      ) : null}
 
       {cellEdit ? (
         <div className="fixed inset-0 z-[70] flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="budget-cell-edit-title">
