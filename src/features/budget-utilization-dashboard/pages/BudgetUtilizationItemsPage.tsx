@@ -2128,7 +2128,7 @@ export function BudgetUtilizationItemsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {loading ? (
+              {loading && !summary ? (
                 <tr><td colSpan={trancheDefinitions.length + (canManage ? 20 : 19)} className="px-4 py-8 text-center text-slate-500">กำลังโหลดข้อมูล...</td></tr>
               ) : filteredItems.length === 0 ? (
                 <tr><td colSpan={trancheDefinitions.length + (canManage ? 20 : 19)} className="px-4 py-8 text-center text-slate-500">ยังไม่มีรายการงบประมาณ</td></tr>
