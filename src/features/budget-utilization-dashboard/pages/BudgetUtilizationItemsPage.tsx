@@ -2112,7 +2112,7 @@ export function BudgetUtilizationItemsPage() {
                 const amountTextClass = isHeading ? 'text-slate-400' : undefined;
                 const netTotal = getNetAllocationTotal(item.amount);
                 const utilizationTotal = item.amount.utilization_total_amount;
-                const remainingAmount = Math.max(0, netTotal - utilizationTotal);
+                const remainingAmount = netTotal - utilizationTotal;
                 const disbursementRate = item.amount.disbursement_rate ?? 0;
                 const utilizationRate = item.amount.utilization_with_po_rate ?? 0;
 
@@ -2202,7 +2202,9 @@ export function BudgetUtilizationItemsPage() {
                     <td className={`px-4 py-3 text-right ${amountTextClass ?? ''}`}>{isHeading ? '-' : <button type="button" onClick={(event) => openAmountCellEdit(event, item, 'disbursedAdvanceAmount', 'เงินยืมราชการ', item.amount.disbursed_advance_amount)} className="w-full rounded px-1 py-1 text-right transition hover:bg-emerald-50 hover:text-emerald-800 focus:outline-none focus:ring-2 focus:ring-emerald-300">{formatBudgetAmount(item.amount.disbursed_advance_amount || 0)}</button>}</td>
                     <td className={`px-4 py-3 text-right ${amountTextClass ?? ''}`}>{isHeading ? '-' : formatBudgetAmount(item.amount.disbursed_total_amount || 0)}</td>
                     <td className={`px-4 py-3 text-right font-semibold ${isHeading ? amountTextClass ?? '' : 'text-slate-900'}`}>{isHeading ? '-' : formatBudgetAmount(utilizationTotal)}</td>
-                    <td className={`px-4 py-3 text-right ${amountTextClass ?? ''}`}>{isHeading ? '-' : formatBudgetAmount(remainingAmount)}</td>
+                    <td className={`px-4 py-3 text-right ${isHeading ? amountTextClass ?? '' : remainingAmount < 0 ? 'font-semibold text-red-700' : 'text-slate-900'}`}>
+                      {isHeading ? '-' : formatBudgetAmount(remainingAmount)}
+                    </td>
                     <td className={`px-4 py-3 text-right font-semibold ${isHeading ? 'text-slate-400' : 'text-teal-700'}`}>{isHeading ? '-' : `${formatBudgetAmount(disbursementRate)}%`}</td>
                     <td className={`px-4 py-3 text-right font-semibold ${isHeading ? 'text-slate-400' : 'text-sky-700'}`}>{isHeading ? '-' : `${formatBudgetAmount(utilizationRate)}%`}</td>
                     {canManage ? (

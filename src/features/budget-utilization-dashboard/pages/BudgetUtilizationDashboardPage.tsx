@@ -126,6 +126,14 @@ function isProjectBudgetCategory(name: string) {
   return /งบโครงการ/.test(name);
 }
 
+function getProjectRootSequence(values: unknown[]) {
+  for (const value of values) {
+    const match = String(value ?? '').trim().match(/^3\.(5|6)(?=\s|$)/);
+    if (match) return match[0];
+  }
+  return '';
+}
+
 function StatCard({ title, value, subtext = '', icon: Icon, tone }: { title: string; value: string; subtext?: string; icon: typeof Coins; tone: string }) {
   return (
     <div className="rounded-md border border-slate-200 bg-white p-4 shadow-sm">
@@ -422,20 +430,25 @@ function getRawPlanDetailRows(rawWorkbook: BudgetUtilizationRawWorkbook | null |
   if (!definition) return [];
 
   const hasDepartmentColumns = rawWorkbookHasDepartmentTransfers(rawWorkbook);
-  return rawWorkbook.rows
+  const detailRows = rawWorkbook.rows
     .map((row, index) => ({ row, mapped: mapRawBudgetRow(row, index, hasDepartmentColumns) }))
     .filter(({ row, mapped }) => {
       const rowLabel = getRawCell(row, 0);
       const categoryName = getRawCell(row, 2);
       const itemName = getRawCell(row, 5);
+      const projectSequence = categoryKey === 'project' ? getProjectRootSequence(row) : '';
+      const projectName = categoryKey === 'project'
+        ? String(row.find((cell) => /โครงการใหญ่\s*:/.test(String(cell ?? ''))) ?? '').trim()
+        : '';
       const hasMoney = mapped.planned || mapped.netTotal || mapped.utilizationTotal || mapped.remaining || mapped.disbursedTotal;
+      const isProjectRow = categoryKey === 'project' && Boolean(projectSequence);
 
       if (
-        !definition.matcher.test(categoryName)
+        (!definition.matcher.test(categoryName) && !isProjectRow)
         || /\(รวม\)|รวมทั้งสิ้น|ดึงมา/.test(rowLabel)
         || /\(รวม\)|ดึงมา/.test(categoryName)
-        || !itemName
-        || !hasMoney
+        || (!itemName && !projectName)
+        || (!hasMoney && categoryKey !== 'project')
       ) {
         return false;
       }
@@ -448,24 +461,23 @@ function getRawPlanDetailRows(rawWorkbook: BudgetUtilizationRawWorkbook | null |
       }
 
       if (categoryKey === "project") {
-        const output = getRawCell(row, 3);
-        const activity = getRawCell(row, 4);
-        const isTargetMatch = 
-          (output === "2" && activity === "2.2") ||
-          (output === "7" && (activity === "7.2" || activity === "7.4"));
-        return isTargetMatch && itemName.includes("โครงการใหญ่");
+        return isProjectRow;
       }
 
       return true;
     })
     .map(({ row, mapped }) => ({
       ...mapped,
-      name: categoryKey === 'personnel'
-        ? mapped.name.replace(/^\s*งบบุคลากร\s*:\s*/, '')
-        : mapped.name,
+      name: categoryKey === 'project'
+        ? String(row.find((cell) => /โครงการใหญ่\s*:/.test(String(cell ?? ''))) || getRawCell(row, 5) || mapped.name).trim()
+        : categoryKey === 'personnel'
+          ? mapped.name.replace(/^\s*งบบุคลากร\s*:\s*/, '')
+          : mapped.name,
       output: getRawCell(row, 3),
       activity: getRawCell(row, 4),
     }));
+
+  return detailRows;
 }
 
 function getRawActualByGroup(group: AssessmentGroupKey, total: RawBudgetRow | null, categories: RawBudgetRow[]) {
@@ -883,36 +895,36 @@ export function BudgetUtilizationDashboardPage() {
   }, [hasPlanBarClicked, showBottomTable, showProjectBar, selectedRawPlanCategoryKey, rawPlanCategoryData, rawTotal, visiblePlanCategoryData]);
 
   const projectPlanDetailRows = useMemo(() => {
-    return getRawPlanDetailRows(rawWorkbook, "project");
-  }, [rawWorkbook]);
+    const normalizedItems = rawDetail?.items?.length
+      ? rawDetail.items
+      : summary?.items ?? [];
+    const normalizedProjects = normalizedItems
+      .filter((item) => Boolean(getProjectRootSequence([
+        item.sequence_label,
+        ...(item.source_row_data ?? []),
+      ])))
+      .map((item) => {
+        const amount = getCategoryAmount(item, normalizedItems);
+        const netTotal = getNetAllocationTotal(amount);
+        const rawProjectName = item.source_row_data?.find((cell) => /โครงการใหญ่\s*:/.test(String(cell ?? '')));
 
-  const groupedProjectPlanRows = useMemo(() => {
-    const groups: Record<string, { label: string; output: string; activity: string; committedTotal: number; utilizationTotal: number; remaining: number; disbursedTotal: number; netTotal: number }> = {};
-    for (const item of projectPlanDetailRows) {
-      const key = `${item.output}-${item.activity}`;
-      if (!groups[key]) {
-        groups[key] = {
-          label: `ผลผลิตที่ ${item.output} กิจกรรมหลักที่ ${item.activity}`,
-          output: item.output ?? '',
-          activity: item.activity ?? '',
-          committedTotal: 0,
-          utilizationTotal: 0,
-          remaining: 0,
-          disbursedTotal: 0,
-          netTotal: 0,
+        return {
+          id: item.id,
+          name: String(rawProjectName ?? item.item_name).trim(),
+          output: item.output_label ?? '',
+          activity: item.activity_label ?? item.activity_sequence_label ?? '',
+          committedTotal: amount.committed_total_amount,
+          utilizationTotal: amount.utilization_total_amount,
+          remaining: Math.max(0, netTotal - amount.utilization_total_amount),
+          disbursedTotal: amount.disbursed_total_amount,
+          netTotal,
+          disbursementRate: percent(amount.disbursed_total_amount, netTotal),
         };
-      }
-      groups[key].committedTotal += item.committedTotal;
-      groups[key].utilizationTotal += item.utilizationTotal;
-      groups[key].remaining += item.remaining;
-      groups[key].disbursedTotal += item.disbursedTotal;
-      groups[key].netTotal += item.netTotal;
-    }
-    return Object.values(groups).map(g => ({
-      ...g,
-      disbursementRate: percent(g.disbursedTotal, g.netTotal),
-    }));
-  }, [projectPlanDetailRows]);
+      });
+
+    if (normalizedProjects.length > 0) return normalizedProjects;
+    return getRawPlanDetailRows(rawWorkbook, "project");
+  }, [rawDetail?.items, rawWorkbook, summary?.items]);
 
   const rawAssessmentRows = useMemo(() => assessmentGroupOrder.map((group) => {
     const actual = getRawActualByGroup(group, rawTotal, rawCategoryData);
@@ -1333,7 +1345,7 @@ export function BudgetUtilizationDashboardPage() {
                           <h3 className="text-sm font-semibold text-slate-950">
                             รายการงบโครงการ (รวม)
                           </h3>
-                          <span className="text-xs font-medium text-slate-500">{groupedProjectPlanRows.length.toLocaleString()} กิจกรรมหลัก</span>
+                          <span className="text-xs font-medium text-slate-500">{projectPlanDetailRows.length.toLocaleString()} รายการ</span>
                         </div>
                         <div className="max-h-72 overflow-auto">
                           <table className="w-full min-w-[480px] divide-y divide-slate-200 text-xs">
@@ -1347,10 +1359,13 @@ export function BudgetUtilizationDashboardPage() {
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100 bg-white">
-                              {groupedProjectPlanRows.length ? groupedProjectPlanRows.map((item) => (
-                                <tr key={`${item.output}-${item.activity}`}>
+                              {projectPlanDetailRows.length ? projectPlanDetailRows.map((item) => (
+                                <tr key={item.id}>
                                   <td className="w-[40%] max-w-0 px-2 py-2 font-medium text-slate-900">
-                                    <span className="block font-semibold text-slate-950">{item.label}</span>
+                                    <span className="line-clamp-2 font-semibold text-slate-950">{item.name}</span>
+                                    <span className="mt-0.5 block text-[11px] font-normal text-slate-500">
+                                      ผลผลิตที่ {item.output || '-'} · กิจกรรมหลักที่ {item.activity || '-'}
+                                    </span>
                                   </td>
                                   <td className="w-[15%] px-2 py-2 text-right font-semibold text-indigo-700">{formatBudgetAmount(item.committedTotal)}</td>
                                   <td className="w-[15%] px-2 py-2 text-right font-semibold text-slate-950">{formatBudgetAmount(item.utilizationTotal)}</td>
