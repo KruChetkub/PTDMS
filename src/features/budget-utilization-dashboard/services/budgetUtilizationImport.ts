@@ -208,6 +208,10 @@ export function parseRawBudgetWorkbookRows(rawWorkbook: BudgetUtilizationRawWork
   const categoryIds = new Map<string, string>();
   const outputActivityIds = new Map<string, string>();
   let latestCategoryKey = '';
+  let latestCategoryId: string | null = null;
+  let latestOutputActivityId: string | null = null;
+  let latestMajorProjectId: string | null = null;
+  let latestSubProjectId: string | null = null;
 
   const pushRow = (input: {
     row: string[];
@@ -218,6 +222,7 @@ export function parseRawBudgetWorkbookRows(rawWorkbook: BudgetUtilizationRawWork
     depth: number;
     sequenceLabel?: string | null;
     outputLabel?: string | null;
+    activitySequenceLabel?: string | null;
     activityLabel?: string | null;
   }) => {
     const rowNumber = input.rowIndex + 1;
@@ -239,7 +244,7 @@ export function parseRawBudgetWorkbookRows(rawWorkbook: BudgetUtilizationRawWork
       sequence_label: input.sequenceLabel ?? null,
       item_name: safeItemName,
       output_label: input.outputLabel ?? null,
-      activity_sequence_label: null,
+      activity_sequence_label: input.activitySequenceLabel ?? null,
       activity_label: input.activityLabel ?? null,
       raw_label: input.row.filter(Boolean).join(' | '),
       source_import_batch_id: null,
@@ -281,12 +286,16 @@ export function parseRawBudgetWorkbookRows(rawWorkbook: BudgetUtilizationRawWork
         const categoryId = pushRow({ row, rowIndex, itemName: categoryName, rowType: 'budget_category', depth: 0 });
         categoryIds.set(categoryKey, categoryId);
         latestCategoryKey = categoryKey;
+        latestCategoryId = categoryId;
+        latestOutputActivityId = null;
+        latestMajorProjectId = null;
+        latestSubProjectId = null;
         return;
       }
 
       const categoryName = stripCategoryTotalLabel(categoryCell) || stripCategoryTotalLabel(majorProject) || latestCategoryKey;
       const categoryKey = normalizeLabel(categoryName);
-      let categoryId = categoryIds.get(categoryKey) ?? categoryIds.get(latestCategoryKey) ?? null;
+      let categoryId = categoryIds.get(categoryKey) ?? categoryIds.get(latestCategoryKey) ?? latestCategoryId;
 
       if (!categoryId && categoryName) {
         categoryId = pushRow({
@@ -297,6 +306,7 @@ export function parseRawBudgetWorkbookRows(rawWorkbook: BudgetUtilizationRawWork
           depth: 0,
         });
         categoryIds.set(categoryKey, categoryId);
+        latestCategoryId = categoryId;
       }
       if (categoryKey) latestCategoryKey = categoryKey;
 
@@ -314,17 +324,75 @@ export function parseRawBudgetWorkbookRows(rawWorkbook: BudgetUtilizationRawWork
           activityLabel,
         });
         outputActivityIds.set(groupKey, groupId);
+        latestOutputActivityId = groupId;
+        latestMajorProjectId = null;
+        latestSubProjectId = null;
         return;
       }
 
       if (!detailName && !majorProject) return;
 
-      const parentId = outputActivityIds.get(groupKey) ?? categoryId;
+      const isMajorProject = Boolean(majorProject || /โครงการใหญ่/.test(detailName) || /โครงการใหญ่/.test(sequenceLabel));
+      const isSubProject = /โครงการย่อย/.test(detailName) || /โครงการย่อย/.test(sequenceLabel);
+      const isActivity = /กิจกรรมที่/.test(detailName) || /กิจกรรมที่/.test(sequenceLabel);
+
+      if (isMajorProject) {
+        const parentId = latestOutputActivityId ?? categoryId;
+        const majorId = pushRow({
+          row,
+          rowIndex,
+          itemName: detailName || majorProject,
+          rowType: 'major_project',
+          parentId,
+          depth: parentId ? 2 : 1,
+          sequenceLabel: sequenceLabel || null,
+          outputLabel: outputLabel || null,
+          activityLabel: activityLabel || null,
+        });
+        latestMajorProjectId = majorId;
+        latestSubProjectId = null;
+        return;
+      }
+
+      if (isSubProject) {
+        const parentId = latestMajorProjectId ?? latestOutputActivityId ?? categoryId;
+        const subId = pushRow({
+          row,
+          rowIndex,
+          itemName: detailName,
+          rowType: 'sub_project',
+          parentId,
+          depth: parentId ? 3 : 2,
+          sequenceLabel: sequenceLabel || null,
+          outputLabel: outputLabel || null,
+          activityLabel: activityLabel || null,
+        });
+        latestSubProjectId = subId;
+        return;
+      }
+
+      if (isActivity) {
+        const parentId = latestSubProjectId ?? latestMajorProjectId ?? latestOutputActivityId ?? categoryId;
+        pushRow({
+          row,
+          rowIndex,
+          itemName: detailName,
+          rowType: 'activity',
+          parentId,
+          depth: parentId ? 4 : 3,
+          sequenceLabel: sequenceLabel || null,
+          outputLabel: outputLabel || null,
+          activityLabel: activityLabel || null,
+        });
+        return;
+      }
+
+      const parentId = latestOutputActivityId ?? categoryId;
       pushRow({
         row,
         rowIndex,
-        itemName: detailName || majorProject,
-        rowType: majorProject || /โครงการใหญ่/.test(detailName) ? 'major_project' : 'line_item',
+        itemName: detailName,
+        rowType: 'line_item',
         parentId,
         depth: parentId ? (outputActivityIds.has(groupKey) ? 2 : 1) : 0,
         sequenceLabel: sequenceLabel || null,

@@ -70,6 +70,10 @@ export function formatMillionBaht(value: number) {
 
 export function getNetAllocationTotal(amount: Partial<BudgetUtilizationAmount>) {
   const storedNetBudget = toNumber(amount.net_budget_after_transfer_amount);
+  if (storedNetBudget !== 0) {
+    return storedNetBudget;
+  }
+
   const allocationTotal = amount.allocation_total_amount ?? (
     toNumber(amount.allocation_tranche_1_amount) +
     toNumber(amount.allocation_tranche_2_amount) +
@@ -94,7 +98,7 @@ export function getNetAllocationTotal(amount: Partial<BudgetUtilizationAmount>) 
     amount.division_transfer_out_amount,
   ].some((value) => toNumber(value) !== 0);
 
-  return hasNetBudgetComponents ? netAllocationAfterTransfer : storedNetBudget;
+  return hasNetBudgetComponents ? netAllocationAfterTransfer : 0;
 }
 
 export function normalizeAmount(raw?: Partial<BudgetUtilizationAmount> | null): BudgetUtilizationAmount {
@@ -192,29 +196,127 @@ export function sumBudgetAmounts(amounts: BudgetUtilizationAmount[]) {
   ));
 }
 
-export function summarizeBudgetItems(items: BudgetUtilizationItemWithAmount[]) {
-  const totalItem = items.find((item) => item.row_type === 'total') ?? null;
-  if (totalItem) return normalizeAmount(totalItem.amount);
+export const hierarchyAmountFields: Array<keyof BudgetUtilizationAmount> = [
+  'planned_budget_amount',
+  'allocation_tranche_1_amount',
+  'allocation_tranche_2_amount',
+  'allocation_tranche_3_amount',
+  'allocation_total_amount',
+  'net_budget_after_transfer_amount',
+  'central_transfer_in_amount',
+  'central_transfer_out_amount',
+  'department_request_increase_amount',
+  'department_transfer_out_amount',
+  'division_transfer_in_amount',
+  'division_transfer_out_amount',
+  'committed_po_amount',
+  'committed_without_po_amount',
+  'committed_total_amount',
+  'disbursed_general_amount',
+  'disbursed_advance_amount',
+  'disbursed_total_amount',
+  'utilization_total_amount',
+];
 
-  const majorProjectIds = new Set(
-    items.filter((item) => item.row_type === 'major_project').map((item) => item.id),
-  );
-  const itemById = new Map(items.map((item) => [item.id, item]));
-  const hasMajorProjectAncestor = (item: BudgetUtilizationItemWithAmount) => {
-    let parentId = item.parent_id;
-    while (parentId) {
-      if (majorProjectIds.has(parentId)) return true;
-      parentId = itemById.get(parentId)?.parent_id ?? null;
+export function buildHierarchyRollupMap(items: BudgetUtilizationItemWithAmount[]): Map<string, BudgetUtilizationAmount> {
+  const nonTotalItems = items.filter((item) => item.row_type !== 'total');
+  const itemById = new Map(nonTotalItems.map((item) => [item.id, item]));
+
+  const childrenMap = new Map<string, BudgetUtilizationItemWithAmount[]>();
+  nonTotalItems.forEach((item) => {
+    if (item.parent_id) {
+      const list = childrenMap.get(item.parent_id) ?? [];
+      list.push(item);
+      childrenMap.set(item.parent_id, list);
     }
-    return false;
-  };
-  const totals = sumBudgetAmounts(
-    items.map((item) => (
-      hasMajorProjectAncestor(item)
-        ? { ...item.amount, planned_budget_amount: 0 }
-        : item.amount
-    )),
-  );
+  });
 
-  return normalizeAmount(totals);
+  const operationsCategory = nonTotalItems.find((item) =>
+    item.row_type === 'budget_category' && item.item_name.replace(/\s+/g, '').includes('งบดำเนินงาน')
+  );
+  if (operationsCategory) {
+    const orphanMajorProjects = nonTotalItems.filter((item) =>
+      item.row_type === 'major_project' && !item.parent_id
+    );
+    if (orphanMajorProjects.length > 0) {
+      const list = childrenMap.get(operationsCategory.id) ?? [];
+      orphanMajorProjects.forEach((proj) => {
+        if (!list.some((existing) => existing.id === proj.id)) {
+          list.push(proj);
+        }
+      });
+      childrenMap.set(operationsCategory.id, list);
+    }
+  }
+
+  const getLeafDescendants = (nodeId: string): BudgetUtilizationItemWithAmount[] => {
+    const children = childrenMap.get(nodeId) ?? [];
+    if (children.length === 0) {
+      const node = itemById.get(nodeId);
+      return node ? [node] : [];
+    }
+    const leaves: BudgetUtilizationItemWithAmount[] = [];
+    children.forEach((child) => {
+      leaves.push(...getLeafDescendants(child.id));
+    });
+    return leaves;
+  };
+
+  const rollupMap = new Map<string, BudgetUtilizationAmount>();
+
+  nonTotalItems.forEach((item) => {
+    const children = childrenMap.get(item.id) ?? [];
+    if (children.length === 0) {
+      rollupMap.set(item.id, normalizeAmount(item.amount));
+    } else {
+      const leafDescendants = getLeafDescendants(item.id);
+      const uniqueLeaves = Array.from(new Map(leafDescendants.map((leaf) => [leaf.id, leaf])).values());
+      const summed = sumBudgetAmounts(uniqueLeaves.map((leaf) => leaf.amount));
+      const ownAmount = normalizeAmount(item.amount);
+
+      const merged: Record<string, any> = {};
+      hierarchyAmountFields.forEach((field) => {
+        const leafVal = toNumber(summed[field]);
+        const ownVal = toNumber(ownAmount[field]);
+        merged[field] = leafVal !== 0 ? leafVal : ownVal;
+      });
+
+      rollupMap.set(item.id, normalizeAmount(merged as Partial<BudgetUtilizationAmount>));
+    }
+  });
+
+  return rollupMap;
+}
+
+export function summarizeBudgetItems(items: BudgetUtilizationItemWithAmount[]) {
+  const nonTotalItems = items.filter((item) => item.row_type !== 'total');
+  if (nonTotalItems.length === 0) {
+    const totalItem = items.find((item) => item.row_type === 'total');
+    return normalizeAmount(totalItem?.amount);
+  }
+
+  const rollupMap = buildHierarchyRollupMap(items);
+  const categories = nonTotalItems.filter((item) => item.row_type === 'budget_category' && !item.parent_id);
+
+  if (categories.length > 0) {
+    const categoryAmounts = categories.map((cat) => rollupMap.get(cat.id) ?? normalizeAmount(cat.amount));
+    const orphanRoots = nonTotalItems.filter((item) =>
+      !item.parent_id
+      && item.row_type !== 'budget_category'
+      && item.row_type !== 'major_project'
+    );
+    const orphanAmounts = orphanRoots.map((item) => rollupMap.get(item.id) ?? normalizeAmount(item.amount));
+    return sumBudgetAmounts([...categoryAmounts, ...orphanAmounts]);
+  }
+
+  const parentIds = new Set(
+    nonTotalItems.map((item) => item.parent_id).filter(Boolean) as string[],
+  );
+  const leafItems = nonTotalItems.filter((item) => !parentIds.has(item.id));
+
+  if (leafItems.length > 0) {
+    return sumBudgetAmounts(leafItems.map((item) => rollupMap.get(item.id) ?? normalizeAmount(item.amount)));
+  }
+
+  return sumBudgetAmounts(nonTotalItems.map((item) => rollupMap.get(item.id) ?? normalizeAmount(item.amount)));
 }

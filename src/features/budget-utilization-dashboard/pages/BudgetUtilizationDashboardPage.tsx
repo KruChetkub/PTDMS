@@ -5,7 +5,7 @@ import { Bar, BarChart, CartesianGrid, Cell, LabelList, Legend, Pie, PieChart, R
 import { PageHeader } from '../../../components/ui/PageHeader';
 import { useAuditPageAccess } from '../../../hooks/useAuditPageAccess';
 import { getBudgetDashboardSummary, getBudgetImportFileDetail, listBudgetDatasetOptions } from '../services/budgetUtilization.service';
-import { formatBudgetAmount, getNetAllocationTotal, normalizeAmount, percent, sumBudgetAmounts, toNumber } from '../utils/budgetUtilizationCalculations';
+import { buildHierarchyRollupMap, formatBudgetAmount, getNetAllocationTotal, normalizeAmount, percent, sumBudgetAmounts, summarizeBudgetItems, toNumber } from '../utils/budgetUtilizationCalculations';
 import type { BudgetUtilizationAmount, BudgetUtilizationDashboardSummary, BudgetUtilizationDatasetOption, BudgetUtilizationImportFileDetail, BudgetUtilizationItemWithAmount, BudgetUtilizationRawWorkbook } from '../types/budgetUtilization.types';
 import { getSafeUserErrorMessage } from '../../../utils/errorHandling';
 
@@ -296,14 +296,11 @@ function mapRawBudgetRow(row: string[], index: number, hasDepartmentColumns = fa
   const name = (/\(รวม\)/.test(summaryLabel) || summaryLabel === 'งบดำเนินงาน')
     ? summaryLabel
     : getRawCell(row, 5) || getRawCell(row, 1) || summaryLabel || `แถวที่ ${index + 1}`;
+  const netTotal = toNumber(row[12]);
   const committedTotal = toNumber(row[19 + transferOffset]) || toNumber(row[17 + transferOffset]) + toNumber(row[18 + transferOffset]);
   const disbursedTotal = toNumber(row[22 + transferOffset]) || toNumber(row[20 + transferOffset]) + toNumber(row[21 + transferOffset]);
   const utilizationTotal = toNumber(row[23 + transferOffset]) || committedTotal + disbursedTotal;
-  const calculatedNetTotal = toNumber(row[9]) + toNumber(row[10]) + toNumber(row[11])
-    + toNumber(row[13]) - toNumber(row[14])
-    + (hasDepartmentColumns ? toNumber(row[15]) - toNumber(row[16]) : 0)
-    + toNumber(row[15 + transferOffset]) - toNumber(row[16 + transferOffset]);
-  const netTotal = toNumber(row[12]) || calculatedNetTotal;
+  const remaining = toNumber(row[24 + transferOffset]) || (netTotal - utilizationTotal);
 
   return {
     id: `raw-${index}`,
@@ -326,7 +323,7 @@ function mapRawBudgetRow(row: string[], index: number, hasDepartmentColumns = fa
     disbursedAdvance: toNumber(row[21 + transferOffset]),
     disbursedTotal,
     utilizationTotal,
-    remaining: toNumber(row[24 + transferOffset]),
+    remaining,
     disbursementRate: percent(disbursedTotal, netTotal),
     utilizationWithPoRate: percent(utilizationTotal, netTotal),
   };
@@ -435,19 +432,26 @@ function getRawPlanDetailRows(rawWorkbook: BudgetUtilizationRawWorkbook | null |
       const rowLabel = getRawCell(row, 0);
       const categoryName = getRawCell(row, 2);
       const itemName = getRawCell(row, 5);
-      const projectSequence = categoryKey === 'project' ? getProjectRootSequence(row) : '';
-      const projectName = categoryKey === 'project'
-        ? String(row.find((cell) => /โครงการใหญ่\s*:/.test(String(cell ?? ''))) ?? '').trim()
-        : '';
+      const rawProjectCell = row.find((cell) => /โครงการใหญ่\s*:/.test(String(cell ?? '')));
+      const projectName = rawProjectCell ? String(rawProjectCell).trim() : '';
+      const isProjectRow = categoryKey === 'project' && (
+        Boolean(projectName)
+        || /โครงการใหญ่/.test(rowLabel)
+        || /โครงการใหญ่/.test(itemName)
+      );
+
+      if (categoryKey === 'project') {
+        return isProjectRow && !/\(รวม\)|รวมทั้งสิ้น/.test(itemName);
+      }
+
       const hasMoney = mapped.planned || mapped.netTotal || mapped.utilizationTotal || mapped.remaining || mapped.disbursedTotal;
-      const isProjectRow = categoryKey === 'project' && Boolean(projectSequence);
 
       if (
-        (!definition.matcher.test(categoryName) && !isProjectRow)
+        !definition.matcher.test(categoryName)
         || /\(รวม\)|รวมทั้งสิ้น|ดึงมา/.test(rowLabel)
         || /\(รวม\)|ดึงมา/.test(categoryName)
-        || (!itemName && !projectName)
-        || (!hasMoney && categoryKey !== 'project')
+        || !itemName
+        || !hasMoney
       ) {
         return false;
       }
@@ -457,10 +461,6 @@ function getRawPlanDetailRows(rawWorkbook: BudgetUtilizationRawWorkbook | null |
         && itemName.replace(/\s+/g, '') === categoryName.replace(/\s+/g, '')
       ) {
         return false;
-      }
-
-      if (categoryKey === "project") {
-        return isProjectRow;
       }
 
       return true;
@@ -487,20 +487,6 @@ function getRawActualByGroup(group: AssessmentGroupKey, total: RawBudgetRow | nu
 
   const groupCategories = categories.filter((item) => (group === 'investment' ? isInvestmentCategory(item.name) : !isInvestmentCategory(item.name)));
   return sumRawBudgetRows(groupCategories);
-}
-
-function getRawMerge(rawWorkbook: BudgetUtilizationRawWorkbook, rowIndex: number, columnIndex: number) {
-  return rawWorkbook.merges.find((merge) => merge.startRow === rowIndex && merge.startCol === columnIndex) ?? null;
-}
-
-function isCoveredRawCell(rawWorkbook: BudgetUtilizationRawWorkbook, rowIndex: number, columnIndex: number) {
-  return rawWorkbook.merges.some((merge) => (
-    rowIndex >= merge.startRow &&
-    rowIndex <= merge.endRow &&
-    columnIndex >= merge.startCol &&
-    columnIndex <= merge.endCol &&
-    (rowIndex !== merge.startRow || columnIndex !== merge.startCol)
-  ));
 }
 
 function buildDatabaseWorkbook(summary: BudgetUtilizationDashboardSummary | null): BudgetUtilizationRawWorkbook | null {
@@ -588,52 +574,16 @@ function buildDatabaseWorkbook(summary: BudgetUtilizationDashboardSummary | null
   ));
   const majorProjects = summary.items.filter((item) => item.row_type === 'major_project');
 
+  const rollupMap = buildHierarchyRollupMap(summary.items);
   const categoryAmounts = summary.categoryItems.map((category) => {
-    const categoryAmount = getCategoryAmount(category, summary.items);
-    const isPrimaryOperationsCategory = category.id === operationsCategories[0]?.id;
-    const additionalItemIds = new Set(summary.items
-      .filter((item) => (
-        item.row_type !== 'total'
-        && item.row_type !== 'budget_category'
-        && !isDescendantOf(item, category.id)
-        && findTableCategory(item)?.id === category.id
-      ))
-      .map((item) => item.id));
-
-    if (isPrimaryOperationsCategory) {
-      majorProjects
-        .filter((project) => !operationsCategories.some((operationsCategory) => isDescendantOf(project, operationsCategory.id)))
-        .forEach((project) => additionalItemIds.add(project.id));
-    }
-
-    const additionalRootItems = summary.items.filter((item) => (
-      additionalItemIds.has(item.id)
-      && (!item.parent_id || !additionalItemIds.has(item.parent_id))
-    ));
-    const additionalAmounts = additionalRootItems.map((item) => getCategoryAmount(item, summary.items));
-    const additionalAmount = additionalAmounts.length > 0
-      ? sumBudgetAmounts(additionalAmounts)
-      : null;
-    const mergedAmount = additionalAmount
-      ? normalizeAmount({
-          ...categoryAmount,
-          ...Object.fromEntries(hierarchyAmountFields.map((field) => [
-            field,
-            toNumber(category.amount[field]) !== 0
-              ? toNumber(categoryAmount[field])
-              : toNumber(categoryAmount[field]) + toNumber(additionalAmount[field]),
-          ])),
-        })
-      : categoryAmount;
-
+    const rolledAmount = rollupMap.get(category.id) ?? getCategoryAmount(category, summary.items);
     return {
       category,
-      amount: mergedAmount,
+      amount: rolledAmount,
     };
   });
-  if (categoryAmounts.length > 0) {
-    rows[1] = toRow('รวมทั้งสิ้น', '', 'รวมทั้งสิ้น', sumBudgetAmounts(categoryAmounts.map(({ amount }) => amount)));
-  }
+  const grandTotal = summarizeBudgetItems(summary.items);
+  rows[1] = toRow('รวมทั้งสิ้น', '', 'รวมทั้งสิ้น', grandTotal);
 
   for (const { category, amount: categoryAmount } of categoryAmounts) {
     const compactName = category.item_name.replace(/\s+/g, '');
@@ -651,15 +601,27 @@ function buildDatabaseWorkbook(summary: BudgetUtilizationDashboardSummary | null
   const operationsDetails = detailItems.filter((item) => /งบดำเนินงาน/.test(findCategory(item)?.item_name ?? ''));
   const regularOperations = operationsDetails.filter((item) => !isProjectItem(item));
   const projectOperations = operationsDetails.filter(isProjectItem);
-  const majorProjectAmounts = majorProjects.map((item) => getCategoryAmount(item, summary.items));
+  const majorProjectAmounts = majorProjects.map((item) => rollupMap.get(item.id) ?? getCategoryAmount(item, summary.items));
   if (regularOperations.length > 0) {
-    rows.push(toRow('งบดำเนินงาน', 'งบดำเนินงาน', 'งบดำเนินงาน', sumBudgetAmounts(regularOperations.map((item) => item.amount))));
+    rows.push(toRow('งบดำเนินงาน', 'งบดำเนินงาน', 'งบดำเนินงาน', sumBudgetAmounts(regularOperations.map((item) => rollupMap.get(item.id) ?? item.amount))));
   }
   if (majorProjectAmounts.length > 0 || projectOperations.length > 0) {
     const projectAmount = majorProjectAmounts.length > 0
       ? sumBudgetAmounts(majorProjectAmounts)
-      : sumBudgetAmounts(projectOperations.map((item) => item.amount));
+      : sumBudgetAmounts(projectOperations.map((item) => rollupMap.get(item.id) ?? item.amount));
     rows.push(toRow('งบโครงการ (รวม)', 'งบโครงการ', 'งบโครงการ (รวม)', projectAmount));
+  }
+
+  for (const proj of majorProjects) {
+    const projAmount = rollupMap.get(proj.id) ?? getCategoryAmount(proj, summary.items);
+    rows.push(toRow(
+      proj.sequence_label ?? '',
+      'งบโครงการ',
+      `โครงการใหญ่ : ${proj.item_name.replace(/^โครงการใหญ่\s*:\s*/, '')}`,
+      projAmount,
+      proj.output_label ?? '',
+      proj.activity_label ?? proj.activity_sequence_label ?? '',
+    ));
   }
 
   for (const item of detailItems) {
@@ -683,50 +645,6 @@ function buildDatabaseWorkbook(summary: BudgetUtilizationDashboardSummary | null
     rows,
     merges: [],
   };
-}
-
-function RawWorkbookTable({ rawWorkbook }: { rawWorkbook: BudgetUtilizationRawWorkbook }) {
-  return (
-    <div className="overflow-x-auto">
-      <table className="border-collapse text-xs" style={{ minWidth: `${Math.max(rawWorkbook.columnCount, 1) * 132}px` }}>
-        <tbody>
-          {rawWorkbook.rows.map((row, rowIndex) => (
-            <tr key={`raw-dashboard-row-${rowIndex}`} className={rowIndex < 2 ? 'bg-slate-100 font-semibold text-slate-950' : undefined}>
-              {Array.from({ length: rawWorkbook.columnCount }, (_, columnIndex) => {
-                if (isCoveredRawCell(rawWorkbook, rowIndex, columnIndex)) return null;
-                const merge = getRawMerge(rawWorkbook, rowIndex, columnIndex);
-                const value = row[columnIndex] || '';
-                const isProjectNameColumn = columnIndex === 4;
-
-                return (
-                  <td
-                    key={`raw-dashboard-cell-${rowIndex}-${columnIndex}`}
-                    colSpan={merge ? merge.endCol - merge.startCol + 1 : undefined}
-                    rowSpan={merge ? merge.endRow - merge.startRow + 1 : undefined}
-                    className={`border border-slate-300 px-2 py-2 align-middle text-slate-800 ${isProjectNameColumn ? 'w-56 max-w-56' : 'whitespace-pre-wrap'}`}
-                  >
-                    {value ? (
-                      <span
-                        className={isProjectNameColumn ? 'block overflow-hidden text-ellipsis break-words leading-5' : undefined}
-                        style={isProjectNameColumn ? {
-                          display: '-webkit-box',
-                          WebkitBoxOrient: 'vertical',
-                          WebkitLineClamp: 2,
-                        } : undefined}
-                        title={isProjectNameColumn ? value : undefined}
-                      >
-                        {value}
-                      </span>
-                    ) : <span className="text-slate-300">-</span>}
-                  </td>
-                );
-              })}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
 }
 
 export function BudgetUtilizationDashboardPage() {
@@ -805,7 +723,7 @@ export function BudgetUtilizationDashboardPage() {
 
   const totals = summary?.totals ?? null;
   const databaseWorkbook = useMemo(() => buildDatabaseWorkbook(summary), [summary]);
-  const rawWorkbook = rawDetail?.rawWorkbook ?? databaseWorkbook;
+  const rawWorkbook = databaseWorkbook;
   const rawDashboard = useMemo(() => getRawDashboardRows(rawWorkbook), [rawWorkbook]);
   const rawTotal = rawDashboard.total;
   const rawCategoryData = rawDashboard.categories;
@@ -897,13 +815,15 @@ export function BudgetUtilizationDashboardPage() {
     const normalizedItems = rawDetail?.items?.length
       ? rawDetail.items
       : summary?.items ?? [];
+    const rollup = buildHierarchyRollupMap(normalizedItems);
     const normalizedProjects = normalizedItems
-      .filter((item) => Boolean(getProjectRootSequence([
-        item.sequence_label,
-        ...(item.source_row_data ?? []),
-      ])))
+      .filter((item) => (
+        item.row_type === 'major_project'
+        || /โครงการใหญ่/.test(item.item_name)
+        || (item.source_row_data && item.source_row_data.some((cell) => /โครงการใหญ่/.test(String(cell ?? ''))))
+      ))
       .map((item) => {
-        const amount = getCategoryAmount(item, normalizedItems);
+        const amount = rollup.get(item.id) ?? getCategoryAmount(item, normalizedItems);
         const netTotal = getNetAllocationTotal(amount);
         const rawProjectName = item.source_row_data?.find((cell) => /โครงการใหญ่\s*:/.test(String(cell ?? '')));
 
@@ -1308,10 +1228,9 @@ export function BudgetUtilizationDashboardPage() {
                           <thead className="sticky top-0 bg-slate-100 text-left font-bold text-slate-700">
                             <tr>
                               <th className="w-[40%] px-2 py-2">รายการ</th>
-                              <th className="w-[15%] px-2 py-2 text-right">ผูกพัน รวม PO</th>
-                              <th className="w-[15%] px-2 py-2 text-right">รวม (10)</th>
-                              <th className="w-[15%] px-2 py-2 text-right">คงเหลือ (11)</th>
-                              <th className="w-[15%] px-2 py-2 text-right">ร้อยละ (12)</th>
+                              <th className="w-[20%] px-2 py-2 text-right">รวม (10)</th>
+                              <th className="w-[20%] px-2 py-2 text-right">คงเหลือ (11)</th>
+                              <th className="w-[20%] px-2 py-2 text-right">ร้อยละ (12)</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-100 bg-white">
@@ -1323,14 +1242,13 @@ export function BudgetUtilizationDashboardPage() {
                                     ผลผลิตที่ {item.output || "-"} · กิจกรรมหลักที่ {item.activity || "-"}
                                   </span>
                                 </td>
-                                <td className="w-[15%] px-2 py-2 text-right font-semibold text-indigo-700">{formatBudgetAmount(item.committedTotal)}</td>
-                                <td className="w-[15%] px-2 py-2 text-right font-semibold text-slate-950">{formatBudgetAmount(item.utilizationTotal)}</td>
-                                <td className="w-[15%] px-2 py-2 text-right font-semibold text-slate-950">{formatBudgetAmount(item.remaining)}</td>
-                                <td className="w-[15%] px-2 py-2 text-right font-semibold text-teal-700">{formatBudgetAmount(item.disbursementRate)}%</td>
+                                <td className="w-[20%] px-2 py-2 text-right font-semibold text-slate-950">{formatBudgetAmount(item.utilizationTotal)}</td>
+                                <td className="w-[20%] px-2 py-2 text-right font-semibold text-slate-950">{formatBudgetAmount(item.remaining)}</td>
+                                <td className="w-[20%] px-2 py-2 text-right font-semibold text-teal-700">{formatBudgetAmount(item.disbursementRate)}%</td>
                               </tr>
                             )) : (
                               <tr>
-                                <td colSpan={5} className="px-3 py-4 text-center text-slate-500">ไม่มีรายการในหมวดนี้</td>
+                                <td colSpan={4} className="px-3 py-4 text-center text-slate-500">ไม่มีรายการในหมวดนี้</td>
                               </tr>
                             )}
                           </tbody>
@@ -1351,10 +1269,9 @@ export function BudgetUtilizationDashboardPage() {
                             <thead className="sticky top-0 bg-slate-100 text-left font-semibold text-slate-600">
                               <tr>
                                 <th className="w-[40%] px-2 py-2">หัวข้อโครงการ</th>
-                                <th className="w-[15%] px-2 py-2 text-right">ผูกพัน รวม PO</th>
-                                <th className="w-[15%] px-2 py-2 text-right">รวม (10)</th>
-                                <th className="w-[15%] px-2 py-2 text-right">คงเหลือ (11)</th>
-                                <th className="w-[15%] px-2 py-2 text-right">ร้อยละ (12)</th>
+                                <th className="w-[20%] px-2 py-2 text-right">รวม (10)</th>
+                                <th className="w-[20%] px-2 py-2 text-right">คงเหลือ (11)</th>
+                                <th className="w-[20%] px-2 py-2 text-right">ร้อยละ (12)</th>
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100 bg-white">
@@ -1366,14 +1283,13 @@ export function BudgetUtilizationDashboardPage() {
                                       ผลผลิตที่ {item.output || '-'} · กิจกรรมหลักที่ {item.activity || '-'}
                                     </span>
                                   </td>
-                                  <td className="w-[15%] px-2 py-2 text-right font-semibold text-indigo-700">{formatBudgetAmount(item.committedTotal)}</td>
-                                  <td className="w-[15%] px-2 py-2 text-right font-semibold text-slate-950">{formatBudgetAmount(item.utilizationTotal)}</td>
-                                  <td className="w-[15%] px-2 py-2 text-right font-semibold text-slate-950">{formatBudgetAmount(item.remaining)}</td>
-                                  <td className="w-[15%] px-2 py-2 text-right font-semibold text-teal-700">{formatBudgetAmount(item.disbursementRate)}%</td>
+                                  <td className="w-[20%] px-2 py-2 text-right font-semibold text-slate-950">{formatBudgetAmount(item.utilizationTotal)}</td>
+                                  <td className="w-[20%] px-2 py-2 text-right font-semibold text-slate-950">{formatBudgetAmount(item.remaining)}</td>
+                                  <td className="w-[20%] px-2 py-2 text-right font-semibold text-teal-700">{formatBudgetAmount(item.disbursementRate)}%</td>
                                 </tr>
                               )) : (
                                 <tr>
-                                  <td colSpan={5} className="px-3 py-4 text-center text-slate-500">ไม่มีรายการในหมวดนี้</td>
+                                  <td colSpan={4} className="px-3 py-4 text-center text-slate-500">ไม่มีรายการในหมวดนี้</td>
                                 </tr>
                               )}
                             </tbody>
@@ -1465,14 +1381,6 @@ export function BudgetUtilizationDashboardPage() {
                   </div>
                 </div>
               </section>
-          </section>
-
-          <section className="overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm">
-            <div className="border-b border-slate-100 px-4 py-3">
-              <h2 className="text-base font-semibold text-slate-950">ตารางตามโครงสร้างไฟล์ Excel</h2>
-              <p className="mt-1 text-sm text-slate-500">ข้อมูลแสดงตามชีต {rawWorkbook.sheetName} โดยไม่แปลงลำดับโครงสร้าง</p>
-            </div>
-            <RawWorkbookTable rawWorkbook={rawWorkbook} />
           </section>
         </div>
       ) : null}

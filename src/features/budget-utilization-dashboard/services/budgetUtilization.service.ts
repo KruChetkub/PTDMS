@@ -2,7 +2,7 @@ import { supabase } from '../../../lib/supabase';
 import { runSupabaseQuery } from '../../../lib/supabase-query';
 import { sanitizePlainTextInput } from '../../../utils/inputSecurity';
 import { parseRawBudgetWorkbookRows } from './budgetUtilizationImport';
-import { normalizeAmount, summarizeBudgetItems } from '../utils/budgetUtilizationCalculations';
+import { normalizeAmount, summarizeBudgetItems, toNumber } from '../utils/budgetUtilizationCalculations';
 import type {
   BudgetUtilizationAmount,
   BudgetUtilizationAllocationTranche,
@@ -43,8 +43,16 @@ function mapJoinedItem(row: any): BudgetUtilizationItemWithAmount {
     ? row.budget_utilization_amounts[0]
     : row.budget_utilization_amounts;
 
+  const rawSourceData = Array.isArray(row.source_row_data) ? row.source_row_data : null;
+  const rawNetBudget = rawSourceData && rawSourceData.length >= 13
+    ? toNumber(rawSourceData[12])
+    : 0;
+
   const allocationRows = (row.budget_utilization_item_allocations ?? []) as BudgetUtilizationItemAllocation[];
-  const normalizedAmount = normalizeAmount(amountRow as Partial<BudgetUtilizationAmount>);
+  const normalizedAmount = normalizeAmount({
+    ...(amountRow as Partial<BudgetUtilizationAmount>),
+    net_budget_after_transfer_amount: rawNetBudget > 0 ? rawNetBudget : amountRow?.net_budget_after_transfer_amount,
+  });
   const allocationTotal = allocationRows.length > 0
     ? allocationRows.reduce((sum, allocation) => sum + Number(allocation.amount ?? 0), 0)
     : normalizedAmount.allocation_tranche_1_amount
@@ -68,7 +76,7 @@ function mapJoinedItem(row: any): BudgetUtilizationItemWithAmount {
     source_import_batch_id: row.source_import_batch_id ?? null,
     source_sheet_name: row.source_sheet_name ?? null,
     source_row_number: row.source_row_number ?? row.row_number ?? null,
-    source_row_data: Array.isArray(row.source_row_data) ? row.source_row_data : null,
+    source_row_data: rawSourceData,
     created_at: row.created_at,
     updated_at: row.updated_at,
     amount: {

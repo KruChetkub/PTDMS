@@ -5,7 +5,7 @@ import { ConfirmModal } from '../../../components/ui/ConfirmModal';
 import { useAuditPageAccess } from '../../../hooks/useAuditPageAccess';
 import { useAuthStore } from '../../../stores/auth.store';
 import { canManageBudgetUtilization, createBudgetItem, createBudgetReportPeriod, deleteBudgetItem, getBudgetDashboardSummary, saveBudgetAllocationTrancheDefinitions, saveBudgetItemAllocation, updateBudgetItem, updateBudgetItemAmounts, updateBudgetItemDetails } from '../services/budgetUtilization.service';
-import { formatBudgetAmount, getNetAllocationTotal, percent, toNumber } from '../utils/budgetUtilizationCalculations';
+import { buildHierarchyRollupMap, formatBudgetAmount, getNetAllocationTotal, normalizeAmount, percent, summarizeBudgetItems, toNumber } from '../utils/budgetUtilizationCalculations';
 import type { BudgetUtilizationDashboardSummary, BudgetUtilizationItemInput, BudgetUtilizationItemWithAmount, BudgetUtilizationRowType } from '../types/budgetUtilization.types';
 import { getSafeUserErrorMessage } from '../../../utils/errorHandling';
 
@@ -471,6 +471,14 @@ export function BudgetUtilizationItemsPage() {
       .sort(compareItems);
 
     return [...orderedItems, ...orphanItems];
+  }, [allBudgetItems]);
+
+  const rollupMap = useMemo(() => {
+    return buildHierarchyRollupMap(allBudgetItems);
+  }, [allBudgetItems]);
+
+  const tableTotals = useMemo(() => {
+    return summarizeBudgetItems(allBudgetItems);
   }, [allBudgetItems]);
 
   const filteredItems = useMemo(() => {
@@ -2139,17 +2147,18 @@ export function BudgetUtilizationItemsPage() {
                 const isSubActivity = item.row_type === 'sub_project'
                   && (item.source_import_batch_id === null || getDirectChildCount(item.id) > 0);
                 const isHeading = isCategory || isMajorProject || isSubActivity;
-                const amountTextClass = isHeading ? 'text-slate-400' : undefined;
-                const netTotal = getNetAllocationTotal(item.amount);
-                const utilizationTotal = item.amount.utilization_total_amount;
-                const remainingAmount = netTotal - utilizationTotal;
-                const disbursementRate = item.amount.disbursement_rate ?? 0;
-                const utilizationRate = percent(utilizationTotal, netTotal);
+                const itemAmount = rollupMap.get(item.id) ?? normalizeAmount(item.amount);
+                const netTotal = itemAmount.net_budget_after_transfer_amount;
+                const utilizationTotal = itemAmount.utilization_total_amount;
+                const remainingAmount = itemAmount.remaining_amount;
+                const disbursementRate = itemAmount.disbursement_rate ?? 0;
+                const utilizationRate = itemAmount.utilization_with_po_rate ?? 0;
+                const headingAmountClass = isCategory ? 'font-bold text-teal-950' : isMajorProject ? 'font-bold text-sky-950' : isSubActivity ? 'font-semibold text-indigo-950' : undefined;
 
                 return (
                   <tr
                     key={item.id}
-                    className={`${isCategory ? 'bg-teal-50/50 font-semibold' : isMajorProject ? 'bg-sky-50/60 font-semibold' : isSubActivity ? 'bg-indigo-50/50 font-semibold' : ''}`}
+                    className={`${isCategory ? 'bg-teal-50/70 font-semibold' : isMajorProject ? 'bg-sky-50/70 font-semibold' : isSubActivity ? 'bg-indigo-50/60 font-semibold' : ''}`}
                   >
                     <td className={`sticky left-0 z-10 min-w-[320px] border-r border-slate-200 px-4 py-3 text-slate-900 ${isCategory ? 'bg-teal-50' : isMajorProject ? 'bg-sky-50' : isSubActivity ? 'bg-indigo-50' : 'bg-white'} shadow-[2px_0_0_0_rgb(226_232_240)]`}>
                       <button
@@ -2184,8 +2193,8 @@ export function BudgetUtilizationItemsPage() {
                         ) : null}
                       </button>
                     </td>
-                    <td className={`px-4 py-3 text-right ${isCategory ? 'text-slate-400' : isMajorProject || isSubActivity ? 'font-semibold text-slate-900' : amountTextClass ?? ''}`}>
-                      {isCategory ? '-' : (
+                    <td className={`px-4 py-3 text-right ${headingAmountClass ?? ''}`}>
+                      {isHeading ? formatBudgetAmount(itemAmount.planned_budget_amount) : (
                         <button
                           type="button"
                           onClick={canManage ? () => startEdit(item) : undefined}
@@ -2204,13 +2213,23 @@ export function BudgetUtilizationItemsPage() {
                         : tranche.trancheNumber === 2
                           ? item.amount.allocation_tranche_2_amount
                           : tranche.trancheNumber === 3 ? item.amount.allocation_tranche_3_amount : 0;
+                      const trancheValue = tranche.trancheNumber === 1
+                        ? itemAmount.allocation_tranche_1_amount
+                        : tranche.trancheNumber === 2
+                          ? itemAmount.allocation_tranche_2_amount
+                          : tranche.trancheNumber === 3
+                            ? itemAmount.allocation_tranche_3_amount
+                            : (allocation?.amount ?? 0);
+
                       return (
                         <td
                           key={tranche.key}
-                          className={`px-3 py-3 text-right ${amountTextClass ?? ''}`}
+                          className={`px-3 py-3 text-right ${headingAmountClass ?? ''}`}
                           title={allocation?.allocation_date ? `วันที่จัดสรร ${allocation.allocation_date}` : undefined}
                         >
-                          {isHeading ? '-' : (
+                          {isHeading ? (
+                            formatBudgetAmount(trancheValue)
+                          ) : (
                             <button type="button" onClick={(event) => openAllocationCellEdit(event, item, tranche)} className="w-full rounded px-1 py-1 text-right transition hover:bg-amber-50 hover:text-amber-800 focus:outline-none focus:ring-2 focus:ring-amber-300" title={`แก้ไข ${tranche.label}`}>
                               {formatBudgetAmount(allocation?.amount ?? legacyAmount)}
                             </button>
@@ -2218,25 +2237,25 @@ export function BudgetUtilizationItemsPage() {
                         </td>
                       );
                     })}
-                    <td className={`px-4 py-3 text-right font-semibold ${isHeading ? amountTextClass ?? '' : 'text-slate-900'}`}>{isHeading ? '-' : formatBudgetAmount(netTotal)}</td>
-                    <td className={`px-4 py-3 text-right ${amountTextClass ?? ''}`}>{isHeading ? '-' : <button type="button" onClick={(event) => openAmountCellEdit(event, item, 'centralTransferInAmount', 'ส่วนกลางกรมฯ รับโอน', item.amount.central_transfer_in_amount)} className="w-full rounded px-1 py-1 text-right transition hover:bg-cyan-50 hover:text-cyan-800 focus:outline-none focus:ring-2 focus:ring-cyan-300">{formatBudgetAmount(item.amount.central_transfer_in_amount || 0)}</button>}</td>
-                    <td className={`px-4 py-3 text-right ${amountTextClass ?? ''}`}>{isHeading ? '-' : <button type="button" onClick={(event) => openAmountCellEdit(event, item, 'centralTransferOutAmount', 'ส่วนกลางกรมฯ โอนออก', item.amount.central_transfer_out_amount)} className="w-full rounded px-1 py-1 text-right transition hover:bg-cyan-50 hover:text-cyan-800 focus:outline-none focus:ring-2 focus:ring-cyan-300">{formatBudgetAmount(item.amount.central_transfer_out_amount || 0)}</button>}</td>
-                    <td className={`px-4 py-3 text-right ${amountTextClass ?? ''}`}>{isHeading ? '-' : <button type="button" onClick={(event) => openAmountCellEdit(event, item, 'departmentRequestIncreaseAmount', 'ภายในกรม ขอเพิ่ม', item.amount.department_request_increase_amount)} className="w-full rounded px-1 py-1 text-right transition hover:bg-blue-50 hover:text-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-300">{formatBudgetAmount(item.amount.department_request_increase_amount || 0)}</button>}</td>
-                    <td className={`px-4 py-3 text-right ${amountTextClass ?? ''}`}>{isHeading ? '-' : <button type="button" onClick={(event) => openAmountCellEdit(event, item, 'departmentTransferOutAmount', 'ภายในกรม โอนออก', item.amount.department_transfer_out_amount)} className="w-full rounded px-1 py-1 text-right transition hover:bg-blue-50 hover:text-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-300">{formatBudgetAmount(item.amount.department_transfer_out_amount || 0)}</button>}</td>
-                    <td className={`px-4 py-3 text-right ${amountTextClass ?? ''}`}>{isHeading ? '-' : <button type="button" onClick={(event) => openAmountCellEdit(event, item, 'divisionTransferInAmount', 'ภายในกอง รับโอน', item.amount.division_transfer_in_amount)} className="w-full rounded px-1 py-1 text-right transition hover:bg-orange-50 hover:text-orange-800 focus:outline-none focus:ring-2 focus:ring-orange-300">{formatBudgetAmount(item.amount.division_transfer_in_amount || 0)}</button>}</td>
-                    <td className={`px-4 py-3 text-right ${amountTextClass ?? ''}`}>{isHeading ? '-' : <button type="button" onClick={(event) => openAmountCellEdit(event, item, 'divisionTransferOutAmount', 'ภายในกอง โอนออก', item.amount.division_transfer_out_amount)} className="w-full rounded px-1 py-1 text-right transition hover:bg-orange-50 hover:text-orange-800 focus:outline-none focus:ring-2 focus:ring-orange-300">{formatBudgetAmount(item.amount.division_transfer_out_amount || 0)}</button>}</td>
-                    <td className={`px-4 py-3 text-right ${amountTextClass ?? ''}`}>{isHeading ? '-' : <button type="button" onClick={(event) => openAmountCellEdit(event, item, 'committedPoAmount', 'ผูกพัน มี PO', item.amount.committed_po_amount)} className="w-full rounded px-1 py-1 text-right transition hover:bg-purple-50 hover:text-purple-800 focus:outline-none focus:ring-2 focus:ring-purple-300">{formatBudgetAmount(item.amount.committed_po_amount || 0)}</button>}</td>
-                    <td className={`px-4 py-3 text-right ${amountTextClass ?? ''}`}>{isHeading ? '-' : <button type="button" onClick={(event) => openAmountCellEdit(event, item, 'committedWithoutPoAmount', 'ผูกพัน ไม่มี PO', item.amount.committed_without_po_amount)} className="w-full rounded px-1 py-1 text-right transition hover:bg-purple-50 hover:text-purple-800 focus:outline-none focus:ring-2 focus:ring-purple-300">{formatBudgetAmount(item.amount.committed_without_po_amount || 0)}</button>}</td>
-                    <td className={`px-4 py-3 text-right ${amountTextClass ?? ''}`}>{isHeading ? '-' : formatBudgetAmount(item.amount.committed_total_amount || 0)}</td>
-                    <td className={`px-4 py-3 text-right ${amountTextClass ?? ''}`}>{isHeading ? '-' : <button type="button" onClick={(event) => openAmountCellEdit(event, item, 'disbursedGeneralAmount', 'เบิกจ่ายทั่วไป', item.amount.disbursed_general_amount)} className="w-full rounded px-1 py-1 text-right transition hover:bg-emerald-50 hover:text-emerald-800 focus:outline-none focus:ring-2 focus:ring-emerald-300">{formatBudgetAmount(item.amount.disbursed_general_amount || 0)}</button>}</td>
-                    <td className={`px-4 py-3 text-right ${amountTextClass ?? ''}`}>{isHeading ? '-' : <button type="button" onClick={(event) => openAmountCellEdit(event, item, 'disbursedAdvanceAmount', 'เงินยืมราชการ', item.amount.disbursed_advance_amount)} className="w-full rounded px-1 py-1 text-right transition hover:bg-emerald-50 hover:text-emerald-800 focus:outline-none focus:ring-2 focus:ring-emerald-300">{formatBudgetAmount(item.amount.disbursed_advance_amount || 0)}</button>}</td>
-                    <td className={`px-4 py-3 text-right ${amountTextClass ?? ''}`}>{isHeading ? '-' : formatBudgetAmount(item.amount.disbursed_total_amount || 0)}</td>
-                    <td className={`px-4 py-3 text-right font-semibold ${isHeading ? amountTextClass ?? '' : 'text-slate-900'}`}>{isHeading ? '-' : formatBudgetAmount(utilizationTotal)}</td>
-                    <td className={`px-4 py-3 text-right ${isHeading ? amountTextClass ?? '' : remainingAmount < 0 ? 'font-semibold text-red-700' : 'text-slate-900'}`}>
-                      {isHeading ? '-' : formatBudgetAmount(remainingAmount)}
+                    <td className={`px-4 py-3 text-right font-semibold ${headingAmountClass ?? 'text-slate-900'}`}>{formatBudgetAmount(netTotal)}</td>
+                    <td className={`px-4 py-3 text-right ${headingAmountClass ?? ''}`}>{isHeading ? formatBudgetAmount(itemAmount.central_transfer_in_amount || 0) : <button type="button" onClick={(event) => openAmountCellEdit(event, item, 'centralTransferInAmount', 'ส่วนกลางกรมฯ รับโอน', item.amount.central_transfer_in_amount)} className="w-full rounded px-1 py-1 text-right transition hover:bg-cyan-50 hover:text-cyan-800 focus:outline-none focus:ring-2 focus:ring-cyan-300">{formatBudgetAmount(item.amount.central_transfer_in_amount || 0)}</button>}</td>
+                    <td className={`px-4 py-3 text-right ${headingAmountClass ?? ''}`}>{isHeading ? formatBudgetAmount(itemAmount.central_transfer_out_amount || 0) : <button type="button" onClick={(event) => openAmountCellEdit(event, item, 'centralTransferOutAmount', 'ส่วนกลางกรมฯ โอนออก', item.amount.central_transfer_out_amount)} className="w-full rounded px-1 py-1 text-right transition hover:bg-cyan-50 hover:text-cyan-800 focus:outline-none focus:ring-2 focus:ring-cyan-300">{formatBudgetAmount(item.amount.central_transfer_out_amount || 0)}</button>}</td>
+                    <td className={`px-4 py-3 text-right ${headingAmountClass ?? ''}`}>{isHeading ? formatBudgetAmount(itemAmount.department_request_increase_amount || 0) : <button type="button" onClick={(event) => openAmountCellEdit(event, item, 'departmentRequestIncreaseAmount', 'ภายในกรม ขอเพิ่ม', item.amount.department_request_increase_amount)} className="w-full rounded px-1 py-1 text-right transition hover:bg-blue-50 hover:text-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-300">{formatBudgetAmount(item.amount.department_request_increase_amount || 0)}</button>}</td>
+                    <td className={`px-4 py-3 text-right ${headingAmountClass ?? ''}`}>{isHeading ? formatBudgetAmount(itemAmount.department_transfer_out_amount || 0) : <button type="button" onClick={(event) => openAmountCellEdit(event, item, 'departmentTransferOutAmount', 'ภายในกรม โอนออก', item.amount.department_transfer_out_amount)} className="w-full rounded px-1 py-1 text-right transition hover:bg-blue-50 hover:text-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-300">{formatBudgetAmount(item.amount.department_transfer_out_amount || 0)}</button>}</td>
+                    <td className={`px-4 py-3 text-right ${headingAmountClass ?? ''}`}>{isHeading ? formatBudgetAmount(itemAmount.division_transfer_in_amount || 0) : <button type="button" onClick={(event) => openAmountCellEdit(event, item, 'divisionTransferInAmount', 'ภายในกอง รับโอน', item.amount.division_transfer_in_amount)} className="w-full rounded px-1 py-1 text-right transition hover:bg-orange-50 hover:text-orange-800 focus:outline-none focus:ring-2 focus:ring-orange-300">{formatBudgetAmount(item.amount.division_transfer_in_amount || 0)}</button>}</td>
+                    <td className={`px-4 py-3 text-right ${headingAmountClass ?? ''}`}>{isHeading ? formatBudgetAmount(itemAmount.division_transfer_out_amount || 0) : <button type="button" onClick={(event) => openAmountCellEdit(event, item, 'divisionTransferOutAmount', 'ภายในกอง โอนออก', item.amount.division_transfer_out_amount)} className="w-full rounded px-1 py-1 text-right transition hover:bg-orange-50 hover:text-orange-800 focus:outline-none focus:ring-2 focus:ring-orange-300">{formatBudgetAmount(item.amount.division_transfer_out_amount || 0)}</button>}</td>
+                    <td className={`px-4 py-3 text-right ${headingAmountClass ?? ''}`}>{isHeading ? formatBudgetAmount(itemAmount.committed_po_amount || 0) : <button type="button" onClick={(event) => openAmountCellEdit(event, item, 'committedPoAmount', 'ผูกพัน มี PO', item.amount.committed_po_amount)} className="w-full rounded px-1 py-1 text-right transition hover:bg-purple-50 hover:text-purple-800 focus:outline-none focus:ring-2 focus:ring-purple-300">{formatBudgetAmount(item.amount.committed_po_amount || 0)}</button>}</td>
+                    <td className={`px-4 py-3 text-right ${headingAmountClass ?? ''}`}>{isHeading ? formatBudgetAmount(itemAmount.committed_without_po_amount || 0) : <button type="button" onClick={(event) => openAmountCellEdit(event, item, 'committedWithoutPoAmount', 'ผูกพัน ไม่มี PO', item.amount.committed_without_po_amount)} className="w-full rounded px-1 py-1 text-right transition hover:bg-purple-50 hover:text-purple-800 focus:outline-none focus:ring-2 focus:ring-purple-300">{formatBudgetAmount(item.amount.committed_without_po_amount || 0)}</button>}</td>
+                    <td className={`px-4 py-3 text-right ${headingAmountClass ?? ''}`}>{formatBudgetAmount(itemAmount.committed_total_amount || 0)}</td>
+                    <td className={`px-4 py-3 text-right ${headingAmountClass ?? ''}`}>{isHeading ? formatBudgetAmount(itemAmount.disbursed_general_amount || 0) : <button type="button" onClick={(event) => openAmountCellEdit(event, item, 'disbursedGeneralAmount', 'เบิกจ่ายทั่วไป', item.amount.disbursed_general_amount)} className="w-full rounded px-1 py-1 text-right transition hover:bg-emerald-50 hover:text-emerald-800 focus:outline-none focus:ring-2 focus:ring-emerald-300">{formatBudgetAmount(item.amount.disbursed_general_amount || 0)}</button>}</td>
+                    <td className={`px-4 py-3 text-right ${headingAmountClass ?? ''}`}>{isHeading ? formatBudgetAmount(itemAmount.disbursed_advance_amount || 0) : <button type="button" onClick={(event) => openAmountCellEdit(event, item, 'disbursedAdvanceAmount', 'เงินยืมราชการ', item.amount.disbursed_advance_amount)} className="w-full rounded px-1 py-1 text-right transition hover:bg-emerald-50 hover:text-emerald-800 focus:outline-none focus:ring-2 focus:ring-emerald-300">{formatBudgetAmount(item.amount.disbursed_advance_amount || 0)}</button>}</td>
+                    <td className={`px-4 py-3 text-right ${headingAmountClass ?? ''}`}>{formatBudgetAmount(itemAmount.disbursed_total_amount || 0)}</td>
+                    <td className={`px-4 py-3 text-right font-semibold ${headingAmountClass ?? 'text-slate-900'}`}>{formatBudgetAmount(utilizationTotal)}</td>
+                    <td className={`px-4 py-3 text-right ${headingAmountClass ? headingAmountClass : remainingAmount < 0 ? 'font-semibold text-red-700' : 'text-slate-900'}`}>
+                      {formatBudgetAmount(remainingAmount)}
                     </td>
-                    <td className={`px-4 py-3 text-right font-semibold ${isHeading ? 'text-slate-400' : 'text-teal-700'}`}>{isHeading ? '-' : `${formatBudgetAmount(disbursementRate)}%`}</td>
-                    <td className={`px-4 py-3 text-right font-semibold ${isHeading ? 'text-slate-400' : 'text-sky-700'}`}>{isHeading ? '-' : `${formatBudgetAmount(utilizationRate)}%`}</td>
+                    <td className={`px-4 py-3 text-right font-semibold ${isHeading ? headingAmountClass : 'text-teal-700'}`}>{`${formatBudgetAmount(disbursementRate)}%`}</td>
+                    <td className={`px-4 py-3 text-right font-semibold ${isHeading ? headingAmountClass : 'text-sky-700'}`}>{`${formatBudgetAmount(utilizationRate)}%`}</td>
                     {canManage ? (
                       <td className="px-4 py-3 text-right">
                         <div className="flex justify-end gap-1">
@@ -2265,6 +2284,46 @@ export function BudgetUtilizationItemsPage() {
                 );
               })}
             </tbody>
+            <tfoot className="sticky bottom-0 z-20 border-t-2 border-slate-300 bg-slate-900 font-bold text-white shadow-[0_-2px_10px_rgba(0,0,0,0.15)]">
+              <tr>
+                <td className="sticky left-0 z-30 min-w-[320px] border-r border-slate-700 bg-slate-900 px-4 py-3 text-left">
+                  รวมทั้งสิ้น ({filteredItems.length.toLocaleString()} รายการ)
+                </td>
+                <td className="px-4 py-3 text-right">{formatBudgetAmount(tableTotals.planned_budget_amount)}</td>
+                {trancheDefinitions.map((tranche) => {
+                  const trancheTotal = tranche.trancheNumber === 1
+                    ? tableTotals.allocation_tranche_1_amount
+                    : tranche.trancheNumber === 2
+                      ? tableTotals.allocation_tranche_2_amount
+                      : tranche.trancheNumber === 3
+                        ? tableTotals.allocation_tranche_3_amount
+                        : 0;
+                  return (
+                    <td key={`total-${tranche.key}`} className="px-3 py-3 text-right text-amber-300">
+                      {formatBudgetAmount(trancheTotal)}
+                    </td>
+                  );
+                })}
+                <td className="px-4 py-3 text-right text-lime-400">{formatBudgetAmount(tableTotals.net_budget_after_transfer_amount)}</td>
+                <td className="px-4 py-3 text-right">{formatBudgetAmount(tableTotals.central_transfer_in_amount)}</td>
+                <td className="px-4 py-3 text-right">{formatBudgetAmount(tableTotals.central_transfer_out_amount)}</td>
+                <td className="px-4 py-3 text-right">{formatBudgetAmount(tableTotals.department_request_increase_amount)}</td>
+                <td className="px-4 py-3 text-right">{formatBudgetAmount(tableTotals.department_transfer_out_amount)}</td>
+                <td className="px-4 py-3 text-right">{formatBudgetAmount(tableTotals.division_transfer_in_amount)}</td>
+                <td className="px-4 py-3 text-right">{formatBudgetAmount(tableTotals.division_transfer_out_amount)}</td>
+                <td className="px-4 py-3 text-right text-purple-300">{formatBudgetAmount(tableTotals.committed_po_amount)}</td>
+                <td className="px-4 py-3 text-right text-purple-300">{formatBudgetAmount(tableTotals.committed_without_po_amount)}</td>
+                <td className="px-4 py-3 text-right text-purple-200">{formatBudgetAmount(tableTotals.committed_total_amount)}</td>
+                <td className="px-4 py-3 text-right text-emerald-300">{formatBudgetAmount(tableTotals.disbursed_general_amount)}</td>
+                <td className="px-4 py-3 text-right text-emerald-300">{formatBudgetAmount(tableTotals.disbursed_advance_amount)}</td>
+                <td className="px-4 py-3 text-right text-emerald-200">{formatBudgetAmount(tableTotals.disbursed_total_amount)}</td>
+                <td className="px-4 py-3 text-right text-yellow-300">{formatBudgetAmount(tableTotals.utilization_total_amount)}</td>
+                <td className="px-4 py-3 text-right text-sky-300">{formatBudgetAmount(tableTotals.remaining_amount)}</td>
+                <td className="px-4 py-3 text-right text-teal-300">{formatBudgetAmount(tableTotals.disbursement_rate ?? 0)}%</td>
+                <td className="px-4 py-3 text-right text-sky-300">{formatBudgetAmount(tableTotals.utilization_with_po_rate ?? 0)}%</td>
+                {canManage ? <td></td> : null}
+              </tr>
+            </tfoot>
           </table>
         </div>
       </section>
