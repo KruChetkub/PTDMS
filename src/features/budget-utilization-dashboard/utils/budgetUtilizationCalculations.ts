@@ -13,6 +13,8 @@ export const emptyBudgetAmount: BudgetUtilizationAmount = {
   net_budget_after_transfer_amount: 0,
   central_transfer_in_amount: 0,
   central_transfer_out_amount: 0,
+  department_request_increase_amount: 0,
+  department_transfer_out_amount: 0,
   division_transfer_in_amount: 0,
   division_transfer_out_amount: 0,
   committed_po_amount: 0,
@@ -67,6 +69,11 @@ export function formatMillionBaht(value: number) {
 }
 
 export function getNetAllocationTotal(amount: Partial<BudgetUtilizationAmount>) {
+  const storedNetBudget = toNumber(amount.net_budget_after_transfer_amount);
+  if (storedNetBudget !== 0) {
+    return storedNetBudget;
+  }
+
   const allocationTotal = amount.allocation_total_amount ?? (
     toNumber(amount.allocation_tranche_1_amount) +
     toNumber(amount.allocation_tranche_2_amount) +
@@ -76,6 +83,8 @@ export function getNetAllocationTotal(amount: Partial<BudgetUtilizationAmount>) 
     allocationTotal +
     toNumber(amount.central_transfer_in_amount) -
     toNumber(amount.central_transfer_out_amount) +
+    toNumber(amount.department_request_increase_amount) -
+    toNumber(amount.department_transfer_out_amount) +
     toNumber(amount.division_transfer_in_amount) -
     toNumber(amount.division_transfer_out_amount)
   );
@@ -92,23 +101,28 @@ export function normalizeAmount(raw?: Partial<BudgetUtilizationAmount> | null): 
   const allocationTranche3 = toNumber(source.allocation_tranche_3_amount);
   const centralTransferIn = toNumber(source.central_transfer_in_amount);
   const centralTransferOut = toNumber(source.central_transfer_out_amount);
+  const departmentRequestIncrease = toNumber(source.department_request_increase_amount);
+  const departmentTransferOut = toNumber(source.department_transfer_out_amount);
   const divisionTransferIn = toNumber(source.division_transfer_in_amount);
   const divisionTransferOut = toNumber(source.division_transfer_out_amount);
   const committedTotal = toNumber(source.committed_po_amount) + toNumber(source.committed_without_po_amount);
   const calculatedNetBudgetAfterTransfer = getNetAllocationTotal({
+    net_budget_after_transfer_amount: source.net_budget_after_transfer_amount,
     allocation_total_amount: source.allocation_total_amount,
     allocation_tranche_1_amount: allocationTranche1,
     allocation_tranche_2_amount: allocationTranche2,
     allocation_tranche_3_amount: allocationTranche3,
     central_transfer_in_amount: centralTransferIn,
     central_transfer_out_amount: centralTransferOut,
+    department_request_increase_amount: departmentRequestIncrease,
+    department_transfer_out_amount: departmentTransferOut,
     division_transfer_in_amount: divisionTransferIn,
     division_transfer_out_amount: divisionTransferOut,
     committed_po_amount: source.committed_po_amount,
     committed_without_po_amount: source.committed_without_po_amount,
   });
-  const netBudgetAfterTransfer = calculatedNetBudgetAfterTransfer
-    || toNumber(source.net_budget_after_transfer_amount)
+  const netBudgetAfterTransfer = toNumber(source.net_budget_after_transfer_amount)
+    || calculatedNetBudgetAfterTransfer
     || committedTotal;
   const disbursedFromParts = toNumber(source.disbursed_general_amount) + toNumber(source.disbursed_advance_amount);
   const disbursedTotal = disbursedFromParts;
@@ -128,6 +142,8 @@ export function normalizeAmount(raw?: Partial<BudgetUtilizationAmount> | null): 
     net_budget_after_transfer_amount: netBudgetAfterTransfer,
     central_transfer_in_amount: centralTransferIn,
     central_transfer_out_amount: centralTransferOut,
+    department_request_increase_amount: departmentRequestIncrease,
+    department_transfer_out_amount: departmentTransferOut,
     division_transfer_in_amount: divisionTransferIn,
     division_transfer_out_amount: divisionTransferOut,
     committed_po_amount: toNumber(source.committed_po_amount),
@@ -159,6 +175,8 @@ export function sumBudgetAmounts(amounts: BudgetUtilizationAmount[]) {
       net_budget_after_transfer_amount: sum.net_budget_after_transfer_amount + amount.net_budget_after_transfer_amount,
       central_transfer_in_amount: sum.central_transfer_in_amount + amount.central_transfer_in_amount,
       central_transfer_out_amount: sum.central_transfer_out_amount + amount.central_transfer_out_amount,
+      department_request_increase_amount: sum.department_request_increase_amount + amount.department_request_increase_amount,
+      department_transfer_out_amount: sum.department_transfer_out_amount + amount.department_transfer_out_amount,
       division_transfer_in_amount: sum.division_transfer_in_amount + amount.division_transfer_in_amount,
       division_transfer_out_amount: sum.division_transfer_out_amount + amount.division_transfer_out_amount,
       committed_po_amount: sum.committed_po_amount + amount.committed_po_amount,

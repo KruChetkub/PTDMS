@@ -234,7 +234,7 @@ export function BudgetUtilizationImportDetailPage() {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="min-w-[1680px] divide-y divide-slate-100 text-sm">
+          <table className="min-w-[1900px] divide-y divide-slate-100 text-sm">
             <thead className="bg-slate-50 text-left text-xs font-semibold text-slate-500">
               <tr>
                 <th className="px-4 py-3">รายการ</th>
@@ -244,6 +244,8 @@ export function BudgetUtilizationImportDetailPage() {
                 <th className="px-4 py-3 text-right">งวด 3</th>
                 <th className="px-4 py-3 text-right">ส่วนกลางรับโอน</th>
                 <th className="px-4 py-3 text-right">ส่วนกลางโอนออก</th>
+                <th className="px-4 py-3 text-right">ภายในกรมขอเพิ่ม</th>
+                <th className="px-4 py-3 text-right">ภายในกรมโอนออก</th>
                 <th className="px-4 py-3 text-right">ภายในกองรับโอน</th>
                 <th className="px-4 py-3 text-right">ภายในกองโอนออก</th>
                 <th className="px-4 py-3 text-right">ผูกพันมี PO</th>
@@ -255,9 +257,9 @@ export function BudgetUtilizationImportDetailPage() {
             </thead>
             <tbody className="divide-y divide-slate-100">
               {loading ? (
-                <tr><td colSpan={14} className="px-4 py-8 text-center text-slate-500">กำลังโหลดข้อมูล...</td></tr>
+                <tr><td colSpan={16} className="px-4 py-8 text-center text-slate-500">กำลังโหลดข้อมูล...</td></tr>
               ) : filteredItems.length === 0 ? (
-                <tr><td colSpan={14} className="px-4 py-8 text-center text-slate-500">ไม่พบรายการในไฟล์นี้</td></tr>
+                <tr><td colSpan={16} className="px-4 py-8 text-center text-slate-500">ไม่พบรายการในไฟล์นี้</td></tr>
               ) : filteredItems.map((item) => (
                 <tr key={item.id} className={item.parent_id === null ? 'bg-teal-50/50 font-semibold' : undefined}>
                   <td className="px-4 py-3 text-slate-900">
@@ -272,6 +274,8 @@ export function BudgetUtilizationImportDetailPage() {
                   <td className="px-4 py-3 text-right">{formatBudgetAmount(item.amount.allocation_tranche_3_amount, 0)}</td>
                   <td className="px-4 py-3 text-right">{formatBudgetAmount(item.amount.central_transfer_in_amount, 0)}</td>
                   <td className="px-4 py-3 text-right">{formatBudgetAmount(item.amount.central_transfer_out_amount, 0)}</td>
+                  <td className="px-4 py-3 text-right">{formatBudgetAmount(item.amount.department_request_increase_amount, 0)}</td>
+                  <td className="px-4 py-3 text-right">{formatBudgetAmount(item.amount.department_transfer_out_amount, 0)}</td>
                   <td className="px-4 py-3 text-right">{formatBudgetAmount(item.amount.division_transfer_in_amount, 0)}</td>
                   <td className="px-4 py-3 text-right">{formatBudgetAmount(item.amount.division_transfer_out_amount, 0)}</td>
                   <td className="px-4 py-3 text-right">{formatBudgetAmount(item.amount.committed_po_amount, 0)}</td>

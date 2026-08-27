@@ -110,6 +110,8 @@ create table if not exists public.budget_utilization_amounts (
   net_budget_after_transfer_amount numeric(14,2) not null default 0,
   central_transfer_in_amount numeric(14,2) not null default 0,
   central_transfer_out_amount numeric(14,2) not null default 0,
+  department_request_increase_amount numeric(14,2) not null default 0,
+  department_transfer_out_amount numeric(14,2) not null default 0,
   division_transfer_in_amount numeric(14,2) not null default 0,
   division_transfer_out_amount numeric(14,2) not null default 0,
   committed_po_amount numeric(14,2) not null default 0,

@@ -90,6 +90,8 @@ type RawTableColumns = {
   netTotal: number;
   centralIn: number;
   centralOut: number;
+  departmentRequestIncrease: number | null;
+  departmentTransferOut: number | null;
   divisionIn: number;
   divisionOut: number;
   committedPo: number;
@@ -125,6 +127,13 @@ function getRawTableColumns(rows: unknown[][]): RawTableColumns {
   }
 
   const category = findHeaderIndex(header, (value) => value === 'ชื่อโครงการ');
+  const headerContext = rows
+    .slice(headerRowIndex, headerRowIndex + 2)
+    .flat()
+    .map((cell) => normalizeLabel(String(cell ?? '')))
+    .join(' ');
+  const hasDepartmentTransfers = headerContext.includes('ภายในกรม');
+  const transferOffset = hasDepartmentTransfers ? 2 : 0;
 
   return {
     headerRowIndex,
@@ -141,18 +150,20 @@ function getRawTableColumns(rows: unknown[][]): RawTableColumns {
     netTotal: planned + 4,
     centralIn: planned + 5,
     centralOut: planned + 6,
-    divisionIn: planned + 7,
-    divisionOut: planned + 8,
-    committedPo: planned + 9,
-    committedWithoutPo: planned + 10,
-    committedTotal: planned + 11,
-    disbursedGeneral: planned + 12,
-    disbursedAdvance: planned + 13,
-    disbursedTotal: planned + 14,
-    utilizationTotal: planned + 15,
-    remaining: planned + 16,
-    disbursementRate: planned + 17,
-    utilizationWithPoRate: planned + 18,
+    departmentRequestIncrease: hasDepartmentTransfers ? planned + 7 : null,
+    departmentTransferOut: hasDepartmentTransfers ? planned + 8 : null,
+    divisionIn: planned + 7 + transferOffset,
+    divisionOut: planned + 8 + transferOffset,
+    committedPo: planned + 9 + transferOffset,
+    committedWithoutPo: planned + 10 + transferOffset,
+    committedTotal: planned + 11 + transferOffset,
+    disbursedGeneral: planned + 12 + transferOffset,
+    disbursedAdvance: planned + 13 + transferOffset,
+    disbursedTotal: planned + 14 + transferOffset,
+    utilizationTotal: planned + 15 + transferOffset,
+    remaining: planned + 16 + transferOffset,
+    disbursementRate: planned + 17 + transferOffset,
+    utilizationWithPoRate: planned + 18 + transferOffset,
   };
 }
 
@@ -169,6 +180,8 @@ function getRawAmount(row: string[], columns: RawTableColumns) {
     net_budget_after_transfer_amount: toNumber(row[columns.netTotal]),
     central_transfer_in_amount: toNumber(row[columns.centralIn]),
     central_transfer_out_amount: toNumber(row[columns.centralOut]),
+    department_request_increase_amount: columns.departmentRequestIncrease === null ? 0 : toNumber(row[columns.departmentRequestIncrease]),
+    department_transfer_out_amount: columns.departmentTransferOut === null ? 0 : toNumber(row[columns.departmentTransferOut]),
     division_transfer_in_amount: toNumber(row[columns.divisionIn]),
     division_transfer_out_amount: toNumber(row[columns.divisionOut]),
     committed_po_amount: toNumber(row[columns.committedPo]),
@@ -531,6 +544,8 @@ export async function parseBudgetWorkbook(file: File): Promise<BudgetUtilization
           net_budget_after_transfer_amount: toNumber(row[6]),
           central_transfer_in_amount: toNumber(row[7]),
           central_transfer_out_amount: toNumber(row[8]),
+          department_request_increase_amount: 0,
+          department_transfer_out_amount: 0,
           division_transfer_in_amount: toNumber(row[9]),
           division_transfer_out_amount: toNumber(row[10]),
           committed_po_amount: toNumber(row[11]),

@@ -28,6 +28,8 @@ type ItemForm = {
   allocationTranche3Date: string;
   centralTransferInAmount: string;
   centralTransferOutAmount: string;
+  departmentRequestIncreaseAmount: string;
+  departmentTransferOutAmount: string;
   divisionTransferInAmount: string;
   divisionTransferOutAmount: string;
   committedPoAmount: string;
@@ -59,6 +61,12 @@ type CentralTransferForm = {
   itemId: string;
   centralTransferInAmount: string;
   centralTransferOutAmount: string;
+};
+
+type DepartmentTransferForm = {
+  itemId: string;
+  departmentRequestIncreaseAmount: string;
+  departmentTransferOutAmount: string;
 };
 
 type DivisionTransferForm = {
@@ -104,6 +112,8 @@ const emptyMainForm: ItemForm = {
   allocationTranche3Date: '',
   centralTransferInAmount: '',
   centralTransferOutAmount: '',
+  departmentRequestIncreaseAmount: '',
+  departmentTransferOutAmount: '',
   divisionTransferInAmount: '',
   divisionTransferOutAmount: '',
   committedPoAmount: '',
@@ -150,6 +160,12 @@ const initialCentralTransferForm: CentralTransferForm = {
   centralTransferOutAmount: '',
 };
 
+const initialDepartmentTransferForm: DepartmentTransferForm = {
+  itemId: '',
+  departmentRequestIncreaseAmount: '',
+  departmentTransferOutAmount: '',
+};
+
 const initialDivisionTransferForm: DivisionTransferForm = {
   itemId: '',
   divisionTransferInAmount: '',
@@ -193,6 +209,8 @@ function formFromItem(item: BudgetUtilizationItemWithAmount): ItemForm {
     allocationTranche3Date: item.amount.allocation_tranche_3_date ?? '',
     centralTransferInAmount: String(item.amount.central_transfer_in_amount || ''),
     centralTransferOutAmount: String(item.amount.central_transfer_out_amount || ''),
+    departmentRequestIncreaseAmount: String(item.amount.department_request_increase_amount || ''),
+    departmentTransferOutAmount: String(item.amount.department_transfer_out_amount || ''),
     divisionTransferInAmount: String(item.amount.division_transfer_in_amount || ''),
     divisionTransferOutAmount: String(item.amount.division_transfer_out_amount || ''),
     committedPoAmount: String(item.amount.committed_po_amount || ''),
@@ -227,6 +245,8 @@ function toItemPayload(reportPeriodId: string, form: ItemForm, parentId: string 
     allocationTranche3Date: form.allocationTranche3Date || null,
     centralTransferInAmount: toNumber(form.centralTransferInAmount),
     centralTransferOutAmount: toNumber(form.centralTransferOutAmount),
+    departmentRequestIncreaseAmount: toNumber(form.departmentRequestIncreaseAmount),
+    departmentTransferOutAmount: toNumber(form.departmentTransferOutAmount),
     divisionTransferInAmount: toNumber(form.divisionTransferInAmount),
     divisionTransferOutAmount: toNumber(form.divisionTransferOutAmount),
     committedPoAmount: toNumber(form.committedPoAmount),
@@ -261,6 +281,7 @@ export function BudgetUtilizationItemsPage() {
   const [allocationForm, setAllocationForm] = useState<AllocationForm>(initialAllocationForm);
   const [disbursementForm, setDisbursementForm] = useState<DisbursementForm>(initialDisbursementForm);
   const [centralTransferForm, setCentralTransferForm] = useState<CentralTransferForm>(initialCentralTransferForm);
+  const [departmentTransferForm, setDepartmentTransferForm] = useState<DepartmentTransferForm>(initialDepartmentTransferForm);
   const [divisionTransferForm, setDivisionTransferForm] = useState<DivisionTransferForm>(initialDivisionTransferForm);
   const [commitmentForm, setCommitmentForm] = useState<CommitmentForm>(initialCommitmentForm);
   const [trancheDefinitions, setTrancheDefinitions] = useState<TrancheDefinition[]>(initialTrancheDefinitions);
@@ -475,6 +496,10 @@ export function BudgetUtilizationItemsPage() {
     return budgetLineItems.find((item) => item.id === centralTransferForm.itemId) ?? null;
   }, [budgetLineItems, centralTransferForm.itemId]);
 
+  const selectedDepartmentTransferItem = useMemo(() => {
+    return budgetLineItems.find((item) => item.id === departmentTransferForm.itemId) ?? null;
+  }, [budgetLineItems, departmentTransferForm.itemId]);
+
   const selectedDivisionTransferItem = useMemo(() => {
     return budgetLineItems.find((item) => item.id === divisionTransferForm.itemId) ?? null;
   }, [budgetLineItems, divisionTransferForm.itemId]);
@@ -650,6 +675,11 @@ export function BudgetUtilizationItemsPage() {
         centralTransferInAmount: String(item.amount.central_transfer_in_amount || ''),
         centralTransferOutAmount: String(item.amount.central_transfer_out_amount || ''),
       });
+      setDepartmentTransferForm({
+        itemId: item.id,
+        departmentRequestIncreaseAmount: String(item.amount.department_request_increase_amount || ''),
+        departmentTransferOutAmount: String(item.amount.department_transfer_out_amount || ''),
+      });
       setDivisionTransferForm({
         itemId: item.id,
         divisionTransferInAmount: String(item.amount.division_transfer_in_amount || ''),
@@ -708,6 +738,14 @@ export function BudgetUtilizationItemsPage() {
       ...current,
       centralTransferInAmount: item ? String(item.amount.central_transfer_in_amount || '') : '',
       centralTransferOutAmount: item ? String(item.amount.central_transfer_out_amount || '') : '',
+    }));
+  };
+
+  const applySelectedDepartmentTransferItemValue = (item: BudgetUtilizationItemWithAmount | null) => {
+    setDepartmentTransferForm((current) => ({
+      ...current,
+      departmentRequestIncreaseAmount: item ? String(item.amount.department_request_increase_amount || '') : '',
+      departmentTransferOutAmount: item ? String(item.amount.department_transfer_out_amount || '') : '',
     }));
   };
 
@@ -856,6 +894,41 @@ export function BudgetUtilizationItemsPage() {
       await loadData(activeReportPeriodId);
     } catch (saveError) {
       setError(getSafeUserErrorMessage(saveError, 'ไม่สามารถบันทึกภายในกองได้'));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const saveDepartmentTransferForm = async () => {
+    if (!selectedDepartmentTransferItem) {
+      setError('กรุณาเลือกรายการงบประมาณก่อนบันทึกภายในกรม');
+      return;
+    }
+
+    try {
+      setSaving(true);
+      setError(null);
+      const activeReportPeriodId = await ensureReportPeriodId();
+      const nextForm = formFromItem(selectedDepartmentTransferItem);
+      const requestIncrease = toNumber(departmentTransferForm.departmentRequestIncreaseAmount);
+      const transferOut = toNumber(departmentTransferForm.departmentTransferOutAmount);
+      const effectiveBudget =
+        toNumber(nextForm.netBudgetAfterTransferAmount) -
+        toNumber(nextForm.departmentRequestIncreaseAmount) +
+        toNumber(nextForm.departmentTransferOutAmount) +
+        requestIncrease -
+        transferOut;
+      const remainingAmount = Math.max(0, effectiveBudget - toNumber(nextForm.utilizationTotalAmount));
+
+      nextForm.departmentRequestIncreaseAmount = departmentTransferForm.departmentRequestIncreaseAmount;
+      nextForm.departmentTransferOutAmount = departmentTransferForm.departmentTransferOutAmount;
+      nextForm.netBudgetAfterTransferAmount = String(effectiveBudget || '');
+      nextForm.remainingAmount = String(remainingAmount || '');
+
+      await updateBudgetItem(toItemPayload(activeReportPeriodId, nextForm, selectedDepartmentTransferItem.parent_id, selectedDepartmentTransferItem.sequence_label ?? ''));
+      await loadData(activeReportPeriodId);
+    } catch (saveError) {
+      setError(getSafeUserErrorMessage(saveError, 'ไม่สามารถบันทึกภายในกรมได้'));
     } finally {
       setSaving(false);
     }
@@ -1594,6 +1667,62 @@ export function BudgetUtilizationItemsPage() {
             </div>
           </section>
 
+          <section className="mt-4 rounded-md border border-blue-100 bg-white p-4 shadow-sm">
+            <div className="mb-3">
+              <h2 className="text-base font-semibold text-slate-950">ภายในกรม</h2>
+              <p className="mt-1 text-xs text-slate-500">บันทึกยอดขอเพิ่มและโอนออกภายในกรม สำหรับคำนวณงบสุทธิและคงเหลือ</p>
+            </div>
+            <div className="grid gap-3 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,0.8fr)_minmax(0,0.8fr)_auto] lg:items-end">
+              <label className="block">
+                <span className="text-xs font-semibold text-slate-600">รายการงบประมาณ</span>
+                <select
+                  value={departmentTransferForm.itemId}
+                  onChange={(event) => {
+                    const nextItem = budgetLineItems.find((item) => item.id === event.target.value) ?? null;
+                    setDepartmentTransferForm((current) => ({ ...current, itemId: event.target.value }));
+                    applySelectedDepartmentTransferItemValue(nextItem);
+                  }}
+                  className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                >
+                  <option value="">เลือกรายการงบประมาณ</option>
+                  {budgetLineItems.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.sequence_label ? `${item.sequence_label} ` : ''}
+                      {item.item_name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="block">
+                <span className="text-xs font-semibold text-slate-600">ขอเพิ่ม</span>
+                <input
+                  value={departmentTransferForm.departmentRequestIncreaseAmount}
+                  onChange={(event) => setDepartmentTransferForm((current) => ({ ...current, departmentRequestIncreaseAmount: event.target.value }))}
+                  className="mt-1 h-10 w-full rounded-md border border-slate-300 px-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                  placeholder="ยอดขอเพิ่ม"
+                />
+              </label>
+              <label className="block">
+                <span className="text-xs font-semibold text-slate-600">โอนออก</span>
+                <input
+                  value={departmentTransferForm.departmentTransferOutAmount}
+                  onChange={(event) => setDepartmentTransferForm((current) => ({ ...current, departmentTransferOutAmount: event.target.value }))}
+                  className="mt-1 h-10 w-full rounded-md border border-slate-300 px-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                  placeholder="ยอดโอนออก"
+                />
+              </label>
+              <button
+                type="button"
+                onClick={() => void saveDepartmentTransferForm()}
+                disabled={saving || !departmentTransferForm.itemId}
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-blue-700 px-4 text-sm font-semibold text-white transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Save className="h-4 w-4" aria-hidden="true" />
+                บันทึกภายในกรม
+              </button>
+            </div>
+          </section>
+
           <section className="mt-4 rounded-md border border-orange-100 bg-white p-4 shadow-sm">
             <div className="mb-3">
               <h2 className="text-base font-semibold text-slate-950">ภายในกอง</h2>
@@ -1780,7 +1909,7 @@ export function BudgetUtilizationItemsPage() {
         <div className="overflow-x-auto">
           <table
             className="divide-y divide-slate-100 text-sm"
-            style={{ minWidth: `${1960 + trancheDefinitions.length * 120}px` }}
+            style={{ minWidth: `${2200 + trancheDefinitions.length * 120}px` }}
           >
             <thead className="bg-slate-50 text-left text-xs font-semibold text-slate-700">
               <tr>
@@ -1798,6 +1927,7 @@ export function BudgetUtilizationItemsPage() {
                 ))}
                 <th rowSpan={2} className="border border-slate-200 bg-lime-50 px-4 py-3 text-center align-middle">ยอดสุทธิงบประมาณ<br />{displayFiscalYear} หลังโอนเปลี่ยนแปลง<br />(1)</th>
                 <th colSpan={2} className="border border-slate-200 bg-green-700 px-4 py-2 text-center font-bold text-white">ส่วนกลางกรมฯ</th>
+                <th colSpan={2} className="border border-slate-200 bg-blue-500 px-4 py-2 text-center font-bold text-white">ภายในกรม</th>
                 <th colSpan={2} className="border border-slate-200 bg-green-400 px-4 py-2 text-center font-bold text-slate-950">ภายในกอง</th>
                 <th colSpan={3} className="border border-slate-200 bg-sky-400 px-4 py-2 text-center font-bold text-slate-950">ผูกพัน</th>
                 <th colSpan={3} className="border border-slate-200 bg-lime-500 px-4 py-2 text-center font-bold text-slate-950">เบิก-จ่าย</th>
@@ -1810,6 +1940,8 @@ export function BudgetUtilizationItemsPage() {
               <tr>
                 <th className="border border-slate-200 bg-white px-4 py-2 text-center text-slate-700">รับโอน<br />(2)</th>
                 <th className="border border-slate-200 bg-white px-4 py-2 text-center text-slate-700">โอนออก<br />(3)</th>
+                <th className="border border-slate-200 bg-white px-4 py-2 text-center text-slate-700">ขอเพิ่ม</th>
+                <th className="border border-slate-200 bg-white px-4 py-2 text-center text-slate-700">โอนออก</th>
                 <th className="border border-slate-200 bg-white px-4 py-2 text-center text-slate-700">รับโอน<br />(2)</th>
                 <th className="border border-slate-200 bg-white px-4 py-2 text-center text-slate-700">โอนออก<br />(3)</th>
                 <th className="border border-slate-200 bg-white px-4 py-2 text-center text-slate-700">มี PO<br />(4)</th>
@@ -1822,9 +1954,9 @@ export function BudgetUtilizationItemsPage() {
             </thead>
             <tbody className="divide-y divide-slate-100">
               {loading ? (
-                <tr><td colSpan={trancheDefinitions.length + (canManage ? 18 : 17)} className="px-4 py-8 text-center text-slate-500">กำลังโหลดข้อมูล...</td></tr>
+                <tr><td colSpan={trancheDefinitions.length + (canManage ? 20 : 19)} className="px-4 py-8 text-center text-slate-500">กำลังโหลดข้อมูล...</td></tr>
               ) : filteredItems.length === 0 ? (
-                <tr><td colSpan={trancheDefinitions.length + (canManage ? 18 : 17)} className="px-4 py-8 text-center text-slate-500">ยังไม่มีรายการงบประมาณ</td></tr>
+                <tr><td colSpan={trancheDefinitions.length + (canManage ? 20 : 19)} className="px-4 py-8 text-center text-slate-500">ยังไม่มีรายการงบประมาณ</td></tr>
               ) : filteredItems.map((item) => {
                 const isCategory = item.parent_id === null;
                 const isMajorProject = item.row_type === 'major_project'
@@ -1890,6 +2022,8 @@ export function BudgetUtilizationItemsPage() {
                     <td className={`px-4 py-3 text-right font-semibold ${isHeading ? amountTextClass ?? '' : 'text-slate-900'}`}>{isHeading ? '-' : formatBudgetAmount(netTotal)}</td>
                     <td className={`px-4 py-3 text-right ${amountTextClass ?? ''}`}>{isHeading ? '-' : formatBudgetAmount(item.amount.central_transfer_in_amount || 0)}</td>
                     <td className={`px-4 py-3 text-right ${amountTextClass ?? ''}`}>{isHeading ? '-' : formatBudgetAmount(item.amount.central_transfer_out_amount || 0)}</td>
+                    <td className={`px-4 py-3 text-right ${amountTextClass ?? ''}`}>{isHeading ? '-' : formatBudgetAmount(item.amount.department_request_increase_amount || 0)}</td>
+                    <td className={`px-4 py-3 text-right ${amountTextClass ?? ''}`}>{isHeading ? '-' : formatBudgetAmount(item.amount.department_transfer_out_amount || 0)}</td>
                     <td className={`px-4 py-3 text-right ${amountTextClass ?? ''}`}>{isHeading ? '-' : formatBudgetAmount(item.amount.division_transfer_in_amount || 0)}</td>
                     <td className={`px-4 py-3 text-right ${amountTextClass ?? ''}`}>{isHeading ? '-' : formatBudgetAmount(item.amount.division_transfer_out_amount || 0)}</td>
                     <td className={`px-4 py-3 text-right ${amountTextClass ?? ''}`}>{isHeading ? '-' : formatBudgetAmount(item.amount.committed_po_amount || 0)}</td>

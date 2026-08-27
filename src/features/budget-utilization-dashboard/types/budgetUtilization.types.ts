@@ -56,6 +56,8 @@ export type BudgetUtilizationAmount = {
   net_budget_after_transfer_amount: number;
   central_transfer_in_amount: number;
   central_transfer_out_amount: number;
+  department_request_increase_amount: number;
+  department_transfer_out_amount: number;
   division_transfer_in_amount: number;
   division_transfer_out_amount: number;
   committed_po_amount: number;
@@ -224,6 +226,8 @@ export type BudgetUtilizationItemInput = {
   allocationTranche3Date?: string | null;
   centralTransferInAmount?: number;
   centralTransferOutAmount?: number;
+  departmentRequestIncreaseAmount?: number;
+  departmentTransferOutAmount?: number;
   divisionTransferInAmount?: number;
   divisionTransferOutAmount?: number;
   committedPoAmount?: number;

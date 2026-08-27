@@ -419,6 +419,7 @@ export async function saveBudgetItemAllocation(
   );
   const netBudget = allocationTotal
     + currentAmount.central_transfer_in_amount - currentAmount.central_transfer_out_amount
+    + currentAmount.department_request_increase_amount - currentAmount.department_transfer_out_amount
     + currentAmount.division_transfer_in_amount - currentAmount.division_transfer_out_amount
     + currentAmount.committed_po_amount + currentAmount.committed_without_po_amount;
   const remaining = Math.max(0, netBudget - currentAmount.utilization_total_amount);
@@ -517,6 +518,8 @@ function toBudgetAmountPayload(input: BudgetUtilizationItemInput, itemId: string
     (input.allocationTranche3Amount ?? 0) +
     (input.centralTransferInAmount ?? 0) -
     (input.centralTransferOutAmount ?? 0) +
+    (input.departmentRequestIncreaseAmount ?? 0) -
+    (input.departmentTransferOutAmount ?? 0) +
     (input.divisionTransferInAmount ?? 0) -
     (input.divisionTransferOutAmount ?? 0) +
     committedTotalAmount;
@@ -535,6 +538,8 @@ function toBudgetAmountPayload(input: BudgetUtilizationItemInput, itemId: string
     allocation_tranche_3_amount: input.allocationTranche3Amount,
     central_transfer_in_amount: input.centralTransferInAmount,
     central_transfer_out_amount: input.centralTransferOutAmount,
+    department_request_increase_amount: input.departmentRequestIncreaseAmount,
+    department_transfer_out_amount: input.departmentTransferOutAmount,
     division_transfer_in_amount: input.divisionTransferInAmount,
     division_transfer_out_amount: input.divisionTransferOutAmount,
     committed_po_amount: committedPoAmount,
@@ -559,6 +564,8 @@ function toBudgetAmountPayload(input: BudgetUtilizationItemInput, itemId: string
     net_budget_after_transfer_amount: normalized.net_budget_after_transfer_amount,
     central_transfer_in_amount: normalized.central_transfer_in_amount,
     central_transfer_out_amount: normalized.central_transfer_out_amount,
+    department_request_increase_amount: normalized.department_request_increase_amount,
+    department_transfer_out_amount: normalized.department_transfer_out_amount,
     division_transfer_in_amount: normalized.division_transfer_in_amount,
     division_transfer_out_amount: normalized.division_transfer_out_amount,
     committed_po_amount: normalized.committed_po_amount,
@@ -747,6 +754,8 @@ const reconciliationFields: Array<keyof BudgetUtilizationAmount> = [
   'net_budget_after_transfer_amount',
   'central_transfer_in_amount',
   'central_transfer_out_amount',
+  'department_request_increase_amount',
+  'department_transfer_out_amount',
   'division_transfer_in_amount',
   'division_transfer_out_amount',
   'committed_total_amount',

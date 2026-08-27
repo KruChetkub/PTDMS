@@ -53,6 +53,8 @@ type RawBudgetRow = {
   netTotal: number;
   centralIn: number;
   centralOut: number;
+  departmentRequestIncrease: number;
+  departmentTransferOut: number;
   divisionIn: number;
   divisionOut: number;
   committedPo: number;
@@ -200,6 +202,8 @@ const hierarchyAmountFields = [
   'allocation_total_amount',
   'central_transfer_in_amount',
   'central_transfer_out_amount',
+  'department_request_increase_amount',
+  'department_transfer_out_amount',
   'division_transfer_in_amount',
   'division_transfer_out_amount',
   'committed_po_amount',
@@ -272,19 +276,27 @@ function getRawCell(row: string[], index: number) {
   return String(row[index] ?? '').trim();
 }
 
-function mapRawBudgetRow(row: string[], index: number): RawBudgetRow {
+function rawWorkbookHasDepartmentTransfers(rawWorkbook: BudgetUtilizationRawWorkbook) {
+  return rawWorkbook.rows.slice(0, 4).some((row) => (
+    row.some((cell) => String(cell ?? '').replace(/\s+/g, '').includes('ภายในกรม'))
+  ));
+}
+
+function mapRawBudgetRow(row: string[], index: number, hasDepartmentColumns = false): RawBudgetRow {
+  const transferOffset = hasDepartmentColumns ? 2 : 0;
   const summaryLabel = getRawCell(row, 0);
   const name = (/\(รวม\)/.test(summaryLabel) || summaryLabel === 'งบดำเนินงาน')
     ? summaryLabel
     : getRawCell(row, 5) || getRawCell(row, 1) || summaryLabel || `แถวที่ ${index + 1}`;
-  const committedTotal = toNumber(row[19]) || toNumber(row[17]) + toNumber(row[18]);
-  const disbursedTotal = toNumber(row[22]) || toNumber(row[20]) + toNumber(row[21]);
-  const utilizationTotal = toNumber(row[23]) || committedTotal + disbursedTotal;
+  const committedTotal = toNumber(row[19 + transferOffset]) || toNumber(row[17 + transferOffset]) + toNumber(row[18 + transferOffset]);
+  const disbursedTotal = toNumber(row[22 + transferOffset]) || toNumber(row[20 + transferOffset]) + toNumber(row[21 + transferOffset]);
+  const utilizationTotal = toNumber(row[23 + transferOffset]) || committedTotal + disbursedTotal;
   const calculatedNetTotal = toNumber(row[9]) + toNumber(row[10]) + toNumber(row[11])
     + toNumber(row[13]) - toNumber(row[14])
-    + toNumber(row[15]) - toNumber(row[16])
+    + (hasDepartmentColumns ? toNumber(row[15]) - toNumber(row[16]) : 0)
+    + toNumber(row[15 + transferOffset]) - toNumber(row[16 + transferOffset])
     + committedTotal;
-  const netTotal = calculatedNetTotal || toNumber(row[12]);
+  const netTotal = toNumber(row[12]) || calculatedNetTotal;
 
   return {
     id: `raw-${index}`,
@@ -296,16 +308,18 @@ function mapRawBudgetRow(row: string[], index: number): RawBudgetRow {
     netTotal,
     centralIn: toNumber(row[13]),
     centralOut: toNumber(row[14]),
-    divisionIn: toNumber(row[15]),
-    divisionOut: toNumber(row[16]),
-    committedPo: toNumber(row[17]),
-    committedWithoutPo: toNumber(row[18]),
+    departmentRequestIncrease: hasDepartmentColumns ? toNumber(row[15]) : 0,
+    departmentTransferOut: hasDepartmentColumns ? toNumber(row[16]) : 0,
+    divisionIn: toNumber(row[15 + transferOffset]),
+    divisionOut: toNumber(row[16 + transferOffset]),
+    committedPo: toNumber(row[17 + transferOffset]),
+    committedWithoutPo: toNumber(row[18 + transferOffset]),
     committedTotal,
-    disbursedGeneral: toNumber(row[20]),
-    disbursedAdvance: toNumber(row[21]),
+    disbursedGeneral: toNumber(row[20 + transferOffset]),
+    disbursedAdvance: toNumber(row[21 + transferOffset]),
     disbursedTotal,
     utilizationTotal,
-    remaining: toNumber(row[24]),
+    remaining: toNumber(row[24 + transferOffset]),
     disbursementRate: percent(disbursedTotal, netTotal),
     utilizationWithPoRate: percent(utilizationTotal, netTotal),
   };
@@ -316,8 +330,9 @@ function getRawDashboardRows(rawWorkbook: BudgetUtilizationRawWorkbook | null | 
     return { total: null as RawBudgetRow | null, categories: [] as RawBudgetRow[] };
   }
 
+  const hasDepartmentColumns = rawWorkbookHasDepartmentTransfers(rawWorkbook);
   const mappedRows = rawWorkbook.rows
-    .map((row, index) => ({ row, mapped: mapRawBudgetRow(row, index) }))
+    .map((row, index) => ({ row, mapped: mapRawBudgetRow(row, index, hasDepartmentColumns) }))
     .filter(({ mapped }) => mapped.netTotal || mapped.planned || mapped.disbursedTotal || mapped.utilizationTotal);
   const total = mappedRows.find(({ row }) => row.some((cell) => /รวมทั้งสิ้น/.test(cell)))?.mapped ?? mappedRows[0]?.mapped ?? null;
   const categories = mappedRows
@@ -340,6 +355,8 @@ function sumRawBudgetRows(rows: RawBudgetRow[]): RawBudgetRow {
       netTotal: total.netTotal + row.netTotal,
       centralIn: total.centralIn + row.centralIn,
       centralOut: total.centralOut + row.centralOut,
+      departmentRequestIncrease: total.departmentRequestIncrease + row.departmentRequestIncrease,
+      departmentTransferOut: total.departmentTransferOut + row.departmentTransferOut,
       divisionIn: total.divisionIn + row.divisionIn,
       divisionOut: total.divisionOut + row.divisionOut,
       committedPo: total.committedPo + row.committedPo,
@@ -359,6 +376,8 @@ function sumRawBudgetRows(rows: RawBudgetRow[]): RawBudgetRow {
       netTotal: 0,
       centralIn: 0,
       centralOut: 0,
+      departmentRequestIncrease: 0,
+      departmentTransferOut: 0,
       divisionIn: 0,
       divisionOut: 0,
       committedPo: 0,
@@ -402,8 +421,9 @@ function getRawPlanDetailRows(rawWorkbook: BudgetUtilizationRawWorkbook | null |
   const definition = plannedBudgetCategoryDefinitions.find((item) => item.key === categoryKey);
   if (!definition) return [];
 
+  const hasDepartmentColumns = rawWorkbookHasDepartmentTransfers(rawWorkbook);
   return rawWorkbook.rows
-    .map((row, index) => ({ row, mapped: mapRawBudgetRow(row, index) }))
+    .map((row, index) => ({ row, mapped: mapRawBudgetRow(row, index, hasDepartmentColumns) }))
     .filter(({ row, mapped }) => {
       const rowLabel = getRawCell(row, 0);
       const categoryName = getRawCell(row, 2);
@@ -416,6 +436,13 @@ function getRawPlanDetailRows(rawWorkbook: BudgetUtilizationRawWorkbook | null |
         || /\(รวม\)|ดึงมา/.test(categoryName)
         || !itemName
         || !hasMoney
+      ) {
+        return false;
+      }
+
+      if (
+        categoryKey === 'operations'
+        && itemName.replace(/\s+/g, '') === categoryName.replace(/\s+/g, '')
       ) {
         return false;
       }
@@ -478,7 +505,7 @@ function buildDatabaseWorkbook(summary: BudgetUtilizationDashboardSummary | null
   ) => {
     const netTotal = getNetAllocationTotal(amount);
     const remaining = Math.max(0, netTotal - amount.utilization_total_amount);
-    const row = Array.from({ length: 27 }, () => '');
+    const row = Array.from({ length: 29 }, () => '');
     row[0] = firstCell;
     row[2] = categoryName;
     row[3] = output;
@@ -491,23 +518,25 @@ function buildDatabaseWorkbook(summary: BudgetUtilizationDashboardSummary | null
     row[12] = String(netTotal);
     row[13] = String(amount.central_transfer_in_amount);
     row[14] = String(amount.central_transfer_out_amount);
-    row[15] = String(amount.division_transfer_in_amount);
-    row[16] = String(amount.division_transfer_out_amount);
-    row[17] = String(amount.committed_po_amount);
-    row[18] = String(amount.committed_without_po_amount);
-    row[19] = String(amount.committed_total_amount);
-    row[20] = String(amount.disbursed_general_amount);
-    row[21] = String(amount.disbursed_advance_amount);
-    row[22] = String(amount.disbursed_total_amount);
-    row[23] = String(amount.utilization_total_amount);
-    row[24] = String(remaining);
-    row[25] = String(percent(amount.disbursed_total_amount, netTotal));
-    row[26] = String(percent(amount.utilization_total_amount, netTotal));
+    row[15] = String(amount.department_request_increase_amount);
+    row[16] = String(amount.department_transfer_out_amount);
+    row[17] = String(amount.division_transfer_in_amount);
+    row[18] = String(amount.division_transfer_out_amount);
+    row[19] = String(amount.committed_po_amount);
+    row[20] = String(amount.committed_without_po_amount);
+    row[21] = String(amount.committed_total_amount);
+    row[22] = String(amount.disbursed_general_amount);
+    row[23] = String(amount.disbursed_advance_amount);
+    row[24] = String(amount.disbursed_total_amount);
+    row[25] = String(amount.utilization_total_amount);
+    row[26] = String(remaining);
+    row[27] = String(percent(amount.disbursed_total_amount, netTotal));
+    row[28] = String(percent(amount.utilization_total_amount, netTotal));
     return row;
   };
 
   const rows: string[][] = [
-    ['รายการ', '', 'หมวดงบประมาณ', 'ผลผลิต', 'กิจกรรมหลัก', 'ชื่อโครงการ', '', '', 'วงเงินตามแผน', 'รับจัดสรรงวด 1', 'รับจัดสรรงวด 2', 'รับจัดสรรงวด 3', 'ยอดสุทธิ', 'ส่วนกลางรับโอน', 'ส่วนกลางโอนออก', 'ภายในกองรับโอน', 'ภายในกองโอนออก', 'มี PO', 'ไม่มี PO', 'ผูกพันรวม', 'เบิกจ่ายทั่วไป', 'เงินยืมราชการ', 'เบิกจ่ายรวม', 'รวม', 'คงเหลือ', 'ร้อยละเบิกจ่าย', 'ร้อยละรวม'],
+    ['รายการ', '', 'หมวดงบประมาณ', 'ผลผลิต', 'กิจกรรมหลัก', 'ชื่อโครงการ', '', '', 'วงเงินตามแผน', 'รับจัดสรรงวด 1', 'รับจัดสรรงวด 2', 'รับจัดสรรงวด 3', 'ยอดสุทธิ', 'ส่วนกลางรับโอน', 'ส่วนกลางโอนออก', 'ภายในกรมขอเพิ่ม', 'ภายในกรมโอนออก', 'ภายในกองรับโอน', 'ภายในกองโอนออก', 'มี PO', 'ไม่มี PO', 'ผูกพันรวม', 'เบิกจ่ายทั่วไป', 'เงินยืมราชการ', 'เบิกจ่ายรวม', 'รวม', 'คงเหลือ', 'ร้อยละเบิกจ่าย', 'ร้อยละรวม'],
     toRow('รวมทั้งสิ้น', '', 'รวมทั้งสิ้น', summary.totals),
   ];
   const itemById = new Map(summary.items.map((item) => [item.id, item]));
@@ -639,7 +668,7 @@ function buildDatabaseWorkbook(summary: BudgetUtilizationDashboardSummary | null
 
   return {
     sheetName: 'ฐานข้อมูลงบประมาณปัจจุบัน',
-    columnCount: 27,
+    columnCount: 29,
     rows,
     merges: [],
   };
@@ -711,6 +740,7 @@ export function BudgetUtilizationDashboardPage() {
       setError(null);
       setShowProjectBar(false);
       setShowBottomTable(false);
+      setHasPlanBarClicked(false);
       setSelectedRawPlanCategoryKey('personnel');
       const options = await listBudgetDatasetOptions();
       const selectedOption = options.find((option) => option.reportPeriodId === reportPeriodId) ?? null;
@@ -817,7 +847,7 @@ export function BudgetUtilizationDashboardPage() {
 
   const visiblePlanChartData = useMemo(() => visiblePlanCategoryData.map((item) => {
     const allocatedBudget = item.netTotal;
-    const remainingFromAllocation = allocatedBudget - item.disbursedTotal;
+    const remainingFromAllocation = Math.max(0, item.remaining);
     const remainingFromAllocationRate = allocatedBudget > 0 ? (remainingFromAllocation * 100) / allocatedBudget : 0;
     const disbursementRate = allocatedBudget > 0 ? (item.disbursedTotal * 100) / allocatedBudget : 0;
 
@@ -827,9 +857,7 @@ export function BudgetUtilizationDashboardPage() {
       remainingFromAllocation,
       remainingFromAllocationRate,
       disbursementRateLabel: `เบิก ${formatBudgetAmount(disbursementRate)}%`,
-      remainingFromAllocationLabel: remainingFromAllocation >= 0
-        ? `เหลือ ${formatBudgetAmount(remainingFromAllocationRate)}%`
-        : `เกิน ${formatBudgetAmount(Math.abs(remainingFromAllocationRate))}%`,
+      remainingFromAllocationLabel: `เหลือ ${formatBudgetAmount(remainingFromAllocationRate)}%`,
     };
   }), [visiblePlanCategoryData]);
 
@@ -1163,7 +1191,7 @@ export function BudgetUtilizationDashboardPage() {
               </div>
 
               <div className="order-2 rounded-md border border-slate-200 bg-white p-4 shadow-sm">
-                <h2 className="text-base font-bold text-slate-950">เปรียบเทียบงบประมาณที่รับจัดสรรและผลเบิกจ่ายรวม</h2>
+                <h2 className="text-base font-bold text-slate-950">เปรียบเทียบงบประมาณที่รับจัดสรร ผลเบิกจ่ายรวม และคงเหลือ</h2>
                 <div className="mt-4 grid items-start gap-4 xl:grid-cols-[minmax(540px,0.9fr)_minmax(520px,1fr)]">
                   <div>
                     <div className="h-96 xl:h-[500px]">
@@ -1192,16 +1220,6 @@ export function BudgetUtilizationDashboardPage() {
                                 />
                               );
                             })}
-                            <LabelList
-                              dataKey="remainingFromAllocationLabel"
-                              position="top"
-                              fill="#1e3a8a"
-                              fontSize={13}
-                              fontWeight="normal"
-                              stroke="none"
-                              strokeWidth={0}
-                              style={{ fontWeight: 400 }}
-                            />
                           </Bar>
                           <Bar dataKey="disbursedTotal" name="ผลเบิกจ่ายรวม" fill="#ea580c" radius={[5, 5, 0, 0]} animationDuration={450}>
                             {visiblePlanChartData.map((item) => {
@@ -1225,6 +1243,35 @@ export function BudgetUtilizationDashboardPage() {
                               dataKey="disbursementRateLabel"
                               position="top"
                               fill="#9a3412"
+                              fontSize={13}
+                              fontWeight="normal"
+                              stroke="none"
+                              strokeWidth={0}
+                              style={{ fontWeight: 400 }}
+                            />
+                          </Bar>
+                          <Bar dataKey="remainingFromAllocation" name="คงเหลือ" fill="#0f766e" radius={[5, 5, 0, 0]} animationDuration={450}>
+                            {visiblePlanChartData.map((item) => {
+                              const isActive = showBottomTable
+                                ? item.key === "project"
+                                : item.key === selectedRawPlanCategoryKey;
+
+                              return (
+                                <Cell
+                                  key={item.key}
+                                  fill="#0f766e"
+                                  fillOpacity={isActive ? 1 : 0.58}
+                                  stroke={isActive ? "#134e4a" : "#0f766e"}
+                                  strokeWidth={isActive ? 2 : 1}
+                                  className="cursor-pointer"
+                                  onClick={() => handlePlanCategoryClick(item.key)}
+                                />
+                              );
+                            })}
+                            <LabelList
+                              dataKey="remainingFromAllocationLabel"
+                              position="top"
+                              fill="#115e59"
                               fontSize={13}
                               fontWeight="normal"
                               stroke="none"
@@ -1623,6 +1670,8 @@ export function BudgetUtilizationDashboardPage() {
                     <th className="px-4 py-3 text-right">ยอดรวมสุทธิ</th>
                     <th className="px-4 py-3 text-right">ส่วนกลาง รับโอน</th>
                     <th className="px-4 py-3 text-right">ส่วนกลาง โอนออก</th>
+                    <th className="px-4 py-3 text-right">ภายในกรม ขอเพิ่ม</th>
+                    <th className="px-4 py-3 text-right">ภายในกรม โอนออก</th>
                     <th className="px-4 py-3 text-right">ภายในกอง รับโอน</th>
                     <th className="px-4 py-3 text-right">ภายในกอง โอนออก</th>
                     <th className="px-4 py-3 text-right">เบิกจ่าย</th>
@@ -1637,6 +1686,8 @@ export function BudgetUtilizationDashboardPage() {
                       <td className="px-4 py-3 text-right text-slate-700">{formatBudgetAmount(item.budget, 0)}</td>
                       <td className="px-4 py-3 text-right text-slate-700">{formatBudgetAmount(item.amount.central_transfer_in_amount, 0)}</td>
                       <td className="px-4 py-3 text-right text-slate-700">{formatBudgetAmount(item.amount.central_transfer_out_amount, 0)}</td>
+                      <td className="px-4 py-3 text-right text-slate-700">{formatBudgetAmount(item.amount.department_request_increase_amount, 0)}</td>
+                      <td className="px-4 py-3 text-right text-slate-700">{formatBudgetAmount(item.amount.department_transfer_out_amount, 0)}</td>
                       <td className="px-4 py-3 text-right text-slate-700">{formatBudgetAmount(item.amount.division_transfer_in_amount, 0)}</td>
                       <td className="px-4 py-3 text-right text-slate-700">{formatBudgetAmount(item.amount.division_transfer_out_amount, 0)}</td>
                       <td className="px-4 py-3 text-right text-slate-700">{formatBudgetAmount(item.disbursed, 0)}</td>
