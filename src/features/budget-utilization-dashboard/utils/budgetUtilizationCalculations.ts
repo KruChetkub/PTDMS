@@ -70,10 +70,6 @@ export function formatMillionBaht(value: number) {
 
 export function getNetAllocationTotal(amount: Partial<BudgetUtilizationAmount>) {
   const storedNetBudget = toNumber(amount.net_budget_after_transfer_amount);
-  if (storedNetBudget !== 0) {
-    return storedNetBudget;
-  }
-
   const allocationTotal = amount.allocation_total_amount ?? (
     toNumber(amount.allocation_tranche_1_amount) +
     toNumber(amount.allocation_tranche_2_amount) +
@@ -88,9 +84,17 @@ export function getNetAllocationTotal(amount: Partial<BudgetUtilizationAmount>) 
     toNumber(amount.division_transfer_in_amount) -
     toNumber(amount.division_transfer_out_amount)
   );
-  const committedTotal = toNumber(amount.committed_po_amount) + toNumber(amount.committed_without_po_amount);
+  const hasNetBudgetComponents = [
+    allocationTotal,
+    amount.central_transfer_in_amount,
+    amount.central_transfer_out_amount,
+    amount.department_request_increase_amount,
+    amount.department_transfer_out_amount,
+    amount.division_transfer_in_amount,
+    amount.division_transfer_out_amount,
+  ].some((value) => toNumber(value) !== 0);
 
-  return netAllocationAfterTransfer + committedTotal;
+  return hasNetBudgetComponents ? netAllocationAfterTransfer : storedNetBudget;
 }
 
 export function normalizeAmount(raw?: Partial<BudgetUtilizationAmount> | null): BudgetUtilizationAmount {
@@ -118,17 +122,13 @@ export function normalizeAmount(raw?: Partial<BudgetUtilizationAmount> | null): 
     department_transfer_out_amount: departmentTransferOut,
     division_transfer_in_amount: divisionTransferIn,
     division_transfer_out_amount: divisionTransferOut,
-    committed_po_amount: source.committed_po_amount,
-    committed_without_po_amount: source.committed_without_po_amount,
   });
-  const netBudgetAfterTransfer = toNumber(source.net_budget_after_transfer_amount)
-    || calculatedNetBudgetAfterTransfer
-    || committedTotal;
+  const netBudgetAfterTransfer = calculatedNetBudgetAfterTransfer;
   const disbursedFromParts = toNumber(source.disbursed_general_amount) + toNumber(source.disbursed_advance_amount);
   const disbursedTotal = disbursedFromParts;
   const calculatedUtilizationTotal = committedTotal + disbursedTotal;
   const utilizationTotal = calculatedUtilizationTotal;
-  const remaining = Math.max(0, netBudgetAfterTransfer - utilizationTotal);
+  const remaining = netBudgetAfterTransfer - utilizationTotal;
   const disbursementRate = percent(disbursedTotal, netBudgetAfterTransfer);
   const utilizationWithPoRate = percent(utilizationTotal, netBudgetAfterTransfer);
 

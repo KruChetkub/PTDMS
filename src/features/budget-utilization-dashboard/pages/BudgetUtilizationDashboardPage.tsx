@@ -302,8 +302,7 @@ function mapRawBudgetRow(row: string[], index: number, hasDepartmentColumns = fa
   const calculatedNetTotal = toNumber(row[9]) + toNumber(row[10]) + toNumber(row[11])
     + toNumber(row[13]) - toNumber(row[14])
     + (hasDepartmentColumns ? toNumber(row[15]) - toNumber(row[16]) : 0)
-    + toNumber(row[15 + transferOffset]) - toNumber(row[16 + transferOffset])
-    + committedTotal;
+    + toNumber(row[15 + transferOffset]) - toNumber(row[16 + transferOffset]);
   const netTotal = toNumber(row[12]) || calculatedNetTotal;
 
   return {

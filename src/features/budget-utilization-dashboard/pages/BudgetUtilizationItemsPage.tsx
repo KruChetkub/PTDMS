@@ -955,7 +955,7 @@ export function BudgetUtilizationItemsPage() {
       const committedTotal = toNumber(nextForm.committedTotalAmount);
       const utilizationTotal = committedTotal + disbursedTotal;
       const effectiveBudget = toNumber(nextForm.netBudgetAfterTransferAmount);
-      const remainingAmount = Math.max(0, effectiveBudget - utilizationTotal);
+      const remainingAmount = effectiveBudget - utilizationTotal;
 
       nextForm.disbursedGeneralAmount = disbursementForm.disbursedGeneralAmount;
       nextForm.disbursedAdvanceAmount = disbursementForm.disbursedAdvanceAmount;
@@ -992,7 +992,7 @@ export function BudgetUtilizationItemsPage() {
         centralTransferIn -
         centralTransferOut;
       const utilizationTotal = toNumber(nextForm.committedTotalAmount) + toNumber(nextForm.disbursedTotalAmount);
-      const remainingAmount = Math.max(0, effectiveBudget - utilizationTotal);
+      const remainingAmount = effectiveBudget - utilizationTotal;
 
       nextForm.centralTransferInAmount = centralTransferForm.centralTransferInAmount;
       nextForm.centralTransferOutAmount = centralTransferForm.centralTransferOutAmount;
@@ -1028,7 +1028,7 @@ export function BudgetUtilizationItemsPage() {
         toNumber(nextForm.divisionTransferOutAmount) +
         divisionTransferIn -
         divisionTransferOut;
-      const remainingAmount = Math.max(0, effectiveBudget - toNumber(nextForm.utilizationTotalAmount));
+      const remainingAmount = effectiveBudget - toNumber(nextForm.utilizationTotalAmount);
 
       nextForm.divisionTransferInAmount = divisionTransferForm.divisionTransferInAmount;
       nextForm.divisionTransferOutAmount = divisionTransferForm.divisionTransferOutAmount;
@@ -1063,7 +1063,7 @@ export function BudgetUtilizationItemsPage() {
         toNumber(nextForm.departmentTransferOutAmount) +
         requestIncrease -
         transferOut;
-      const remainingAmount = Math.max(0, effectiveBudget - toNumber(nextForm.utilizationTotalAmount));
+      const remainingAmount = effectiveBudget - toNumber(nextForm.utilizationTotalAmount);
 
       nextForm.departmentRequestIncreaseAmount = departmentTransferForm.departmentRequestIncreaseAmount;
       nextForm.departmentTransferOutAmount = departmentTransferForm.departmentTransferOutAmount;
@@ -1096,7 +1096,7 @@ export function BudgetUtilizationItemsPage() {
       const disbursedTotal = toNumber(nextForm.disbursedTotalAmount);
       const utilizationTotal = committedTotal + disbursedTotal;
       const effectiveBudget = toNumber(nextForm.netBudgetAfterTransferAmount);
-      const remainingAmount = Math.max(0, effectiveBudget - utilizationTotal);
+      const remainingAmount = effectiveBudget - utilizationTotal;
 
       nextForm.committedPoAmount = commitmentForm.committedPoAmount;
       nextForm.committedWithoutPoAmount = commitmentForm.committedWithoutPoAmount;

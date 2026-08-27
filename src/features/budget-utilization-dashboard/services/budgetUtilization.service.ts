@@ -420,9 +420,8 @@ export async function saveBudgetItemAllocation(
   const netBudget = allocationTotal
     + currentAmount.central_transfer_in_amount - currentAmount.central_transfer_out_amount
     + currentAmount.department_request_increase_amount - currentAmount.department_transfer_out_amount
-    + currentAmount.division_transfer_in_amount - currentAmount.division_transfer_out_amount
-    + currentAmount.committed_po_amount + currentAmount.committed_without_po_amount;
-  const remaining = Math.max(0, netBudget - currentAmount.utilization_total_amount);
+    + currentAmount.division_transfer_in_amount - currentAmount.division_transfer_out_amount;
+  const remaining = netBudget - currentAmount.utilization_total_amount;
   const updatePayload: Record<string, number | string | null> = {
     net_budget_after_transfer_amount: netBudget,
     remaining_amount: remaining,
@@ -521,15 +520,14 @@ function toBudgetAmountPayload(input: BudgetUtilizationItemInput, itemId: string
     (input.departmentRequestIncreaseAmount ?? 0) -
     (input.departmentTransferOutAmount ?? 0) +
     (input.divisionTransferInAmount ?? 0) -
-    (input.divisionTransferOutAmount ?? 0) +
-    committedTotalAmount;
+    (input.divisionTransferOutAmount ?? 0);
   const netBudgetAfterTransferAmount = calculatedNetBudgetAfterTransferAmount
     || (input.netBudgetAfterTransferAmount ?? 0);
   const disbursedGeneralAmount = input.disbursedGeneralAmount ?? 0;
   const disbursedAdvanceAmount = input.disbursedAdvanceAmount ?? 0;
   const disbursedTotalAmount = input.disbursedTotalAmount ?? disbursedGeneralAmount + disbursedAdvanceAmount;
   const utilizationTotalAmount = input.utilizationTotalAmount ?? committedTotalAmount + disbursedTotalAmount;
-  const remainingAmount = Math.max(0, netBudgetAfterTransferAmount - utilizationTotalAmount);
+  const remainingAmount = netBudgetAfterTransferAmount - utilizationTotalAmount;
   const normalized = normalizeAmount({
     planned_budget_amount: input.plannedBudgetAmount,
     net_budget_after_transfer_amount: netBudgetAfterTransferAmount,
@@ -652,8 +650,7 @@ export async function updateBudgetItemAmounts(input: BudgetUtilizationItemInput)
     + (input.departmentRequestIncreaseAmount ?? 0)
     - (input.departmentTransferOutAmount ?? 0)
     + (input.divisionTransferInAmount ?? 0)
-    - (input.divisionTransferOutAmount ?? 0)
-    + committedTotal;
+    - (input.divisionTransferOutAmount ?? 0);
   const amountPayload = toBudgetAmountPayload(input, input.itemId);
 
   await runSupabaseQuery(
@@ -665,7 +662,7 @@ export async function updateBudgetItemAmounts(input: BudgetUtilizationItemInput)
         committed_total_amount: committedTotal,
         disbursed_total_amount: disbursedTotal,
         utilization_total_amount: utilizationTotal,
-        remaining_amount: Math.max(0, netBudget - utilizationTotal),
+        remaining_amount: netBudget - utilizationTotal,
         disbursement_rate: netBudget === 0 ? 0 : disbursedTotal * 100 / netBudget,
         utilization_with_po_rate: netBudget === 0 ? 0 : utilizationTotal * 100 / netBudget,
       })
