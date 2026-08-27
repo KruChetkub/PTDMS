@@ -2088,7 +2088,7 @@ export function BudgetUtilizationItemsPage() {
           >
             <thead className="sticky top-0 z-20 bg-slate-50 text-left text-xs font-semibold text-slate-700 shadow-sm">
               <tr>
-                <th rowSpan={2} className="border border-slate-200 bg-white px-4 py-3 text-center align-middle">ชื่อโครงการ</th>
+                <th rowSpan={2} className="sticky left-0 z-30 min-w-[320px] border border-slate-200 bg-white px-4 py-3 text-center align-middle shadow-[2px_0_0_0_rgb(226_232_240)]">ชื่อโครงการ</th>
                 <th rowSpan={2} className="border border-slate-200 bg-white px-4 py-3 text-center align-middle">วงเงินตามแผน<br />ปี {displayFiscalYear}</th>
                 {trancheDefinitions.map((tranche) => (
                   <th
@@ -2151,7 +2151,7 @@ export function BudgetUtilizationItemsPage() {
                     key={item.id}
                     className={`${isCategory ? 'bg-teal-50/50 font-semibold' : isMajorProject ? 'bg-sky-50/60 font-semibold' : isSubActivity ? 'bg-indigo-50/50 font-semibold' : ''}`}
                   >
-                    <td className="px-4 py-3 text-slate-900">
+                    <td className={`sticky left-0 z-10 min-w-[320px] border-r border-slate-200 px-4 py-3 text-slate-900 ${isCategory ? 'bg-teal-50' : isMajorProject ? 'bg-sky-50' : isSubActivity ? 'bg-indigo-50' : 'bg-white'} shadow-[2px_0_0_0_rgb(226_232_240)]`}>
                       <button
                         type="button"
                         onClick={canManage ? () => startEdit(item) : undefined}
