@@ -3,6 +3,7 @@ import type { Session, User } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import { recordAuditLog, recordLoginAttempt } from '../services/audit.service';
 import type { Profile } from '../types/database.types';
+import { isPasswordPolicySatisfied } from '../features/auth/passwordPolicy';
 
 type AuthState = {
   session: Session | null;
@@ -21,6 +22,18 @@ type AuthState = {
   signOut: () => Promise<void>;
   clearError: () => void;
 };
+
+function getPasswordUpdateError(error: { code?: string; message: string }) {
+  if (error.code === 'same_password') {
+    return new Error('รหัสผ่านใหม่ต้องไม่ซ้ำกับรหัสผ่านปัจจุบัน');
+  }
+
+  if (error.code === 'weak_password') {
+    return new Error('รหัสผ่านไม่ผ่านข้อกำหนดด้านความปลอดภัย');
+  }
+
+  return error;
+}
 
 let initializePromise: Promise<void> | null = null;
 let authSubscription: { unsubscribe: () => void } | null = null;
@@ -157,6 +170,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   signUp: async (email: string, password: string, fullName: string) => {
+    if (!isPasswordPolicySatisfied(password)) {
+      throw new Error('รหัสผ่านไม่ผ่านข้อกำหนดด้านความปลอดภัย');
+    }
+
     set({ loading: true, error: null });
 
     const redirectTo = `${window.location.origin}/auth/callback`;
@@ -195,12 +212,17 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   updatePassword: async (password: string) => {
+    if (!isPasswordPolicySatisfied(password)) {
+      throw new Error('รหัสผ่านไม่ผ่านข้อกำหนดด้านความปลอดภัย');
+    }
+
     set({ loading: true, error: null });
 
     const { error } = await supabase.auth.updateUser({ password });
     if (error) {
-      set({ error: error.message, loading: false });
-      throw error;
+      const passwordError = getPasswordUpdateError(error);
+      set({ error: passwordError.message, loading: false });
+      throw passwordError;
     }
 
     const { error: completionError } = await supabase.rpc('complete_forced_password_change');

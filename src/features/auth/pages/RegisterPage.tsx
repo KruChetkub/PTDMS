@@ -4,9 +4,11 @@ import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { Link } from 'react-router-dom';
 import { ConfiguredNotice } from '../../../components/auth/ConfiguredNotice';
+import { PasswordRequirementsChecklist } from '../../../components/auth/PasswordRequirementsChecklist';
 import { useAuthStore } from '../../../stores/auth.store';
 import { registerSchema, type RegisterFormValues } from '../auth.schemas';
 import { reportClientError } from '../../../utils/errorHandling';
+import { isPasswordPolicySatisfied } from '../passwordPolicy';
 
 export function RegisterPage() {
   const [submitted, setSubmitted] = useState(false);
@@ -14,6 +16,7 @@ export function RegisterPage() {
   const {
     register,
     handleSubmit,
+    watch,
     formState: { errors },
   } = useForm<RegisterFormValues>({
     resolver: zodResolver(registerSchema),
@@ -23,6 +26,8 @@ export function RegisterPage() {
       password: '',
     },
   });
+  const password = watch('password');
+  const passwordValid = isPasswordPolicySatisfied(password);
 
   const onSubmit = async (values: RegisterFormValues) => {
     clearError();
@@ -91,6 +96,7 @@ export function RegisterPage() {
               <span className="text-sm font-medium text-slate-700">Password</span>
               <input
                 type="password"
+                maxLength={128}
                 autoComplete="new-password"
                 className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
                 {...register('password')}
@@ -98,9 +104,11 @@ export function RegisterPage() {
               {errors.password ? <span className="mt-1 block text-xs text-red-600">{errors.password.message}</span> : null}
             </label>
 
+            <PasswordRequirementsChecklist password={password} />
+
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || !passwordValid}
               className="inline-flex w-full items-center justify-center gap-2 rounded-md bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-70"
             >
               <UserPlus className="h-4 w-4" aria-hidden="true" />

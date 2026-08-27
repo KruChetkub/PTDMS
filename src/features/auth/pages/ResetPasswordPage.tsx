@@ -4,9 +4,11 @@ import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { Link, useNavigate } from 'react-router-dom';
 import { ConfiguredNotice } from '../../../components/auth/ConfiguredNotice';
+import { PasswordRequirementsChecklist } from '../../../components/auth/PasswordRequirementsChecklist';
 import { supabase } from '../../../lib/supabase';
 import { useAuthStore } from '../../../stores/auth.store';
 import { resetPasswordSchema, type ResetPasswordFormValues } from '../auth.schemas';
+import { isPasswordFormValid } from '../passwordPolicy';
 import { getSafeUserErrorMessage, reportClientError } from '../../../utils/errorHandling';
 
 export function ResetPasswordPage() {
@@ -19,6 +21,7 @@ export function ResetPasswordPage() {
   const {
     register,
     handleSubmit,
+    watch,
     formState: { errors },
   } = useForm<ResetPasswordFormValues>({
     resolver: zodResolver(resetPasswordSchema),
@@ -27,6 +30,9 @@ export function ResetPasswordPage() {
       confirmPassword: '',
     },
   });
+  const password = watch('password');
+  const confirmPassword = watch('confirmPassword');
+  const passwordFormValid = isPasswordFormValid(password, confirmPassword);
 
   useEffect(() => {
     const prepareRecoverySession = async () => {
@@ -131,6 +137,7 @@ export function ResetPasswordPage() {
               <div className="mt-1 flex items-center rounded-md border border-slate-300 bg-white px-3 focus-within:border-brand-500 focus-within:ring-2 focus-within:ring-brand-100">
                 <input
                   type={showPassword ? 'text' : 'password'}
+                  maxLength={128}
                   autoComplete="new-password"
                   className="w-full bg-transparent py-2 pr-2 text-sm outline-none"
                   {...register('password')}
@@ -153,6 +160,7 @@ export function ResetPasswordPage() {
               <div className="mt-1 flex items-center rounded-md border border-slate-300 bg-white px-3 focus-within:border-brand-500 focus-within:ring-2 focus-within:ring-brand-100">
                 <input
                   type={showConfirmPassword ? 'text' : 'password'}
+                  maxLength={128}
                   autoComplete="new-password"
                   className="w-full bg-transparent py-2 pr-2 text-sm outline-none"
                   {...register('confirmPassword')}
@@ -172,9 +180,11 @@ export function ResetPasswordPage() {
               ) : null}
             </div>
 
+            <PasswordRequirementsChecklist password={password} confirmPassword={confirmPassword} />
+
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || !passwordFormValid}
               className="inline-flex w-full items-center justify-center gap-2 rounded-md bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-70"
             >
               <KeyRound className="h-4 w-4" aria-hidden="true" />

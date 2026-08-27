@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { Eye, EyeOff, KeyRound, Save, UserCog } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import { PageHeader } from '../../components/ui/PageHeader';
+import { PasswordRequirementsChecklist } from '../../components/auth/PasswordRequirementsChecklist';
+import { isPasswordFormValid } from '../auth/passwordPolicy';
 import { useAuditPageAccess } from '../../hooks/useAuditPageAccess';
 import { updateOwnProfileDetails } from '../../services/personnel.service';
 import { useAuthStore } from '../../stores/auth.store';
@@ -98,6 +100,7 @@ export function AccountSettingsPage() {
   const [profileError, setProfileError] = useState<string | null>(null);
   const [passwordMessage, setPasswordMessage] = useState<string | null>(null);
   const [passwordError, setPasswordError] = useState<string | null>(null);
+  const passwordFormValid = isPasswordFormValid(passwordForm.password, passwordForm.confirmPassword);
 
 
   useEffect(() => {
@@ -164,13 +167,8 @@ export function AccountSettingsPage() {
     setPasswordMessage(null);
     setPasswordError(null);
 
-    if (passwordForm.password.length < 8) {
-      setPasswordError('รหัสผ่านควรมีอย่างน้อย 8 ตัวอักษร');
-      return;
-    }
-
-    if (passwordForm.password !== passwordForm.confirmPassword) {
-      setPasswordError('รหัสผ่านทั้งสองช่องต้องตรงกัน');
+    if (!passwordFormValid) {
+      setPasswordError('กรุณากำหนดรหัสผ่านให้ผ่านเงื่อนไขครบทุกข้อ');
       return;
     }
 
@@ -301,6 +299,7 @@ export function AccountSettingsPage() {
               <div className="mt-1 flex items-center rounded-md border border-slate-300 bg-white px-3 focus-within:border-brand-500 focus-within:ring-2 focus-within:ring-brand-100">
                 <input
                   type={showPassword ? 'text' : 'password'}
+                  maxLength={128}
                   autoComplete="new-password"
                   className="w-full bg-transparent py-2 text-sm outline-none"
                   value={passwordForm.password}
@@ -326,6 +325,7 @@ export function AccountSettingsPage() {
               <div className="mt-1 flex items-center rounded-md border border-slate-300 bg-white px-3 focus-within:border-brand-500 focus-within:ring-2 focus-within:ring-brand-100">
                 <input
                   type={showConfirmPassword ? 'text' : 'password'}
+                  maxLength={128}
                   autoComplete="new-password"
                   className="w-full bg-transparent py-2 text-sm outline-none"
                   value={passwordForm.confirmPassword}
@@ -348,13 +348,20 @@ export function AccountSettingsPage() {
             </label>
           </div>
 
+          <div className="mt-4">
+            <PasswordRequirementsChecklist
+              password={passwordForm.password}
+              confirmPassword={passwordForm.confirmPassword}
+            />
+          </div>
+
           {passwordMessage ? <div className="mt-4 rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{passwordMessage}</div> : null}
           {(passwordError || authError) ? <div className="mt-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{passwordError || authError}</div> : null}
 
           <button
             type="button"
             onClick={() => void handleUpdatePassword()}
-            disabled={authLoading}
+            disabled={authLoading || !passwordFormValid}
             className="mt-5 inline-flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-60"
           >
             <KeyRound className="h-4 w-4" aria-hidden="true" />
