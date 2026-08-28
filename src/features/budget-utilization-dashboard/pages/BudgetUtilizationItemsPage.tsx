@@ -2972,7 +2972,7 @@ export function BudgetUtilizationItemsPage() {
               ) : null}
               <label className="block">
                 <span className="text-sm font-medium text-slate-700">
-                  เลขที่หนังสือ <span className="text-red-600">*</span>
+                  เลขที่หนังสือ <span className="text-xs font-normal text-slate-500"></span>
                 </span>
                 <input
                   value={cellEdit.documentNumber}

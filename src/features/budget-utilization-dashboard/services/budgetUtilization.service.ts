@@ -114,10 +114,6 @@ function normalizeTransactionReference(reference: BudgetTransactionReferenceInpu
       })
     : '';
 
-  if (Math.abs(reference.amount) > 0.005 && !documentNumber) {
-    throw new Error('กรุณากรอกเลขที่หนังสือของยอดที่บันทึก');
-  }
-
   return {
     ...reference,
     documentNumber,
@@ -131,14 +127,14 @@ async function saveBudgetTransactionReferences(
   const normalizedReferences = references.map(normalizeTransactionReference);
 
   for (const reference of normalizedReferences) {
-    if (!reference.documentNumber && Math.abs(reference.amount) <= 0.005) {
+    if (!reference.documentNumber) {
       await runSupabaseQuery(
         budgetClient
           .from('budget_utilization_transaction_references')
           .delete()
           .eq('item_id', itemId)
           .eq('reference_key', reference.referenceKey),
-        'ลบเลขที่หนังสือของยอดที่เป็นศูนย์',
+        'ลบเลขที่หนังสือของรายการงบประมาณ',
       );
       continue;
     }
