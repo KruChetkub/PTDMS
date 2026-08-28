@@ -6,7 +6,7 @@ import { useAuditPageAccess } from '../../../hooks/useAuditPageAccess';
 import { useAuthStore } from '../../../stores/auth.store';
 import { canManageBudgetUtilization, createBudgetItem, createBudgetReportPeriod, deleteBudgetItem, getBudgetDashboardSummary, saveBudgetAllocationTrancheDefinitions, saveBudgetItemAllocation, updateBudgetItem, updateBudgetItemAmounts, updateBudgetItemDetails } from '../services/budgetUtilization.service';
 import { buildHierarchyRollupMap, formatBudgetAmount, getNetAllocationTotal, normalizeAmount, percent, summarizeBudgetItems, toNumber } from '../utils/budgetUtilizationCalculations';
-import type { BudgetUtilizationDashboardSummary, BudgetUtilizationItemInput, BudgetUtilizationItemWithAmount, BudgetUtilizationRowType } from '../types/budgetUtilization.types';
+import type { BudgetUtilizationDashboardSummary, BudgetUtilizationItemInput, BudgetUtilizationItemWithAmount, BudgetUtilizationRowType, BudgetUtilizationTransactionType } from '../types/budgetUtilization.types';
 import { getSafeUserErrorMessage } from '../../../utils/errorHandling';
 
 type ItemForm = {
@@ -50,36 +50,47 @@ type AllocationForm = {
   trancheKey: AllocationTrancheKey;
   amount: string;
   allocationDate: string;
+  documentNumber: string;
 };
 
 type DisbursementForm = {
   itemId: string;
   disbursedGeneralAmount: string;
+  disbursedGeneralDocumentNumber: string;
   disbursedAdvanceAmount: string;
+  disbursedAdvanceDocumentNumber: string;
 };
 
 type CentralTransferForm = {
   itemId: string;
   centralTransferInAmount: string;
+  centralTransferInDocumentNumber: string;
   centralTransferOutAmount: string;
+  centralTransferOutDocumentNumber: string;
 };
 
 type DepartmentTransferForm = {
   itemId: string;
   departmentRequestIncreaseAmount: string;
+  departmentRequestIncreaseDocumentNumber: string;
   departmentTransferOutAmount: string;
+  departmentTransferOutDocumentNumber: string;
 };
 
 type DivisionTransferForm = {
   itemId: string;
   divisionTransferInAmount: string;
+  divisionTransferInDocumentNumber: string;
   divisionTransferOutAmount: string;
+  divisionTransferOutDocumentNumber: string;
 };
 
 type CommitmentForm = {
   itemId: string;
   committedPoAmount: string;
+  committedPoDocumentNumber: string;
   committedWithoutPoAmount: string;
+  committedWithoutPoDocumentNumber: string;
 };
 
 type EditableAmountField =
@@ -103,8 +114,16 @@ type CellEditState = {
   field?: EditableAmountField;
   tranche?: TrancheDefinition;
   allocationDate: string;
+  documentNumber: string;
   tone: CellEditTone;
 };
+
+type AmountReferenceDefinition = {
+  referenceKey: string;
+  transactionType: BudgetUtilizationTransactionType;
+};
+
+type AmountDisplaySign = '+' | '-';
 
 type TrancheDefinition = {
   key: AllocationTrancheKey;
@@ -230,36 +249,47 @@ const initialAllocationForm: AllocationForm = {
   trancheKey: 'legacy-1',
   amount: '',
   allocationDate: '',
+  documentNumber: '',
 };
 
 const initialDisbursementForm: DisbursementForm = {
   itemId: '',
   disbursedGeneralAmount: '',
+  disbursedGeneralDocumentNumber: '',
   disbursedAdvanceAmount: '',
+  disbursedAdvanceDocumentNumber: '',
 };
 
 const initialCentralTransferForm: CentralTransferForm = {
   itemId: '',
   centralTransferInAmount: '',
+  centralTransferInDocumentNumber: '',
   centralTransferOutAmount: '',
+  centralTransferOutDocumentNumber: '',
 };
 
 const initialDepartmentTransferForm: DepartmentTransferForm = {
   itemId: '',
   departmentRequestIncreaseAmount: '',
+  departmentRequestIncreaseDocumentNumber: '',
   departmentTransferOutAmount: '',
+  departmentTransferOutDocumentNumber: '',
 };
 
 const initialDivisionTransferForm: DivisionTransferForm = {
   itemId: '',
   divisionTransferInAmount: '',
+  divisionTransferInDocumentNumber: '',
   divisionTransferOutAmount: '',
+  divisionTransferOutDocumentNumber: '',
 };
 
 const initialCommitmentForm: CommitmentForm = {
   itemId: '',
   committedPoAmount: '',
+  committedPoDocumentNumber: '',
   committedWithoutPoAmount: '',
+  committedWithoutPoDocumentNumber: '',
 };
 
 const initialTrancheDefinitions: TrancheDefinition[] = [
@@ -339,6 +369,36 @@ function getAmountFieldTone(field: EditableAmountField): CellEditTone {
   if (field.startsWith('division')) return 'orange';
   if (field.startsWith('committed')) return 'purple';
   return 'emerald';
+}
+
+const amountReferenceDefinitions: Record<EditableAmountField, AmountReferenceDefinition> = {
+  centralTransferInAmount: { referenceKey: 'central_transfer_in', transactionType: 'central_transfer_in' },
+  centralTransferOutAmount: { referenceKey: 'central_transfer_out', transactionType: 'central_transfer_out' },
+  departmentRequestIncreaseAmount: { referenceKey: 'department_request_increase', transactionType: 'department_request_increase' },
+  departmentTransferOutAmount: { referenceKey: 'department_transfer_out', transactionType: 'department_transfer_out' },
+  divisionTransferInAmount: { referenceKey: 'division_transfer_in', transactionType: 'division_transfer_in' },
+  divisionTransferOutAmount: { referenceKey: 'division_transfer_out', transactionType: 'division_transfer_out' },
+  committedPoAmount: { referenceKey: 'committed_po', transactionType: 'committed_po' },
+  committedWithoutPoAmount: { referenceKey: 'committed_without_po', transactionType: 'committed_without_po' },
+  disbursedGeneralAmount: { referenceKey: 'disbursed_general', transactionType: 'disbursed_general' },
+  disbursedAdvanceAmount: { referenceKey: 'disbursed_advance', transactionType: 'disbursed_advance' },
+};
+
+const amountFieldDisplaySigns: Partial<Record<EditableAmountField, AmountDisplaySign>> = {
+  centralTransferInAmount: '+',
+  centralTransferOutAmount: '-',
+  departmentRequestIncreaseAmount: '+',
+  departmentTransferOutAmount: '-',
+  divisionTransferInAmount: '+',
+  divisionTransferOutAmount: '-',
+};
+
+function formatSignedBudgetAmount(value: number, sign: AmountDisplaySign) {
+  return `${sign}${formatBudgetAmount(Math.abs(value))}`;
+}
+
+function getDocumentNumber(item: BudgetUtilizationItemWithAmount, referenceKey: string) {
+  return item.transactionReferences?.find((reference) => reference.reference_key === referenceKey)?.document_number ?? '';
 }
 
 function getItemTrancheValue(item: BudgetUtilizationItemWithAmount, tranche: TrancheDefinition) {
@@ -1008,7 +1068,16 @@ export function BudgetUtilizationItemsPage() {
     value: number,
   ) => {
     event?.stopPropagation();
-    setCellEdit({ item, field, label, value: String(value || ''), allocationDate: '', tone: getAmountFieldTone(field) });
+    const referenceDefinition = amountReferenceDefinitions[field];
+    setCellEdit({
+      item,
+      field,
+      label,
+      value: String(value || ''),
+      allocationDate: '',
+      documentNumber: getDocumentNumber(item, referenceDefinition.referenceKey),
+      tone: getAmountFieldTone(field),
+    });
     setCellEditError(null);
   };
 
@@ -1036,6 +1105,7 @@ export function BudgetUtilizationItemsPage() {
       label: tranche.label,
       value: String(allocation?.amount || legacyAmount || ''),
       allocationDate: allocation?.allocation_date ?? legacyDate ?? '',
+      documentNumber: getDocumentNumber(item, `allocation:${tranche.key}`),
       tone: 'amber',
     });
     setCellEditError(null);
@@ -1063,6 +1133,7 @@ export function BudgetUtilizationItemsPage() {
           selectedTranche,
           toNumber(cellEdit.value),
           cellEdit.allocationDate || null,
+          cellEdit.documentNumber,
         );
       } else if (cellEdit.field) {
         const nextForm = formFromItem(cellEdit.item);
@@ -1086,12 +1157,20 @@ export function BudgetUtilizationItemsPage() {
             throw new Error(`ยอดผูกพันคงค้างต้องไม่เกินวงเงินที่ยังไม่เบิกจ่าย ${formatBudgetAmount(availableForCommitment)} บาท`);
           }
         }
-        await updateBudgetItemAmounts(toItemPayload(
-          activeReportPeriodId,
-          nextForm,
-          cellEdit.item.parent_id,
-          cellEdit.item.sequence_label ?? '',
-        ));
+        const referenceDefinition = amountReferenceDefinitions[cellEdit.field];
+        await updateBudgetItemAmounts(
+          toItemPayload(
+            activeReportPeriodId,
+            nextForm,
+            cellEdit.item.parent_id,
+            cellEdit.item.sequence_label ?? '',
+          ),
+          [{
+            ...referenceDefinition,
+            documentNumber: cellEdit.documentNumber,
+            amount: toNumber(cellEdit.value),
+          }],
+        );
       }
 
       setCellEdit(null);
@@ -1111,7 +1190,7 @@ export function BudgetUtilizationItemsPage() {
 
   const applySelectedAllocationItemValue = (item: BudgetUtilizationItemWithAmount | null, trancheKey: AllocationTrancheKey) => {
     if (!item) {
-      setAllocationForm((current) => ({ ...current, amount: '', allocationDate: '' }));
+      setAllocationForm((current) => ({ ...current, amount: '', allocationDate: '', documentNumber: '' }));
       return;
     }
 
@@ -1132,6 +1211,7 @@ export function BudgetUtilizationItemsPage() {
       ...current,
       amount: String(allocation?.amount || legacyAmount || ''),
       allocationDate: allocation?.allocation_date ?? legacyDate ?? '',
+      documentNumber: getDocumentNumber(item, `allocation:${trancheKey}`),
     }));
   };
 
@@ -1139,7 +1219,9 @@ export function BudgetUtilizationItemsPage() {
     setDisbursementForm((current) => ({
       ...current,
       disbursedGeneralAmount: item ? String(item.amount.disbursed_general_amount || '') : '',
+      disbursedGeneralDocumentNumber: item ? getDocumentNumber(item, 'disbursed_general') : '',
       disbursedAdvanceAmount: item ? String(item.amount.disbursed_advance_amount || '') : '',
+      disbursedAdvanceDocumentNumber: item ? getDocumentNumber(item, 'disbursed_advance') : '',
     }));
   };
 
@@ -1147,7 +1229,9 @@ export function BudgetUtilizationItemsPage() {
     setCentralTransferForm((current) => ({
       ...current,
       centralTransferInAmount: item ? String(item.amount.central_transfer_in_amount || '') : '',
+      centralTransferInDocumentNumber: item ? getDocumentNumber(item, 'central_transfer_in') : '',
       centralTransferOutAmount: item ? String(item.amount.central_transfer_out_amount || '') : '',
+      centralTransferOutDocumentNumber: item ? getDocumentNumber(item, 'central_transfer_out') : '',
     }));
   };
 
@@ -1155,7 +1239,9 @@ export function BudgetUtilizationItemsPage() {
     setDepartmentTransferForm((current) => ({
       ...current,
       departmentRequestIncreaseAmount: item ? String(item.amount.department_request_increase_amount || '') : '',
+      departmentRequestIncreaseDocumentNumber: item ? getDocumentNumber(item, 'department_request_increase') : '',
       departmentTransferOutAmount: item ? String(item.amount.department_transfer_out_amount || '') : '',
+      departmentTransferOutDocumentNumber: item ? getDocumentNumber(item, 'department_transfer_out') : '',
     }));
   };
 
@@ -1163,7 +1249,9 @@ export function BudgetUtilizationItemsPage() {
     setDivisionTransferForm((current) => ({
       ...current,
       divisionTransferInAmount: item ? String(item.amount.division_transfer_in_amount || '') : '',
+      divisionTransferInDocumentNumber: item ? getDocumentNumber(item, 'division_transfer_in') : '',
       divisionTransferOutAmount: item ? String(item.amount.division_transfer_out_amount || '') : '',
+      divisionTransferOutDocumentNumber: item ? getDocumentNumber(item, 'division_transfer_out') : '',
     }));
   };
 
@@ -1171,7 +1259,9 @@ export function BudgetUtilizationItemsPage() {
     setCommitmentForm((current) => ({
       ...current,
       committedPoAmount: item ? String(item.amount.committed_po_amount || '') : '',
+      committedPoDocumentNumber: item ? getDocumentNumber(item, 'committed_po') : '',
       committedWithoutPoAmount: item ? String(item.amount.committed_without_po_amount || '') : '',
+      committedWithoutPoDocumentNumber: item ? getDocumentNumber(item, 'committed_without_po') : '',
     }));
   };
 
@@ -1194,6 +1284,7 @@ export function BudgetUtilizationItemsPage() {
         selectedTranche,
         toNumber(allocationForm.amount),
         allocationForm.allocationDate || null,
+        allocationForm.documentNumber,
       );
       await loadData(activeReportPeriodId);
     } catch (saveError) {
@@ -1231,7 +1322,13 @@ export function BudgetUtilizationItemsPage() {
       nextForm.utilizationTotalAmount = String(utilizationTotal || '');
       nextForm.remainingAmount = String(remainingAmount || '');
 
-      await updateBudgetItemAmounts(toItemPayload(activeReportPeriodId, nextForm, selectedDisbursementItem.parent_id, selectedDisbursementItem.sequence_label ?? ''));
+      await updateBudgetItemAmounts(
+        toItemPayload(activeReportPeriodId, nextForm, selectedDisbursementItem.parent_id, selectedDisbursementItem.sequence_label ?? ''),
+        [
+          { referenceKey: 'disbursed_general', transactionType: 'disbursed_general', documentNumber: disbursementForm.disbursedGeneralDocumentNumber, amount: disbursedGeneral },
+          { referenceKey: 'disbursed_advance', transactionType: 'disbursed_advance', documentNumber: disbursementForm.disbursedAdvanceDocumentNumber, amount: disbursedAdvance },
+        ],
+      );
       await loadData(activeReportPeriodId);
     } catch (saveError) {
       setError(getSafeUserErrorMessage(saveError, 'ไม่สามารถบันทึกเบิก-จ่ายได้'));
@@ -1268,7 +1365,13 @@ export function BudgetUtilizationItemsPage() {
       nextForm.utilizationTotalAmount = String(utilizationTotal || '');
       nextForm.remainingAmount = String(remainingAmount || '');
 
-      await updateBudgetItemAmounts(toItemPayload(activeReportPeriodId, nextForm, selectedCentralTransferItem.parent_id, selectedCentralTransferItem.sequence_label ?? ''));
+      await updateBudgetItemAmounts(
+        toItemPayload(activeReportPeriodId, nextForm, selectedCentralTransferItem.parent_id, selectedCentralTransferItem.sequence_label ?? ''),
+        [
+          { referenceKey: 'central_transfer_in', transactionType: 'central_transfer_in', documentNumber: centralTransferForm.centralTransferInDocumentNumber, amount: centralTransferIn },
+          { referenceKey: 'central_transfer_out', transactionType: 'central_transfer_out', documentNumber: centralTransferForm.centralTransferOutDocumentNumber, amount: centralTransferOut },
+        ],
+      );
       await loadData(activeReportPeriodId);
     } catch (saveError) {
       setError(getSafeUserErrorMessage(saveError, 'ไม่สามารถบันทึกส่วนกลางกรมฯ ได้'));
@@ -1303,7 +1406,13 @@ export function BudgetUtilizationItemsPage() {
       nextForm.netBudgetAfterTransferAmount = String(effectiveBudget || '');
       nextForm.remainingAmount = String(remainingAmount || '');
 
-      await updateBudgetItemAmounts(toItemPayload(activeReportPeriodId, nextForm, selectedDivisionTransferItem.parent_id, selectedDivisionTransferItem.sequence_label ?? ''));
+      await updateBudgetItemAmounts(
+        toItemPayload(activeReportPeriodId, nextForm, selectedDivisionTransferItem.parent_id, selectedDivisionTransferItem.sequence_label ?? ''),
+        [
+          { referenceKey: 'division_transfer_in', transactionType: 'division_transfer_in', documentNumber: divisionTransferForm.divisionTransferInDocumentNumber, amount: divisionTransferIn },
+          { referenceKey: 'division_transfer_out', transactionType: 'division_transfer_out', documentNumber: divisionTransferForm.divisionTransferOutDocumentNumber, amount: divisionTransferOut },
+        ],
+      );
       await loadData(activeReportPeriodId);
     } catch (saveError) {
       setError(getSafeUserErrorMessage(saveError, 'ไม่สามารถบันทึกภายในกองได้'));
@@ -1338,7 +1447,13 @@ export function BudgetUtilizationItemsPage() {
       nextForm.netBudgetAfterTransferAmount = String(effectiveBudget || '');
       nextForm.remainingAmount = String(remainingAmount || '');
 
-      await updateBudgetItemAmounts(toItemPayload(activeReportPeriodId, nextForm, selectedDepartmentTransferItem.parent_id, selectedDepartmentTransferItem.sequence_label ?? ''));
+      await updateBudgetItemAmounts(
+        toItemPayload(activeReportPeriodId, nextForm, selectedDepartmentTransferItem.parent_id, selectedDepartmentTransferItem.sequence_label ?? ''),
+        [
+          { referenceKey: 'department_request_increase', transactionType: 'department_request_increase', documentNumber: departmentTransferForm.departmentRequestIncreaseDocumentNumber, amount: requestIncrease },
+          { referenceKey: 'department_transfer_out', transactionType: 'department_transfer_out', documentNumber: departmentTransferForm.departmentTransferOutDocumentNumber, amount: transferOut },
+        ],
+      );
       await loadData(activeReportPeriodId);
     } catch (saveError) {
       setError(getSafeUserErrorMessage(saveError, 'ไม่สามารถบันทึกภายในกรมได้'));
@@ -1376,7 +1491,13 @@ export function BudgetUtilizationItemsPage() {
       nextForm.utilizationTotalAmount = String(utilizationTotal || '');
       nextForm.remainingAmount = String(remainingAmount || '');
 
-      await updateBudgetItemAmounts(toItemPayload(activeReportPeriodId, nextForm, selectedCommitmentItem.parent_id, selectedCommitmentItem.sequence_label ?? ''));
+      await updateBudgetItemAmounts(
+        toItemPayload(activeReportPeriodId, nextForm, selectedCommitmentItem.parent_id, selectedCommitmentItem.sequence_label ?? ''),
+        [
+          { referenceKey: 'committed_po', transactionType: 'committed_po', documentNumber: commitmentForm.committedPoDocumentNumber, amount: committedPo },
+          { referenceKey: 'committed_without_po', transactionType: 'committed_without_po', documentNumber: commitmentForm.committedWithoutPoDocumentNumber, amount: committedWithoutPo },
+        ],
+      );
       await loadData(activeReportPeriodId);
     } catch (saveError) {
       setError(getSafeUserErrorMessage(saveError, 'ไม่สามารถบันทึกผูกพันได้'));
@@ -1626,6 +1747,11 @@ export function BudgetUtilizationItemsPage() {
   const editModalParent = editModalItem?.parent_id
     ? allBudgetItems.find((item) => item.id === editModalItem.parent_id) ?? null
     : null;
+  const cellEditHasRecordedData = cellEdit
+    ? Math.abs(toNumber(cellEdit.value)) > 0.005
+      || Boolean(cellEdit.allocationDate)
+      || Boolean(cellEdit.documentNumber)
+    : false;
 
   const renderDetailAmount = (
     label: string,
@@ -1633,13 +1759,19 @@ export function BudgetUtilizationItemsPage() {
     tone: CellEditTone,
     onEdit?: () => void,
     note?: string,
+    documentNumber?: string,
+    displaySign?: AmountDisplaySign,
   ) => {
     const isEditable = canManage && !editModalHasChildren && Boolean(onEdit);
+    const hasRecordedData = Math.abs(value) > 0.005 || Boolean(note) || Boolean(documentNumber);
     const content = (
       <>
         <span className="block text-xs font-medium opacity-75">{label}</span>
-        <span className="mt-1 block text-right text-base font-semibold">{formatBudgetAmount(value)} บาท</span>
+        <span className="mt-1 block text-right text-base font-semibold">
+          {displaySign ? formatSignedBudgetAmount(value, displaySign) : formatBudgetAmount(value)} บาท
+        </span>
         {note ? <span className="mt-1 block text-xs opacity-70">{note}</span> : null}
+        <span className="mt-1 block text-xs opacity-70">เลขที่หนังสือ: {documentNumber || 'ยังไม่ได้ระบุ'}</span>
       </>
     );
 
@@ -1647,14 +1779,17 @@ export function BudgetUtilizationItemsPage() {
       <button
         type="button"
         onClick={onEdit}
-        className={`min-h-[82px] rounded-md border p-3 text-left transition focus:outline-none focus:ring-2 focus:ring-sky-300 ${detailAmountToneClasses[tone]}`}
-        title={`แก้ไข${label}`}
+        className={`flex min-h-[132px] w-full flex-col rounded-md border p-3 text-left transition focus:outline-none focus:ring-2 focus:ring-sky-300 ${detailAmountToneClasses[tone]}`}
+        title={`${hasRecordedData ? 'แก้ไข' : 'เพิ่ม'}${label}`}
       >
         {content}
-        <span className="mt-2 inline-flex items-center gap-1 text-xs font-medium"><Edit3 className="h-3.5 w-3.5" aria-hidden="true" /> แก้ไขตัวเลข</span>
+        <span className="mt-auto inline-flex items-center gap-1 pt-3 text-xs font-medium">
+          {hasRecordedData ? <Edit3 className="h-3.5 w-3.5" aria-hidden="true" /> : <Plus className="h-3.5 w-3.5" aria-hidden="true" />}
+          {hasRecordedData ? 'แก้ไขข้อมูล' : 'เพิ่มข้อมูล'}
+        </span>
       </button>
     ) : (
-      <div className={`min-h-[82px] rounded-md border p-3 ${detailAmountToneClasses[tone].replace(/ hover:[^ ]+/g, '')}`}>
+      <div className={`min-h-[132px] w-full rounded-md border p-3 ${detailAmountToneClasses[tone].replace(/ hover:[^ ]+/g, '')}`}>
         {content}
         {editModalHasChildren ? <span className="mt-2 block text-xs font-medium opacity-70">ยอดรวมจากรายการภายใต้โครงการ</span> : null}
       </div>
@@ -2085,6 +2220,10 @@ export function BudgetUtilizationItemsPage() {
                   placeholder="ยอดจัดสรร"
                 />
               </label>
+              <label className="block">
+                <span className="text-xs font-semibold text-slate-600">เลขที่หนังสือ</span>
+                <input value={allocationForm.documentNumber} onChange={(event) => setAllocationForm((current) => ({ ...current, documentNumber: event.target.value }))} maxLength={200} className="mt-1 h-10 w-full rounded-md border border-slate-300 px-3 text-sm outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100" placeholder="เช่น สธ 0434.3ว 259" />
+              </label>
               <button
                 type="button"
                 onClick={() => void saveAllocationForm()}
@@ -2131,6 +2270,7 @@ export function BudgetUtilizationItemsPage() {
                   className="mt-1 h-10 w-full rounded-md border border-slate-300 px-3 text-sm outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-100"
                   placeholder="ยอดรับโอน"
                 />
+                <input value={centralTransferForm.centralTransferInDocumentNumber} onChange={(event) => setCentralTransferForm((current) => ({ ...current, centralTransferInDocumentNumber: event.target.value }))} maxLength={200} className="mt-2 h-10 w-full rounded-md border border-slate-300 px-3 text-sm outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-100" placeholder="เลขที่หนังสือรับโอน" />
               </label>
               <label className="block">
                 <span className="text-xs font-semibold text-slate-600">โอนออก</span>
@@ -2140,6 +2280,7 @@ export function BudgetUtilizationItemsPage() {
                   className="mt-1 h-10 w-full rounded-md border border-slate-300 px-3 text-sm outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-100"
                   placeholder="ยอดโอนออก"
                 />
+                <input value={centralTransferForm.centralTransferOutDocumentNumber} onChange={(event) => setCentralTransferForm((current) => ({ ...current, centralTransferOutDocumentNumber: event.target.value }))} maxLength={200} className="mt-2 h-10 w-full rounded-md border border-slate-300 px-3 text-sm outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-100" placeholder="เลขที่หนังสือโอนออก" />
               </label>
               <button
                 type="button"
@@ -2187,6 +2328,7 @@ export function BudgetUtilizationItemsPage() {
                   className="mt-1 h-10 w-full rounded-md border border-slate-300 px-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
                   placeholder="ยอดขอเพิ่ม"
                 />
+                <input value={departmentTransferForm.departmentRequestIncreaseDocumentNumber} onChange={(event) => setDepartmentTransferForm((current) => ({ ...current, departmentRequestIncreaseDocumentNumber: event.target.value }))} maxLength={200} className="mt-2 h-10 w-full rounded-md border border-slate-300 px-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100" placeholder="เลขที่หนังสือขอเพิ่ม" />
               </label>
               <label className="block">
                 <span className="text-xs font-semibold text-slate-600">โอนออก</span>
@@ -2196,6 +2338,7 @@ export function BudgetUtilizationItemsPage() {
                   className="mt-1 h-10 w-full rounded-md border border-slate-300 px-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
                   placeholder="ยอดโอนออก"
                 />
+                <input value={departmentTransferForm.departmentTransferOutDocumentNumber} onChange={(event) => setDepartmentTransferForm((current) => ({ ...current, departmentTransferOutDocumentNumber: event.target.value }))} maxLength={200} className="mt-2 h-10 w-full rounded-md border border-slate-300 px-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100" placeholder="เลขที่หนังสือโอนออก" />
               </label>
               <button
                 type="button"
@@ -2243,6 +2386,7 @@ export function BudgetUtilizationItemsPage() {
                   className="mt-1 h-10 w-full rounded-md border border-slate-300 px-3 text-sm outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-100"
                   placeholder="ยอดรับโอน"
                 />
+                <input value={divisionTransferForm.divisionTransferInDocumentNumber} onChange={(event) => setDivisionTransferForm((current) => ({ ...current, divisionTransferInDocumentNumber: event.target.value }))} maxLength={200} className="mt-2 h-10 w-full rounded-md border border-slate-300 px-3 text-sm outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-100" placeholder="เลขที่หนังสือรับโอน" />
               </label>
               <label className="block">
                 <span className="text-xs font-semibold text-slate-600">โอนออก</span>
@@ -2252,6 +2396,7 @@ export function BudgetUtilizationItemsPage() {
                   className="mt-1 h-10 w-full rounded-md border border-slate-300 px-3 text-sm outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-100"
                   placeholder="ยอดโอนออก"
                 />
+                <input value={divisionTransferForm.divisionTransferOutDocumentNumber} onChange={(event) => setDivisionTransferForm((current) => ({ ...current, divisionTransferOutDocumentNumber: event.target.value }))} maxLength={200} className="mt-2 h-10 w-full rounded-md border border-slate-300 px-3 text-sm outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-100" placeholder="เลขที่หนังสือโอนออก" />
               </label>
               <button
                 type="button"
@@ -2299,6 +2444,7 @@ export function BudgetUtilizationItemsPage() {
                   className="mt-1 h-10 w-full rounded-md border border-slate-300 px-3 text-sm outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-100"
                   placeholder="ยอดมี PO"
                 />
+                <input value={commitmentForm.committedPoDocumentNumber} onChange={(event) => setCommitmentForm((current) => ({ ...current, committedPoDocumentNumber: event.target.value }))} maxLength={200} className="mt-2 h-10 w-full rounded-md border border-slate-300 px-3 text-sm outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-100" placeholder="เลขที่หนังสือมี PO" />
               </label>
               <label className="block">
                 <span className="text-xs font-semibold text-slate-600">ไม่มี PO</span>
@@ -2308,6 +2454,7 @@ export function BudgetUtilizationItemsPage() {
                   className="mt-1 h-10 w-full rounded-md border border-slate-300 px-3 text-sm outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-100"
                   placeholder="ยอดไม่มี PO"
                 />
+                <input value={commitmentForm.committedWithoutPoDocumentNumber} onChange={(event) => setCommitmentForm((current) => ({ ...current, committedWithoutPoDocumentNumber: event.target.value }))} maxLength={200} className="mt-2 h-10 w-full rounded-md border border-slate-300 px-3 text-sm outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-100" placeholder="เลขที่หนังสือไม่มี PO" />
               </label>
               <button
                 type="button"
@@ -2355,6 +2502,7 @@ export function BudgetUtilizationItemsPage() {
                   className="mt-1 h-10 w-full rounded-md border border-slate-300 px-3 text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
                   placeholder="ยอดเบิกจ่ายทั่วไป"
                 />
+                <input value={disbursementForm.disbursedGeneralDocumentNumber} onChange={(event) => setDisbursementForm((current) => ({ ...current, disbursedGeneralDocumentNumber: event.target.value }))} maxLength={200} className="mt-2 h-10 w-full rounded-md border border-slate-300 px-3 text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100" placeholder="เลขที่หนังสือเบิกจ่ายทั่วไป" />
               </label>
               <label className="block">
                 <span className="text-xs font-semibold text-slate-600">เงินยืมราชการ</span>
@@ -2364,6 +2512,7 @@ export function BudgetUtilizationItemsPage() {
                   className="mt-1 h-10 w-full rounded-md border border-slate-300 px-3 text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
                   placeholder="ยอดเงินยืมราชการ"
                 />
+                <input value={disbursementForm.disbursedAdvanceDocumentNumber} onChange={(event) => setDisbursementForm((current) => ({ ...current, disbursedAdvanceDocumentNumber: event.target.value }))} maxLength={200} className="mt-2 h-10 w-full rounded-md border border-slate-300 px-3 text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100" placeholder="เลขที่หนังสือเงินยืมราชการ" />
               </label>
               <button
                 type="button"
@@ -2382,8 +2531,8 @@ export function BudgetUtilizationItemsPage() {
       ) : null}
 
       {!canManage || activeTab === 'items' ? (
-      <section className="overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm">
-        <div className="flex flex-col gap-3 border-b border-slate-100 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+      <section className="rounded-md border border-slate-200 bg-white shadow-sm">
+        <div className="sticky top-[121px] z-40 flex flex-col gap-3 rounded-t-md border-b border-slate-200 bg-white/95 px-4 py-3 shadow-sm backdrop-blur sm:flex-row sm:items-center sm:justify-between lg:top-[65px]">
           <h2 className="text-base font-semibold text-slate-950">รายการงบประมาณทั้งหมด</h2>
           <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
             <button
@@ -2405,7 +2554,7 @@ export function BudgetUtilizationItemsPage() {
             </label>
           </div>
         </div>
-        <div className="max-h-[72vh] overflow-auto">
+        <div className="max-h-[calc(100vh-9rem)] min-h-[420px] overflow-auto rounded-b-md">
           <table
             className="divide-y divide-slate-100 text-sm"
             style={{ minWidth: `${2200 + trancheDefinitions.length * 120}px` }}
@@ -2449,6 +2598,44 @@ export function BudgetUtilizationItemsPage() {
                 <th className="border border-emerald-200 bg-emerald-50 px-4 py-2 text-center text-emerald-900">เบิกจ่ายทั่วไป<br />(7)</th>
                 <th className="border border-emerald-200 bg-emerald-50 px-4 py-2 text-center text-emerald-900">เงินยืมราชการ<br />(8)</th>
                 <th className="border border-emerald-200 bg-emerald-50 px-4 py-2 text-center text-emerald-900">รวม<br />(9)<br />=(7)+(8)</th>
+              </tr>
+              <tr className="border-t-2 border-slate-300 bg-slate-900 text-white shadow-sm">
+                <th className="sticky left-0 z-30 min-w-[320px] border-r border-slate-700 bg-slate-900 px-4 py-3 text-left">
+                  รวมทั้งสิ้น ({filteredItems.length.toLocaleString()} รายการ)
+                </th>
+                <td className="px-4 py-3 text-right">{formatBudgetAmount(tableTotals.planned_budget_amount)}</td>
+                {trancheDefinitions.map((tranche) => {
+                  const trancheTotal = tranche.trancheNumber === 1
+                    ? tableTotals.allocation_tranche_1_amount
+                    : tranche.trancheNumber === 2
+                      ? tableTotals.allocation_tranche_2_amount
+                      : tranche.trancheNumber === 3
+                        ? tableTotals.allocation_tranche_3_amount
+                        : 0;
+                  return (
+                    <td key={`total-${tranche.key}`} className="px-3 py-3 text-right text-amber-300">
+                      {formatBudgetAmount(trancheTotal)}
+                    </td>
+                  );
+                })}
+                <td className="px-4 py-3 text-right text-lime-400">{formatBudgetAmount(tableTotals.net_budget_after_transfer_amount)}</td>
+                <td className="px-4 py-3 text-right">{formatSignedBudgetAmount(tableTotals.central_transfer_in_amount, '+')}</td>
+                <td className="px-4 py-3 text-right">{formatSignedBudgetAmount(tableTotals.central_transfer_out_amount, '-')}</td>
+                <td className="px-4 py-3 text-right">{formatSignedBudgetAmount(tableTotals.department_request_increase_amount, '+')}</td>
+                <td className="px-4 py-3 text-right">{formatSignedBudgetAmount(tableTotals.department_transfer_out_amount, '-')}</td>
+                <td className="px-4 py-3 text-right">{formatSignedBudgetAmount(tableTotals.division_transfer_in_amount, '+')}</td>
+                <td className="px-4 py-3 text-right">{formatSignedBudgetAmount(tableTotals.division_transfer_out_amount, '-')}</td>
+                <td className="px-4 py-3 text-right text-purple-300">{formatBudgetAmount(tableTotals.committed_po_amount)}</td>
+                <td className="px-4 py-3 text-right text-purple-300">{formatBudgetAmount(tableTotals.committed_without_po_amount)}</td>
+                <td className="px-4 py-3 text-right text-purple-200">{formatBudgetAmount(tableTotals.committed_total_amount)}</td>
+                <td className="px-4 py-3 text-right text-emerald-300">{formatBudgetAmount(tableTotals.disbursed_general_amount)}</td>
+                <td className="px-4 py-3 text-right text-emerald-300">{formatBudgetAmount(tableTotals.disbursed_advance_amount)}</td>
+                <td className="px-4 py-3 text-right text-emerald-200">{formatBudgetAmount(tableTotals.disbursed_total_amount)}</td>
+                <td className="px-4 py-3 text-right text-yellow-300">{formatBudgetAmount(tableTotals.utilization_total_amount)}</td>
+                <td className="px-4 py-3 text-right text-sky-300">{formatBudgetAmount(tableTotals.remaining_amount)}</td>
+                <td className="px-4 py-3 text-right text-teal-300">{formatBudgetAmount(tableTotals.disbursement_rate ?? 0)}%</td>
+                <td className="px-4 py-3 text-right text-sky-300">{formatBudgetAmount(tableTotals.utilization_with_po_rate ?? 0)}%</td>
+                {canManage ? <td></td> : null}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -2535,6 +2722,11 @@ export function BudgetUtilizationItemsPage() {
                           : tranche.trancheNumber === 3
                             ? itemAmount.allocation_tranche_3_amount
                             : (allocation?.amount ?? 0);
+                      const displayedAllocation = allocation?.amount ?? legacyAmount;
+                      const allocationDocumentNumber = getDocumentNumber(item, `allocation:${tranche.key}`);
+                      const hasAllocationData = Math.abs(displayedAllocation) > 0.005
+                        || Boolean(allocation?.allocation_date)
+                        || Boolean(allocationDocumentNumber);
 
                       return (
                         <td
@@ -2545,20 +2737,21 @@ export function BudgetUtilizationItemsPage() {
                           {isHeading ? (
                             formatBudgetAmount(trancheValue)
                           ) : (
-                            <button type="button" onClick={(event) => openAllocationCellEdit(event, item, tranche)} className="w-full rounded px-1 py-1 text-right transition hover:bg-amber-50 hover:text-amber-800 focus:outline-none focus:ring-2 focus:ring-amber-300" title={`แก้ไข ${tranche.label}`}>
-                              {formatBudgetAmount(allocation?.amount ?? legacyAmount)}
+                            <button type="button" onClick={(event) => openAllocationCellEdit(event, item, tranche)} className="inline-flex w-full items-center justify-end gap-1 rounded px-1 py-1 text-right transition hover:bg-amber-50 hover:text-amber-800 focus:outline-none focus:ring-2 focus:ring-amber-300" title={`${hasAllocationData ? 'แก้ไข' : 'เพิ่ม'} ${tranche.label}`}>
+                              {!hasAllocationData ? <Plus className="h-3.5 w-3.5 shrink-0" aria-hidden="true" /> : null}
+                              {formatBudgetAmount(displayedAllocation)}
                             </button>
                           )}
                         </td>
                       );
                     })}
                     <td className={`px-4 py-3 text-right font-semibold ${headingAmountClass ?? 'text-slate-900'}`}>{formatBudgetAmount(netTotal)}</td>
-                    <td className={`px-4 py-3 text-right ${headingAmountClass ?? ''}`}>{isHeading ? formatBudgetAmount(itemAmount.central_transfer_in_amount || 0) : <button type="button" onClick={(event) => openAmountCellEdit(event, item, 'centralTransferInAmount', 'ส่วนกลางกรมฯ รับโอน', item.amount.central_transfer_in_amount)} className="w-full rounded px-1 py-1 text-right transition hover:bg-cyan-50 hover:text-cyan-800 focus:outline-none focus:ring-2 focus:ring-cyan-300">{formatBudgetAmount(item.amount.central_transfer_in_amount || 0)}</button>}</td>
-                    <td className={`px-4 py-3 text-right ${headingAmountClass ?? ''}`}>{isHeading ? formatBudgetAmount(itemAmount.central_transfer_out_amount || 0) : <button type="button" onClick={(event) => openAmountCellEdit(event, item, 'centralTransferOutAmount', 'ส่วนกลางกรมฯ โอนออก', item.amount.central_transfer_out_amount)} className="w-full rounded px-1 py-1 text-right transition hover:bg-cyan-50 hover:text-cyan-800 focus:outline-none focus:ring-2 focus:ring-cyan-300">{formatBudgetAmount(item.amount.central_transfer_out_amount || 0)}</button>}</td>
-                    <td className={`px-4 py-3 text-right ${headingAmountClass ?? ''}`}>{isHeading ? formatBudgetAmount(itemAmount.department_request_increase_amount || 0) : <button type="button" onClick={(event) => openAmountCellEdit(event, item, 'departmentRequestIncreaseAmount', 'ภายในกรม ขอเพิ่ม', item.amount.department_request_increase_amount)} className="w-full rounded px-1 py-1 text-right transition hover:bg-blue-50 hover:text-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-300">{formatBudgetAmount(item.amount.department_request_increase_amount || 0)}</button>}</td>
-                    <td className={`px-4 py-3 text-right ${headingAmountClass ?? ''}`}>{isHeading ? formatBudgetAmount(itemAmount.department_transfer_out_amount || 0) : <button type="button" onClick={(event) => openAmountCellEdit(event, item, 'departmentTransferOutAmount', 'ภายในกรม โอนออก', item.amount.department_transfer_out_amount)} className="w-full rounded px-1 py-1 text-right transition hover:bg-blue-50 hover:text-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-300">{formatBudgetAmount(item.amount.department_transfer_out_amount || 0)}</button>}</td>
-                    <td className={`px-4 py-3 text-right ${headingAmountClass ?? ''}`}>{isHeading ? formatBudgetAmount(itemAmount.division_transfer_in_amount || 0) : <button type="button" onClick={(event) => openAmountCellEdit(event, item, 'divisionTransferInAmount', 'ภายในกอง รับโอน', item.amount.division_transfer_in_amount)} className="w-full rounded px-1 py-1 text-right transition hover:bg-orange-50 hover:text-orange-800 focus:outline-none focus:ring-2 focus:ring-orange-300">{formatBudgetAmount(item.amount.division_transfer_in_amount || 0)}</button>}</td>
-                    <td className={`px-4 py-3 text-right ${headingAmountClass ?? ''}`}>{isHeading ? formatBudgetAmount(itemAmount.division_transfer_out_amount || 0) : <button type="button" onClick={(event) => openAmountCellEdit(event, item, 'divisionTransferOutAmount', 'ภายในกอง โอนออก', item.amount.division_transfer_out_amount)} className="w-full rounded px-1 py-1 text-right transition hover:bg-orange-50 hover:text-orange-800 focus:outline-none focus:ring-2 focus:ring-orange-300">{formatBudgetAmount(item.amount.division_transfer_out_amount || 0)}</button>}</td>
+                    <td className={`px-4 py-3 text-right ${headingAmountClass ?? ''}`}>{isHeading ? formatSignedBudgetAmount(itemAmount.central_transfer_in_amount || 0, '+') : <button type="button" onClick={(event) => openAmountCellEdit(event, item, 'centralTransferInAmount', 'ส่วนกลางกรมฯ รับโอน', item.amount.central_transfer_in_amount)} className="w-full rounded px-1 py-1 text-right transition hover:bg-cyan-50 hover:text-cyan-800 focus:outline-none focus:ring-2 focus:ring-cyan-300">{formatSignedBudgetAmount(item.amount.central_transfer_in_amount || 0, '+')}</button>}</td>
+                    <td className={`px-4 py-3 text-right ${headingAmountClass ?? ''}`}>{isHeading ? formatSignedBudgetAmount(itemAmount.central_transfer_out_amount || 0, '-') : <button type="button" onClick={(event) => openAmountCellEdit(event, item, 'centralTransferOutAmount', 'ส่วนกลางกรมฯ โอนออก', item.amount.central_transfer_out_amount)} className="w-full rounded px-1 py-1 text-right transition hover:bg-cyan-50 hover:text-cyan-800 focus:outline-none focus:ring-2 focus:ring-cyan-300">{formatSignedBudgetAmount(item.amount.central_transfer_out_amount || 0, '-')}</button>}</td>
+                    <td className={`px-4 py-3 text-right ${headingAmountClass ?? ''}`}>{isHeading ? formatSignedBudgetAmount(itemAmount.department_request_increase_amount || 0, '+') : <button type="button" onClick={(event) => openAmountCellEdit(event, item, 'departmentRequestIncreaseAmount', 'ภายในกรม ขอเพิ่ม', item.amount.department_request_increase_amount)} className="w-full rounded px-1 py-1 text-right transition hover:bg-blue-50 hover:text-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-300">{formatSignedBudgetAmount(item.amount.department_request_increase_amount || 0, '+')}</button>}</td>
+                    <td className={`px-4 py-3 text-right ${headingAmountClass ?? ''}`}>{isHeading ? formatSignedBudgetAmount(itemAmount.department_transfer_out_amount || 0, '-') : <button type="button" onClick={(event) => openAmountCellEdit(event, item, 'departmentTransferOutAmount', 'ภายในกรม โอนออก', item.amount.department_transfer_out_amount)} className="w-full rounded px-1 py-1 text-right transition hover:bg-blue-50 hover:text-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-300">{formatSignedBudgetAmount(item.amount.department_transfer_out_amount || 0, '-')}</button>}</td>
+                    <td className={`px-4 py-3 text-right ${headingAmountClass ?? ''}`}>{isHeading ? formatSignedBudgetAmount(itemAmount.division_transfer_in_amount || 0, '+') : <button type="button" onClick={(event) => openAmountCellEdit(event, item, 'divisionTransferInAmount', 'ภายในกอง รับโอน', item.amount.division_transfer_in_amount)} className="w-full rounded px-1 py-1 text-right transition hover:bg-orange-50 hover:text-orange-800 focus:outline-none focus:ring-2 focus:ring-orange-300">{formatSignedBudgetAmount(item.amount.division_transfer_in_amount || 0, '+')}</button>}</td>
+                    <td className={`px-4 py-3 text-right ${headingAmountClass ?? ''}`}>{isHeading ? formatSignedBudgetAmount(itemAmount.division_transfer_out_amount || 0, '-') : <button type="button" onClick={(event) => openAmountCellEdit(event, item, 'divisionTransferOutAmount', 'ภายในกอง โอนออก', item.amount.division_transfer_out_amount)} className="w-full rounded px-1 py-1 text-right transition hover:bg-orange-50 hover:text-orange-800 focus:outline-none focus:ring-2 focus:ring-orange-300">{formatSignedBudgetAmount(item.amount.division_transfer_out_amount || 0, '-')}</button>}</td>
                     <td className={`px-4 py-3 text-right ${headingAmountClass ?? ''}`}>{isHeading ? formatBudgetAmount(itemAmount.committed_po_amount || 0) : <button type="button" onClick={(event) => openAmountCellEdit(event, item, 'committedPoAmount', 'ผูกพัน มี PO', item.amount.committed_po_amount)} className="w-full rounded px-1 py-1 text-right transition hover:bg-purple-50 hover:text-purple-800 focus:outline-none focus:ring-2 focus:ring-purple-300">{formatBudgetAmount(item.amount.committed_po_amount || 0)}</button>}</td>
                     <td className={`px-4 py-3 text-right ${headingAmountClass ?? ''}`}>{isHeading ? formatBudgetAmount(itemAmount.committed_without_po_amount || 0) : <button type="button" onClick={(event) => openAmountCellEdit(event, item, 'committedWithoutPoAmount', 'ผูกพัน ไม่มี PO', item.amount.committed_without_po_amount)} className="w-full rounded px-1 py-1 text-right transition hover:bg-purple-50 hover:text-purple-800 focus:outline-none focus:ring-2 focus:ring-purple-300">{formatBudgetAmount(item.amount.committed_without_po_amount || 0)}</button>}</td>
                     <td className={`px-4 py-3 text-right ${headingAmountClass ?? ''}`}>{formatBudgetAmount(itemAmount.committed_total_amount || 0)}</td>
@@ -2599,46 +2792,6 @@ export function BudgetUtilizationItemsPage() {
                 );
               })}
             </tbody>
-            <tfoot className="sticky bottom-0 z-20 border-t-2 border-slate-300 bg-slate-900 font-bold text-white shadow-[0_-2px_10px_rgba(0,0,0,0.15)]">
-              <tr>
-                <td className="sticky left-0 z-30 min-w-[320px] border-r border-slate-700 bg-slate-900 px-4 py-3 text-left">
-                  รวมทั้งสิ้น ({filteredItems.length.toLocaleString()} รายการ)
-                </td>
-                <td className="px-4 py-3 text-right">{formatBudgetAmount(tableTotals.planned_budget_amount)}</td>
-                {trancheDefinitions.map((tranche) => {
-                  const trancheTotal = tranche.trancheNumber === 1
-                    ? tableTotals.allocation_tranche_1_amount
-                    : tranche.trancheNumber === 2
-                      ? tableTotals.allocation_tranche_2_amount
-                      : tranche.trancheNumber === 3
-                        ? tableTotals.allocation_tranche_3_amount
-                        : 0;
-                  return (
-                    <td key={`total-${tranche.key}`} className="px-3 py-3 text-right text-amber-300">
-                      {formatBudgetAmount(trancheTotal)}
-                    </td>
-                  );
-                })}
-                <td className="px-4 py-3 text-right text-lime-400">{formatBudgetAmount(tableTotals.net_budget_after_transfer_amount)}</td>
-                <td className="px-4 py-3 text-right">{formatBudgetAmount(tableTotals.central_transfer_in_amount)}</td>
-                <td className="px-4 py-3 text-right">{formatBudgetAmount(tableTotals.central_transfer_out_amount)}</td>
-                <td className="px-4 py-3 text-right">{formatBudgetAmount(tableTotals.department_request_increase_amount)}</td>
-                <td className="px-4 py-3 text-right">{formatBudgetAmount(tableTotals.department_transfer_out_amount)}</td>
-                <td className="px-4 py-3 text-right">{formatBudgetAmount(tableTotals.division_transfer_in_amount)}</td>
-                <td className="px-4 py-3 text-right">{formatBudgetAmount(tableTotals.division_transfer_out_amount)}</td>
-                <td className="px-4 py-3 text-right text-purple-300">{formatBudgetAmount(tableTotals.committed_po_amount)}</td>
-                <td className="px-4 py-3 text-right text-purple-300">{formatBudgetAmount(tableTotals.committed_without_po_amount)}</td>
-                <td className="px-4 py-3 text-right text-purple-200">{formatBudgetAmount(tableTotals.committed_total_amount)}</td>
-                <td className="px-4 py-3 text-right text-emerald-300">{formatBudgetAmount(tableTotals.disbursed_general_amount)}</td>
-                <td className="px-4 py-3 text-right text-emerald-300">{formatBudgetAmount(tableTotals.disbursed_advance_amount)}</td>
-                <td className="px-4 py-3 text-right text-emerald-200">{formatBudgetAmount(tableTotals.disbursed_total_amount)}</td>
-                <td className="px-4 py-3 text-right text-yellow-300">{formatBudgetAmount(tableTotals.utilization_total_amount)}</td>
-                <td className="px-4 py-3 text-right text-sky-300">{formatBudgetAmount(tableTotals.remaining_amount)}</td>
-                <td className="px-4 py-3 text-right text-teal-300">{formatBudgetAmount(tableTotals.disbursement_rate ?? 0)}%</td>
-                <td className="px-4 py-3 text-right text-sky-300">{formatBudgetAmount(tableTotals.utilization_with_po_rate ?? 0)}%</td>
-                {canManage ? <td></td> : null}
-              </tr>
-            </tfoot>
           </table>
         </div>
       </section>
@@ -2776,7 +2929,9 @@ export function BudgetUtilizationItemsPage() {
           <div className={`relative w-full max-w-lg overflow-hidden rounded-md bg-white shadow-2xl ${cellEditToneClasses[cellEdit.tone].border}`}>
             <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
               <div className="min-w-0">
-                <h2 id="budget-cell-edit-title" className={`text-lg font-bold ${cellEditToneClasses[cellEdit.tone].heading}`}>แก้ไข{cellEdit.label}</h2>
+                <h2 id="budget-cell-edit-title" className={`text-lg font-bold ${cellEditToneClasses[cellEdit.tone].heading}`}>
+                  {cellEditHasRecordedData ? 'แก้ไข' : 'เพิ่ม'}{cellEdit.label}
+                </h2>
                 <p className="mt-1 text-sm text-slate-600">
                   {cellEdit.item.sequence_label ? `${cellEdit.item.sequence_label} ` : ''}{cellEdit.item.item_name}
                 </p>
@@ -2788,14 +2943,21 @@ export function BudgetUtilizationItemsPage() {
             <div className="space-y-4 bg-slate-50 p-5">
               <label className="block">
                 <span className="text-sm font-medium text-slate-700">จำนวนเงิน</span>
-                <input
-                  value={cellEdit.value}
-                  onChange={(event) => setCellEdit((current) => current ? { ...current, value: event.target.value } : current)}
-                  inputMode="decimal"
-                  autoFocus
-                  className={`mt-1 h-11 w-full rounded-md border border-slate-300 bg-white px-3 text-right text-base outline-none focus:ring-2 ${cellEditToneClasses[cellEdit.tone].input}`}
-                  placeholder="0.00"
-                />
+                <div className="relative mt-1">
+                  {cellEdit.field && amountFieldDisplaySigns[cellEdit.field] ? (
+                    <span className={`pointer-events-none absolute inset-y-0 left-3 flex items-center text-lg font-semibold ${cellEditToneClasses[cellEdit.tone].heading}`}>
+                      {amountFieldDisplaySigns[cellEdit.field]}
+                    </span>
+                  ) : null}
+                  <input
+                    value={cellEdit.value}
+                    onChange={(event) => setCellEdit((current) => current ? { ...current, value: event.target.value } : current)}
+                    inputMode="decimal"
+                    autoFocus
+                    className={`h-11 w-full rounded-md border border-slate-300 bg-white px-3 text-right text-base outline-none focus:ring-2 ${cellEdit.field && amountFieldDisplaySigns[cellEdit.field] ? 'pl-9' : ''} ${cellEditToneClasses[cellEdit.tone].input}`}
+                    placeholder="0.00"
+                  />
+                </div>
               </label>
               {cellEdit.tranche ? (
                 <label className="block">
@@ -2808,6 +2970,18 @@ export function BudgetUtilizationItemsPage() {
                   />
                 </label>
               ) : null}
+              <label className="block">
+                <span className="text-sm font-medium text-slate-700">
+                  เลขที่หนังสือ <span className="text-red-600">*</span>
+                </span>
+                <input
+                  value={cellEdit.documentNumber}
+                  onChange={(event) => setCellEdit((current) => current ? { ...current, documentNumber: event.target.value } : current)}
+                  maxLength={200}
+                  className={`mt-1 h-11 w-full rounded-md border border-slate-300 bg-white px-3 text-sm outline-none focus:ring-2 ${cellEditToneClasses[cellEdit.tone].input}`}
+                  placeholder="เช่น สธ 0434.3ว 259"
+                />
+              </label>
               <p className={`rounded-md border px-3 py-2 text-xs ${cellEditToneClasses[cellEdit.tone].note}`}>ระบบจะคำนวณยอดสุทธิ ผลรวม คงเหลือ และร้อยละใหม่หลังบันทึก</p>
               {cellEditError ? <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700">{cellEditError}</p> : null}
             </div>
@@ -2815,7 +2989,7 @@ export function BudgetUtilizationItemsPage() {
               <button type="button" onClick={closeCellEdit} disabled={saving} className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50">ยกเลิก</button>
               <button type="button" onClick={() => void saveCellEdit()} disabled={saving} className={`inline-flex items-center gap-2 rounded-md px-5 py-2 text-sm font-semibold text-white transition disabled:opacity-50 ${cellEditToneClasses[cellEdit.tone].button}`}>
                 <Save className="h-4 w-4" aria-hidden="true" />
-                {saving ? 'กำลังบันทึก...' : 'บันทึกตัวเลข'}
+                {saving ? 'กำลังบันทึก...' : cellEditHasRecordedData ? 'บันทึกการแก้ไข' : 'เพิ่มข้อมูล'}
               </button>
             </div>
           </div>
@@ -2891,7 +3065,7 @@ export function BudgetUtilizationItemsPage() {
                   <section className="border-b border-amber-200 pb-5">
                     <h3 className="text-base font-bold text-amber-900">จัดสรรงวด</h3>
                     <p className="mt-1 text-xs text-slate-500">กดรายการเพื่อแก้ไขยอดและวันที่จัดสรร</p>
-                    <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                    <div className="mt-4 grid grid-cols-1 items-stretch gap-3 sm:grid-cols-2 xl:grid-cols-4">
                       {trancheDefinitions.map((tranche) => {
                         const displayValue = tranche.trancheNumber === 1
                           ? editModalAmount.allocation_tranche_1_amount
@@ -2902,13 +3076,14 @@ export function BudgetUtilizationItemsPage() {
                               : getItemTrancheValue(editModalItem, tranche);
                         const allocation = editModalItem.allocations?.find((entry) => entry.tranche_id === tranche.key);
                         return (
-                          <div key={tranche.key}>
+                          <div key={tranche.key} className="h-full min-w-0">
                             {renderDetailAmount(
                               tranche.label,
                               displayValue,
                               'amber',
                               () => openAllocationCellEdit(null, editModalItem, tranche),
                               allocation?.allocation_date ? `วันที่จัดสรร ${allocation.allocation_date}` : undefined,
+                              getDocumentNumber(editModalItem, `allocation:${tranche.key}`),
                             )}
                           </div>
                         );
@@ -2920,22 +3095,22 @@ export function BudgetUtilizationItemsPage() {
                     <div className="border-t-4 border-cyan-600 pt-3">
                       <h3 className="text-sm font-bold text-cyan-900">ส่วนกลางกรมฯ</h3>
                       <div className="mt-3 grid gap-3">
-                        {renderDetailAmount('รับโอน (2)', editModalAmount.central_transfer_in_amount, 'cyan', () => openAmountCellEdit(null, editModalItem, 'centralTransferInAmount', 'ส่วนกลางกรมฯ รับโอน', editModalItem.amount.central_transfer_in_amount))}
-                        {renderDetailAmount('โอนออก (3)', editModalAmount.central_transfer_out_amount, 'cyan', () => openAmountCellEdit(null, editModalItem, 'centralTransferOutAmount', 'ส่วนกลางกรมฯ โอนออก', editModalItem.amount.central_transfer_out_amount))}
+                        {renderDetailAmount('รับโอน (2)', editModalAmount.central_transfer_in_amount, 'cyan', () => openAmountCellEdit(null, editModalItem, 'centralTransferInAmount', 'ส่วนกลางกรมฯ รับโอน', editModalItem.amount.central_transfer_in_amount), undefined, getDocumentNumber(editModalItem, 'central_transfer_in'), '+')}
+                        {renderDetailAmount('โอนออก (3)', editModalAmount.central_transfer_out_amount, 'cyan', () => openAmountCellEdit(null, editModalItem, 'centralTransferOutAmount', 'ส่วนกลางกรมฯ โอนออก', editModalItem.amount.central_transfer_out_amount), undefined, getDocumentNumber(editModalItem, 'central_transfer_out'), '-')}
                       </div>
                     </div>
                     <div className="border-t-4 border-blue-600 pt-3">
                       <h3 className="text-sm font-bold text-blue-900">ภายในกรม</h3>
                       <div className="mt-3 grid gap-3">
-                        {renderDetailAmount('ขอเพิ่ม', editModalAmount.department_request_increase_amount, 'blue', () => openAmountCellEdit(null, editModalItem, 'departmentRequestIncreaseAmount', 'ภายในกรม ขอเพิ่ม', editModalItem.amount.department_request_increase_amount))}
-                        {renderDetailAmount('โอนออก', editModalAmount.department_transfer_out_amount, 'blue', () => openAmountCellEdit(null, editModalItem, 'departmentTransferOutAmount', 'ภายในกรม โอนออก', editModalItem.amount.department_transfer_out_amount))}
+                        {renderDetailAmount('ขอเพิ่ม', editModalAmount.department_request_increase_amount, 'blue', () => openAmountCellEdit(null, editModalItem, 'departmentRequestIncreaseAmount', 'ภายในกรม ขอเพิ่ม', editModalItem.amount.department_request_increase_amount), undefined, getDocumentNumber(editModalItem, 'department_request_increase'), '+')}
+                        {renderDetailAmount('โอนออก', editModalAmount.department_transfer_out_amount, 'blue', () => openAmountCellEdit(null, editModalItem, 'departmentTransferOutAmount', 'ภายในกรม โอนออก', editModalItem.amount.department_transfer_out_amount), undefined, getDocumentNumber(editModalItem, 'department_transfer_out'), '-')}
                       </div>
                     </div>
                     <div className="border-t-4 border-orange-500 pt-3">
                       <h3 className="text-sm font-bold text-orange-900">ภายในกอง</h3>
                       <div className="mt-3 grid gap-3">
-                        {renderDetailAmount('รับโอน (2)', editModalAmount.division_transfer_in_amount, 'orange', () => openAmountCellEdit(null, editModalItem, 'divisionTransferInAmount', 'ภายในกอง รับโอน', editModalItem.amount.division_transfer_in_amount))}
-                        {renderDetailAmount('โอนออก (3)', editModalAmount.division_transfer_out_amount, 'orange', () => openAmountCellEdit(null, editModalItem, 'divisionTransferOutAmount', 'ภายในกอง โอนออก', editModalItem.amount.division_transfer_out_amount))}
+                        {renderDetailAmount('รับโอน (2)', editModalAmount.division_transfer_in_amount, 'orange', () => openAmountCellEdit(null, editModalItem, 'divisionTransferInAmount', 'ภายในกอง รับโอน', editModalItem.amount.division_transfer_in_amount), undefined, getDocumentNumber(editModalItem, 'division_transfer_in'), '+')}
+                        {renderDetailAmount('โอนออก (3)', editModalAmount.division_transfer_out_amount, 'orange', () => openAmountCellEdit(null, editModalItem, 'divisionTransferOutAmount', 'ภายในกอง โอนออก', editModalItem.amount.division_transfer_out_amount), undefined, getDocumentNumber(editModalItem, 'division_transfer_out'), '-')}
                       </div>
                     </div>
                   </section>
@@ -2944,15 +3119,15 @@ export function BudgetUtilizationItemsPage() {
                     <div className="border-t-4 border-purple-600 pt-3">
                       <h3 className="text-sm font-bold text-purple-900">ผูกพัน</h3>
                       <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                        {renderDetailAmount('มี PO (4)', editModalAmount.committed_po_amount, 'purple', () => openAmountCellEdit(null, editModalItem, 'committedPoAmount', 'ผูกพัน มี PO', editModalItem.amount.committed_po_amount))}
-                        {renderDetailAmount('ไม่มี PO (5)', editModalAmount.committed_without_po_amount, 'purple', () => openAmountCellEdit(null, editModalItem, 'committedWithoutPoAmount', 'ผูกพัน ไม่มี PO', editModalItem.amount.committed_without_po_amount))}
+                        {renderDetailAmount('มี PO (4)', editModalAmount.committed_po_amount, 'purple', () => openAmountCellEdit(null, editModalItem, 'committedPoAmount', 'ผูกพัน มี PO', editModalItem.amount.committed_po_amount), undefined, getDocumentNumber(editModalItem, 'committed_po'))}
+                        {renderDetailAmount('ไม่มี PO (5)', editModalAmount.committed_without_po_amount, 'purple', () => openAmountCellEdit(null, editModalItem, 'committedWithoutPoAmount', 'ผูกพัน ไม่มี PO', editModalItem.amount.committed_without_po_amount), undefined, getDocumentNumber(editModalItem, 'committed_without_po'))}
                       </div>
                     </div>
                     <div className="border-t-4 border-emerald-600 pt-3">
                       <h3 className="text-sm font-bold text-emerald-900">เบิก-จ่าย</h3>
                       <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                        {renderDetailAmount('เบิกจ่ายทั่วไป (7)', editModalAmount.disbursed_general_amount, 'emerald', () => openAmountCellEdit(null, editModalItem, 'disbursedGeneralAmount', 'เบิกจ่ายทั่วไป', editModalItem.amount.disbursed_general_amount))}
-                        {renderDetailAmount('เงินยืมราชการ (8)', editModalAmount.disbursed_advance_amount, 'emerald', () => openAmountCellEdit(null, editModalItem, 'disbursedAdvanceAmount', 'เงินยืมราชการ', editModalItem.amount.disbursed_advance_amount))}
+                        {renderDetailAmount('เบิกจ่ายทั่วไป (7)', editModalAmount.disbursed_general_amount, 'emerald', () => openAmountCellEdit(null, editModalItem, 'disbursedGeneralAmount', 'เบิกจ่ายทั่วไป', editModalItem.amount.disbursed_general_amount), undefined, getDocumentNumber(editModalItem, 'disbursed_general'))}
+                        {renderDetailAmount('เงินยืมราชการ (8)', editModalAmount.disbursed_advance_amount, 'emerald', () => openAmountCellEdit(null, editModalItem, 'disbursedAdvanceAmount', 'เงินยืมราชการ', editModalItem.amount.disbursed_advance_amount), undefined, getDocumentNumber(editModalItem, 'disbursed_advance'))}
                       </div>
                     </div>
                   </section>

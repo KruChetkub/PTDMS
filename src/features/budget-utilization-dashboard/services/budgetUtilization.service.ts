@@ -19,6 +19,8 @@ import type {
   BudgetUtilizationRawWorkbook,
   BudgetUtilizationReportPeriod,
   BudgetUtilizationReportPeriodInput,
+  BudgetUtilizationTransactionReference,
+  BudgetUtilizationTransactionType,
 } from '../types/budgetUtilization.types';
 
 const budgetClient = supabase as any;
@@ -49,6 +51,7 @@ function mapJoinedItem(row: any): BudgetUtilizationItemWithAmount {
     : 0;
 
   const allocationRows = (row.budget_utilization_item_allocations ?? []) as BudgetUtilizationItemAllocation[];
+  const transactionReferenceRows = (row.budget_utilization_transaction_references ?? []) as BudgetUtilizationTransactionReference[];
   const normalizedAmount = normalizeAmount({
     ...(amountRow as Partial<BudgetUtilizationAmount>),
     net_budget_after_transfer_amount: rawNetBudget > 0 ? rawNetBudget : amountRow?.net_budget_after_transfer_amount,
@@ -90,7 +93,67 @@ function mapJoinedItem(row: any): BudgetUtilizationItemWithAmount {
       ...allocation,
       amount: Number(allocation.amount ?? 0),
     })),
+    transactionReferences: transactionReferenceRows,
   };
+}
+
+export type BudgetTransactionReferenceInput = {
+  referenceKey: string;
+  transactionType: BudgetUtilizationTransactionType;
+  documentNumber: string;
+  amount: number;
+  trancheId?: string | null;
+};
+
+function normalizeTransactionReference(reference: BudgetTransactionReferenceInput) {
+  const documentNumber = reference.documentNumber.trim()
+    ? sanitizePlainTextInput(reference.documentNumber, {
+        fieldName: 'เลขที่หนังสือ',
+        maxLength: 200,
+        allowNewlines: false,
+      })
+    : '';
+
+  if (Math.abs(reference.amount) > 0.005 && !documentNumber) {
+    throw new Error('กรุณากรอกเลขที่หนังสือของยอดที่บันทึก');
+  }
+
+  return {
+    ...reference,
+    documentNumber,
+  };
+}
+
+async function saveBudgetTransactionReferences(
+  itemId: string,
+  references: BudgetTransactionReferenceInput[],
+) {
+  const normalizedReferences = references.map(normalizeTransactionReference);
+
+  for (const reference of normalizedReferences) {
+    if (!reference.documentNumber && Math.abs(reference.amount) <= 0.005) {
+      await runSupabaseQuery(
+        budgetClient
+          .from('budget_utilization_transaction_references')
+          .delete()
+          .eq('item_id', itemId)
+          .eq('reference_key', reference.referenceKey),
+        'ลบเลขที่หนังสือของยอดที่เป็นศูนย์',
+      );
+      continue;
+    }
+
+    await runSupabaseQuery(
+      budgetClient.from('budget_utilization_transaction_references').upsert({
+        item_id: itemId,
+        reference_key: reference.referenceKey,
+        transaction_type: reference.transactionType,
+        tranche_id: reference.trancheId ?? null,
+        document_number: reference.documentNumber,
+      }, { onConflict: 'item_id,reference_key' }),
+      'บันทึกเลขที่หนังสือของรายการงบประมาณ',
+    );
+  }
 }
 
 export function canManageBudgetUtilization(role: string | null | undefined) {
@@ -253,7 +316,7 @@ export async function listBudgetHierarchyItems(reportPeriodId: string) {
   const result = await runSupabaseQuery<any>(
     budgetClient
       .from('budget_utilization_items')
-      .select('*, budget_utilization_amounts(*), budget_utilization_item_allocations(*)')
+      .select('*, budget_utilization_amounts(*), budget_utilization_item_allocations(*), budget_utilization_transaction_references(*)')
       .eq('report_period_id', reportPeriodId)
       .order('sort_order', { ascending: true }),
     'โหลดรายการงบประมาณ',
@@ -399,7 +462,16 @@ export async function saveBudgetItemAllocation(
   tranche: BudgetUtilizationAllocationTranche,
   amount: number,
   allocationDate: string | null,
+  documentNumber: string,
 ) {
+  const reference = normalizeTransactionReference({
+    referenceKey: `allocation:${tranche.id}`,
+    transactionType: 'allocation',
+    documentNumber,
+    amount,
+    trancheId: tranche.id,
+  });
+
   await runSupabaseQuery(
     budgetClient.from('budget_utilization_item_allocations').upsert({
       item_id: itemId,
@@ -445,6 +517,8 @@ export async function saveBudgetItemAllocation(
     budgetClient.from('budget_utilization_amounts').update(updatePayload).eq('item_id', itemId),
     'อัปเดตยอดสุทธิจากทุกงวดจัดสรร',
   );
+
+  await saveBudgetTransactionReferences(itemId, [reference]);
 }
 
 export async function setActiveBudgetReportPeriod(reportPeriodId: string) {
@@ -634,8 +708,12 @@ export async function updateBudgetItem(input: BudgetUtilizationItemInput) {
   return itemResult.data;
 }
 
-export async function updateBudgetItemAmounts(input: BudgetUtilizationItemInput) {
+export async function updateBudgetItemAmounts(
+  input: BudgetUtilizationItemInput,
+  references: BudgetTransactionReferenceInput[] = [],
+) {
   if (!input.itemId) throw new Error('ไม่พบรายการที่ต้องการแก้ไขตัวเลข');
+  const normalizedReferences = references.map(normalizeTransactionReference);
   const allocationsResult = await runSupabaseQuery<any>(
     budgetClient
       .from('budget_utilization_item_allocations')
@@ -677,6 +755,8 @@ export async function updateBudgetItemAmounts(input: BudgetUtilizationItemInput)
       .eq('item_id', input.itemId),
     'แก้ไขตัวเลขรายการงบประมาณ',
   );
+
+  await saveBudgetTransactionReferences(input.itemId, normalizedReferences);
 }
 
 export async function updateBudgetItemDetails(input: BudgetUtilizationItemInput) {

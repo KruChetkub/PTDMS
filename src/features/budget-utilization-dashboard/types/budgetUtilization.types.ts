@@ -95,9 +95,34 @@ export type BudgetUtilizationItemAllocation = {
   updated_at: string;
 };
 
+export type BudgetUtilizationTransactionType =
+  | 'allocation'
+  | 'central_transfer_in'
+  | 'central_transfer_out'
+  | 'department_request_increase'
+  | 'department_transfer_out'
+  | 'division_transfer_in'
+  | 'division_transfer_out'
+  | 'committed_po'
+  | 'committed_without_po'
+  | 'disbursed_general'
+  | 'disbursed_advance';
+
+export type BudgetUtilizationTransactionReference = {
+  id: string;
+  item_id: string;
+  reference_key: string;
+  transaction_type: BudgetUtilizationTransactionType;
+  tranche_id: string | null;
+  document_number: string;
+  created_at: string;
+  updated_at: string;
+};
+
 export type BudgetUtilizationItemWithAmount = BudgetUtilizationItem & {
   amount: BudgetUtilizationAmount;
   allocations?: BudgetUtilizationItemAllocation[];
+  transactionReferences?: BudgetUtilizationTransactionReference[];
 };
 
 export type BudgetUtilizationImportBatch = {

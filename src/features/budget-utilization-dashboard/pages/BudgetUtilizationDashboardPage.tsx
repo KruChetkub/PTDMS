@@ -1299,7 +1299,7 @@ export function BudgetUtilizationDashboardPage() {
             <section className="rounded-md border border-slate-200 bg-white p-3 shadow-sm xl:col-span-2">
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                   <div>
-                    <h2 className="text-base font-semibold text-slate-950">การประเมินตามไตรมาส</h2>
+                    <h2 className="text-base font-semibold text-slate-950">มาตรการเร่งรัดการเบิกจ่ายงบประมาณ และการใช้จ่ายภาครัฐ ตามไตรมาส</h2>
                   </div>
                   <label className="flex flex-col gap-1 text-xs font-semibold text-slate-600">
                     เลือกไตรมาส
