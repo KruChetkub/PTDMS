@@ -272,13 +272,10 @@ export function buildHierarchyRollupMap(items: BudgetUtilizationItemWithAmount[]
       const leafDescendants = getLeafDescendants(item.id);
       const uniqueLeaves = Array.from(new Map(leafDescendants.map((leaf) => [leaf.id, leaf])).values());
       const summed = sumBudgetAmounts(uniqueLeaves.map((leaf) => leaf.amount));
-      const ownAmount = normalizeAmount(item.amount);
 
       const merged: Record<string, any> = {};
       hierarchyAmountFields.forEach((field) => {
-        const leafVal = toNumber(summed[field]);
-        const ownVal = toNumber(ownAmount[field]);
-        merged[field] = leafVal !== 0 ? leafVal : ownVal;
+        merged[field] = toNumber(summed[field]);
       });
 
       rollupMap.set(item.id, normalizeAmount(merged as Partial<BudgetUtilizationAmount>));

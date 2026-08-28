@@ -1,36 +1,14 @@
-import { useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { AlertCircle, BarChart3, Coins, DatabaseZap, RefreshCw, TrendingUp, WalletCards } from 'lucide-react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { AlertCircle, BarChart3, ChevronDown, ChevronRight, Coins, DatabaseZap, RefreshCw, TrendingUp, WalletCards } from 'lucide-react';
 import { Bar, BarChart, CartesianGrid, Cell, LabelList, Legend, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { PageHeader } from '../../../components/ui/PageHeader';
 import { useAuditPageAccess } from '../../../hooks/useAuditPageAccess';
-import { getBudgetDashboardSummary, getBudgetImportFileDetail, listBudgetDatasetOptions } from '../services/budgetUtilization.service';
+import { getBudgetDashboardSummary } from '../services/budgetUtilization.service';
 import { buildHierarchyRollupMap, formatBudgetAmount, getNetAllocationTotal, normalizeAmount, percent, sumBudgetAmounts, summarizeBudgetItems, toNumber } from '../utils/budgetUtilizationCalculations';
-import type { BudgetUtilizationAmount, BudgetUtilizationDashboardSummary, BudgetUtilizationDatasetOption, BudgetUtilizationImportFileDetail, BudgetUtilizationItemWithAmount, BudgetUtilizationRawWorkbook } from '../types/budgetUtilization.types';
+import type { BudgetUtilizationAmount, BudgetUtilizationDashboardSummary, BudgetUtilizationItemWithAmount, BudgetUtilizationRawWorkbook } from '../types/budgetUtilization.types';
 import { getSafeUserErrorMessage } from '../../../utils/errorHandling';
 
 const chartColors = ['#2563eb', '#8b5cf6', '#f59e0b', '#0f766e', '#e11d48'];
-const selectedDatasetStorageKey = 'budget-utilization:selected-report-period';
-
-function getRememberedDatasetId() {
-  try {
-    return window.sessionStorage.getItem(selectedDatasetStorageKey) ?? '';
-  } catch {
-    return '';
-  }
-}
-
-function rememberDatasetId(reportPeriodId: string) {
-  try {
-    if (reportPeriodId) {
-      window.sessionStorage.setItem(selectedDatasetStorageKey, reportPeriodId);
-    } else {
-      window.sessionStorage.removeItem(selectedDatasetStorageKey);
-    }
-  } catch {
-    // The URL still preserves the selection when browser storage is unavailable.
-  }
-}
 
 const quarterColors = {
   q1: 'bg-emerald-100 text-emerald-950',
@@ -67,6 +45,21 @@ type RawBudgetRow = {
   remaining: number;
   disbursementRate: number;
   utilizationWithPoRate: number;
+};
+
+type ProjectPlanDetailRow = {
+  id: string;
+  sequenceLabel: string;
+  name: string;
+  output: string;
+  activity: string;
+  committedTotal: number;
+  utilizationTotal: number;
+  remaining: number;
+  disbursedTotal: number;
+  netTotal: number;
+  disbursementRate: number;
+  children: ProjectPlanDetailRow[];
 };
 
 const quarterOptions: Array<{ key: QuarterKey; label: string; period: string }> = [
@@ -649,56 +642,27 @@ function buildDatabaseWorkbook(summary: BudgetUtilizationDashboardSummary | null
 
 export function BudgetUtilizationDashboardPage() {
   useAuditPageAccess({ module: 'budget_utilization', action: 'budget_dashboard_access', route: '/budget-utilization' });
-  const [searchParams, setSearchParams] = useSearchParams();
-  const initialReportPeriodId = searchParams.get('reportPeriodId') ?? getRememberedDatasetId();
   const [summary, setSummary] = useState<BudgetUtilizationDashboardSummary | null>(null);
-  const [rawDetail, setRawDetail] = useState<BudgetUtilizationImportFileDetail | null>(null);
-  const [datasetOptions, setDatasetOptions] = useState<BudgetUtilizationDatasetOption[]>([]);
-  const [selectedReportPeriodId, setSelectedReportPeriodId] = useState(initialReportPeriodId);
   const [selectedQuarter, setSelectedQuarter] = useState<QuarterKey>('q4');
   const [selectedRawPlanCategoryKey, setSelectedRawPlanCategoryKey] = useState('personnel');
   const [showProjectBar, setShowProjectBar] = useState<boolean>(false);
   const [showBottomTable, setShowBottomTable] = useState<boolean>(false);
+  const [expandedProjectIds, setExpandedProjectIds] = useState<string[]>([]);
   const [hasPlanBarClicked, setHasPlanBarClicked] = useState<boolean>(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const loadData = async (reportPeriodId = selectedReportPeriodId) => {
+  const loadData = async () => {
     try {
       setLoading(true);
       setError(null);
       setShowProjectBar(false);
       setShowBottomTable(false);
+      setExpandedProjectIds([]);
       setHasPlanBarClicked(false);
       setSelectedRawPlanCategoryKey('personnel');
-      const options = await listBudgetDatasetOptions();
-      const selectedOption = options.find((option) => option.reportPeriodId === reportPeriodId) ?? null;
-
-      setDatasetOptions(options);
-
-      if (selectedOption?.sourceType === 'raw_workbook' && selectedOption.importBatchId) {
-        const detail = await getBudgetImportFileDetail(selectedOption.importBatchId);
-        setRawDetail(detail);
-        setSummary(null);
-        setSelectedReportPeriodId(selectedOption.reportPeriodId);
-        return;
-      }
-
-      if (!reportPeriodId) {
-        const firstRawOption = options.find((option) => option.sourceType === 'raw_workbook');
-        if (firstRawOption?.importBatchId) {
-          const detail = await getBudgetImportFileDetail(firstRawOption.importBatchId);
-          setRawDetail(detail);
-          setSummary(null);
-          setSelectedReportPeriodId(firstRawOption.reportPeriodId);
-          return;
-        }
-      }
-
-      const dashboardSummary = await getBudgetDashboardSummary(reportPeriodId || null);
-      setRawDetail(null);
+      const dashboardSummary = await getBudgetDashboardSummary(null);
       setSummary(dashboardSummary);
-      setSelectedReportPeriodId(dashboardSummary.reportPeriod?.id ?? '');
     } catch (loadError) {
       setError(getSafeUserErrorMessage(loadError, 'ไม่สามารถโหลด Dashboard งบประมาณได้'));
     } finally {
@@ -707,19 +671,8 @@ export function BudgetUtilizationDashboardPage() {
   };
 
   useEffect(() => {
-    void loadData(initialReportPeriodId);
+    void loadData();
   }, []);
-
-  const handleDatasetChange = (reportPeriodId: string) => {
-    setSelectedReportPeriodId(reportPeriodId);
-    rememberDatasetId(reportPeriodId);
-    setSearchParams(reportPeriodId ? { reportPeriodId } : {});
-    setShowProjectBar(false);
-    setShowBottomTable(false);
-    setHasPlanBarClicked(false);
-    setSelectedRawPlanCategoryKey('personnel');
-    void loadData(reportPeriodId);
-  };
 
   const totals = summary?.totals ?? null;
   const databaseWorkbook = useMemo(() => buildDatabaseWorkbook(summary), [summary]);
@@ -812,38 +765,62 @@ export function BudgetUtilizationDashboardPage() {
   }, [hasPlanBarClicked, showBottomTable, showProjectBar, selectedRawPlanCategoryKey, rawPlanCategoryData, rawTotal, visiblePlanCategoryData]);
 
   const projectPlanDetailRows = useMemo(() => {
-    const normalizedItems = rawDetail?.items?.length
-      ? rawDetail.items
-      : summary?.items ?? [];
+    const normalizedItems = summary?.items ?? [];
     const rollup = buildHierarchyRollupMap(normalizedItems);
-    const normalizedProjects = normalizedItems
-      .filter((item) => (
-        item.row_type === 'major_project'
-        || /โครงการใหญ่/.test(item.item_name)
-        || (item.source_row_data && item.source_row_data.some((cell) => /โครงการใหญ่/.test(String(cell ?? ''))))
-      ))
-      .map((item) => {
-        const amount = rollup.get(item.id) ?? getCategoryAmount(item, normalizedItems);
-        const netTotal = getNetAllocationTotal(amount);
-        const rawProjectName = item.source_row_data?.find((cell) => /โครงการใหญ่\s*:/.test(String(cell ?? '')));
+    const childrenByParent = new Map<string, BudgetUtilizationItemWithAmount[]>();
+    normalizedItems.forEach((item) => {
+      if (!item.parent_id) return;
+      const children = childrenByParent.get(item.parent_id) ?? [];
+      children.push(item);
+      childrenByParent.set(item.parent_id, children);
+    });
+    childrenByParent.forEach((children) => children.sort((left, right) => (
+      (left.sequence_label ?? '').localeCompare(right.sequence_label ?? '', 'th', { numeric: true })
+      || left.sort_order - right.sort_order
+    )));
 
-        return {
-          id: item.id,
-          name: String(rawProjectName ?? item.item_name).trim(),
-          output: item.output_label ?? '',
-          activity: item.activity_label ?? item.activity_sequence_label ?? '',
-          committedTotal: amount.committed_total_amount,
-          utilizationTotal: amount.utilization_total_amount,
-          remaining: Math.max(0, netTotal - amount.utilization_total_amount),
-          disbursedTotal: amount.disbursed_total_amount,
-          netTotal,
-          disbursementRate: percent(amount.disbursed_total_amount, netTotal),
-        };
-      });
+    const toProjectDetailRow = (item: BudgetUtilizationItemWithAmount, ancestorIds = new Set<string>()): ProjectPlanDetailRow => {
+      const amount = rollup.get(item.id) ?? getCategoryAmount(item, normalizedItems);
+      const netTotal = getNetAllocationTotal(amount);
+      const rawProjectName = item.source_row_data?.find((cell) => /โครงการใหญ่\s*:/.test(String(cell ?? '')));
+      const nextAncestorIds = new Set(ancestorIds);
+      nextAncestorIds.add(item.id);
+
+      return {
+        id: item.id,
+        sequenceLabel: item.sequence_label ?? '',
+        name: String(rawProjectName ?? item.item_name).trim(),
+        output: item.output_label ?? '',
+        activity: item.activity_label ?? item.activity_sequence_label ?? '',
+        committedTotal: amount.committed_total_amount,
+        utilizationTotal: amount.utilization_total_amount,
+        remaining: Math.max(0, netTotal - amount.utilization_total_amount),
+        disbursedTotal: amount.disbursed_total_amount,
+        netTotal,
+        disbursementRate: percent(amount.disbursed_total_amount, netTotal),
+        children: (childrenByParent.get(item.id) ?? [])
+          .filter((child) => !nextAncestorIds.has(child.id))
+          .map((child) => toProjectDetailRow(child, nextAncestorIds)),
+      };
+    };
+    const normalizedProjectRoots = ['3.5', '3.6'].map((rootSequence) => (
+      normalizedItems
+        .filter((item) => getProjectRootSequence([
+          item.sequence_label,
+          item.raw_label,
+          ...(item.source_row_data ?? []),
+        ]) === rootSequence)
+        .sort((left, right) => left.depth - right.depth || left.sort_order - right.sort_order)[0]
+    )).filter((item): item is BudgetUtilizationItemWithAmount => Boolean(item));
+    const normalizedProjects = normalizedProjectRoots.map((item) => toProjectDetailRow(item));
 
     if (normalizedProjects.length > 0) return normalizedProjects;
-    return getRawPlanDetailRows(rawWorkbook, "project");
-  }, [rawDetail?.items, rawWorkbook, summary?.items]);
+    return getRawPlanDetailRows(rawWorkbook, "project").map<ProjectPlanDetailRow>((item) => ({
+      ...item,
+      sequenceLabel: '',
+      children: [],
+    }));
+  }, [rawWorkbook, summary?.items]);
 
   const rawAssessmentRows = useMemo(() => assessmentGroupOrder.map((group) => {
     const actual = getRawActualByGroup(group, rawTotal, rawCategoryData);
@@ -858,7 +835,7 @@ export function BudgetUtilizationDashboardPage() {
     };
   }), [rawCategoryData, rawTotal, selectedQuarter]);
   const displayedAllocationData = useMemo(() => {
-    if (!summary || rawDetail?.rawWorkbook) {
+    if (!summary) {
       return [
         { name: 'รับจัดสรรงวด 1', value: rawTotal?.allocation1 ?? 0 },
         { name: 'รับจัดสรรงวด 2', value: rawTotal?.allocation2 ?? 0 },
@@ -883,7 +860,7 @@ export function BudgetUtilizationDashboardPage() {
           ), 0)
         : summary.totalItem?.allocations?.find((allocation) => allocation.tranche_id === tranche.id)?.amount ?? 0,
     })).filter((item) => item.value > 0);
-  }, [rawDetail?.rawWorkbook, rawTotal, summary]);
+  }, [rawTotal, summary]);
   const dashboardMetrics = totals ? getDashboardAmountMetrics(totals) : null;
   const allocationData = useMemo(() => [
     { name: 'รับจัดสรร(งวด 1)', value: totals?.allocation_tranche_1_amount ?? 0 },
@@ -925,6 +902,53 @@ export function BudgetUtilizationDashboardPage() {
 
   const hasData = Boolean((summary?.reportPeriod && totals) || rawTotal);
 
+  const toggleProjectExpansion = (projectId: string) => {
+    setExpandedProjectIds((current) => (
+      current.includes(projectId)
+        ? current.filter((id) => id !== projectId)
+        : [...current, projectId]
+    ));
+  };
+
+  const renderProjectHierarchyRows = (items: ProjectPlanDetailRow[], depth = 0): ReactNode[] => (
+    items.flatMap((item) => {
+      const isExpanded = expandedProjectIds.includes(item.id);
+      const hasChildren = item.children.length > 0;
+      const rowBackground = depth === 0 ? 'bg-white' : depth % 2 === 1 ? 'bg-sky-50/70' : 'bg-slate-50';
+      const row = (
+        <tr key={item.id} className={rowBackground}>
+          <td className="w-[55%] max-w-0 py-3 pr-4 font-medium text-slate-900" style={{ paddingLeft: `${16 + depth * 28}px` }}>
+            <button
+              type="button"
+              onClick={() => toggleProjectExpansion(item.id)}
+              disabled={!hasChildren}
+              aria-expanded={hasChildren ? isExpanded : undefined}
+              className="flex w-full items-start gap-2 rounded-md text-left transition hover:bg-sky-100/70 focus:outline-none focus:ring-2 focus:ring-sky-200 disabled:cursor-default disabled:hover:bg-transparent"
+            >
+              <span className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center text-sky-700">
+                {hasChildren ? (isExpanded ? <ChevronDown className="h-4 w-4" aria-hidden="true" /> : <ChevronRight className="h-4 w-4" aria-hidden="true" />) : null}
+              </span>
+              <span className="min-w-0">
+                <span className={`line-clamp-2 text-slate-950 ${depth === 0 ? 'font-semibold' : 'font-medium'}`}>{item.sequenceLabel ? `${item.sequenceLabel} ` : ''}{item.name}</span>
+                <span className="mt-1 block text-xs font-normal text-slate-500">
+                  ผลผลิตที่ {item.output || '-'} · กิจกรรมหลักที่ {item.activity || '-'}
+                  {hasChildren ? ` · ${item.children.length} รายการย่อย` : ''}
+                </span>
+              </span>
+            </button>
+          </td>
+          <td className={`w-[15%] px-4 py-3 text-right text-slate-950 ${depth === 0 ? 'font-semibold' : 'font-medium'}`}>{formatBudgetAmount(item.utilizationTotal)}</td>
+          <td className={`w-[15%] px-4 py-3 text-right text-slate-950 ${depth === 0 ? 'font-semibold' : 'font-medium'}`}>{formatBudgetAmount(item.remaining)}</td>
+          <td className={`w-[15%] px-4 py-3 text-right text-teal-700 ${depth === 0 ? 'font-semibold' : 'font-medium'}`}>{formatBudgetAmount(item.disbursementRate)}%</td>
+        </tr>
+      );
+
+      return isExpanded
+        ? [row, ...renderProjectHierarchyRows(item.children, depth + 1)]
+        : [row];
+    })
+  );
+
   const handlePlanCategoryClick = (key: string) => {
     setHasPlanBarClicked(true);
     if (key === 'operations_total') {
@@ -963,27 +987,6 @@ export function BudgetUtilizationDashboardPage() {
           โหลดใหม่
         </button>
       </div>
-
-      <section className="mb-5 rounded-md border border-slate-200 bg-white p-4 shadow-sm">
-        <label className="block">
-          <span className="text-xs font-semibold text-slate-600">เลือกชุดข้อมูลจากไฟล์นำเข้า</span>
-          <select
-            value={selectedReportPeriodId}
-            onChange={(event) => handleDatasetChange(event.target.value)}
-            className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
-          >
-            <option value="">ชุดข้อมูลล่าสุดที่เปิดใช้งาน</option>
-            {datasetOptions.map((option) => (
-              <option key={option.reportPeriodId} value={option.reportPeriodId}>
-                {option.sourceFileName ? `${option.sourceFileName} · ` : ''}
-                {option.title}
-                {option.sourceType === 'raw_workbook' ? ' · ตาราง Excel' : ''}
-                {option.isActive ? ' · ใช้งานอยู่' : ''}
-              </option>
-            ))}
-          </select>
-        </label>
-      </section>
 
       {error ? (
         <div className="mb-5 flex items-start gap-2 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -1256,49 +1259,38 @@ export function BudgetUtilizationDashboardPage() {
                       </div>
                     </div>
 
-                    {showBottomTable ? (
-                      <div className="rounded-md border border-slate-200 bg-slate-50 shadow-sm">
-                        <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-3 py-2">
-                          <h3 className="text-sm font-semibold text-slate-950">
-                            รายการงบโครงการ (รวม)
-                          </h3>
-                          <span className="text-xs font-medium text-slate-500">{projectPlanDetailRows.length.toLocaleString()} รายการ</span>
-                        </div>
-                        <div className="max-h-72 overflow-auto">
-                          <table className="w-full min-w-[480px] divide-y divide-slate-200 text-xs">
-                            <thead className="sticky top-0 bg-slate-100 text-left font-semibold text-slate-600">
-                              <tr>
-                                <th className="w-[40%] px-2 py-2">หัวข้อโครงการ</th>
-                                <th className="w-[20%] px-2 py-2 text-right">รวม (10)</th>
-                                <th className="w-[20%] px-2 py-2 text-right">คงเหลือ (11)</th>
-                                <th className="w-[20%] px-2 py-2 text-right">ร้อยละ (12)</th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100 bg-white">
-                              {projectPlanDetailRows.length ? projectPlanDetailRows.map((item) => (
-                                <tr key={item.id}>
-                                  <td className="w-[40%] max-w-0 px-2 py-2 font-medium text-slate-900">
-                                    <span className="line-clamp-2 font-semibold text-slate-950">{item.name}</span>
-                                    <span className="mt-0.5 block text-[11px] font-normal text-slate-500">
-                                      ผลผลิตที่ {item.output || '-'} · กิจกรรมหลักที่ {item.activity || '-'}
-                                    </span>
-                                  </td>
-                                  <td className="w-[20%] px-2 py-2 text-right font-semibold text-slate-950">{formatBudgetAmount(item.utilizationTotal)}</td>
-                                  <td className="w-[20%] px-2 py-2 text-right font-semibold text-slate-950">{formatBudgetAmount(item.remaining)}</td>
-                                  <td className="w-[20%] px-2 py-2 text-right font-semibold text-teal-700">{formatBudgetAmount(item.disbursementRate)}%</td>
-                                </tr>
-                              )) : (
-                                <tr>
-                                  <td colSpan={4} className="px-3 py-4 text-center text-slate-500">ไม่มีรายการในหมวดนี้</td>
-                                </tr>
-                              )}
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
-                    ) : null}
                   </div>
                 </div>
+
+                {showBottomTable ? (
+                  <div className="mt-5 overflow-hidden rounded-md border border-slate-200 bg-slate-50 shadow-sm">
+                    <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
+                      <h3 className="text-sm font-semibold text-slate-950">
+                        รายการงบโครงการ (รวม)
+                      </h3>
+                      <span className="text-xs font-medium text-slate-500">{projectPlanDetailRows.length.toLocaleString()} รายการ</span>
+                    </div>
+                    <div className="max-h-[480px] overflow-auto">
+                      <table className="w-full min-w-[760px] divide-y divide-slate-200 text-sm">
+                        <thead className="sticky top-0 z-10 bg-slate-100 text-left text-xs font-semibold text-slate-700 shadow-sm">
+                          <tr>
+                            <th className="w-[55%] px-4 py-3">หัวข้อโครงการ</th>
+                            <th className="w-[15%] px-4 py-3 text-right">รวม (10)</th>
+                            <th className="w-[15%] px-4 py-3 text-right">คงเหลือ (11)</th>
+                            <th className="w-[15%] px-4 py-3 text-right">ร้อยละ (12)</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 bg-white">
+                          {projectPlanDetailRows.length ? renderProjectHierarchyRows(projectPlanDetailRows) : (
+                            <tr>
+                              <td colSpan={4} className="px-4 py-6 text-center text-slate-500">ไม่มีรายการในหมวดนี้</td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                ) : null}
               </div>
 
 

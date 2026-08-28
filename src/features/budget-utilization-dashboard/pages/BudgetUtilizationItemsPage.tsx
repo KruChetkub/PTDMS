@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type MouseEvent } from 'react';
-import { AlertCircle, Edit3, Plus, RefreshCw, Save, Search, Settings2, Table2, Trash2, WalletCards, X } from 'lucide-react';
+import { AlertCircle, Calculator, CheckCircle2, Edit3, Plus, RefreshCw, Save, Search, Settings2, Table2, Trash2, WalletCards, X } from 'lucide-react';
 import { PageHeader } from '../../../components/ui/PageHeader';
 import { ConfirmModal } from '../../../components/ui/ConfirmModal';
 import { useAuditPageAccess } from '../../../hooks/useAuditPageAccess';
@@ -117,6 +117,65 @@ type TrancheForm = {
   key: AllocationTrancheKey | null;
   label: string;
 };
+
+type FormulaAuditRow = {
+  key: string;
+  title: string;
+  formula: string;
+  substitutedFormula: string;
+  expected: number;
+  displayed: number;
+  suffix?: string;
+  tone: 'lime' | 'purple' | 'emerald' | 'sky' | 'slate' | 'teal' | 'blue';
+};
+
+type HierarchyAuditIssue = {
+  itemId: string;
+  sequenceLabel: string;
+  itemName: string;
+  message: string;
+};
+
+const formulaAuditToneClasses: Record<FormulaAuditRow['tone'], string> = {
+  lime: 'border-lime-300 bg-lime-50',
+  purple: 'border-purple-300 bg-purple-50',
+  emerald: 'border-emerald-300 bg-emerald-50',
+  sky: 'border-sky-300 bg-sky-50',
+  slate: 'border-slate-300 bg-slate-50',
+  teal: 'border-teal-300 bg-teal-50',
+  blue: 'border-blue-300 bg-blue-50',
+};
+
+function isFormulaValueEqual(left: number, right: number) {
+  return Math.abs(left - right) < 0.01;
+}
+
+function settleCommitmentsFromDisbursement(
+  form: ItemForm,
+  previousDisbursedTotal: number,
+  nextDisbursedTotal: number,
+) {
+  let settlementAmount = Math.max(0, nextDisbursedTotal - previousDisbursedTotal);
+  let committedPo = toNumber(form.committedPoAmount);
+  let committedWithoutPo = toNumber(form.committedWithoutPoAmount);
+
+  const poSettlement = Math.min(committedPo, settlementAmount);
+  committedPo -= poSettlement;
+  settlementAmount -= poSettlement;
+
+  const withoutPoSettlement = Math.min(committedWithoutPo, settlementAmount);
+  committedWithoutPo -= withoutPoSettlement;
+
+  const netBudget = toNumber(form.netBudgetAfterTransferAmount);
+  if (netBudget > 0 && nextDisbursedTotal >= netBudget - 0.01) {
+    committedPo = 0;
+    committedWithoutPo = 0;
+  }
+
+  form.committedPoAmount = String(committedPo || '');
+  form.committedWithoutPoAmount = String(committedWithoutPo || '');
+  form.committedTotalAmount = String(committedPo + committedWithoutPo || '');
+}
 
 const emptyMainForm: ItemForm = {
   itemId: null,
@@ -374,6 +433,8 @@ export function BudgetUtilizationItemsPage() {
   const [trancheForm, setTrancheForm] = useState<TrancheForm>(emptyTrancheForm);
   const [isCategoryManagerOpen, setIsCategoryManagerOpen] = useState(false);
   const [isTrancheManagerOpen, setIsTrancheManagerOpen] = useState(false);
+  const [isFormulaAuditOpen, setIsFormulaAuditOpen] = useState(false);
+  const [formulaAuditItemId, setFormulaAuditItemId] = useState('');
   const [editModalItem, setEditModalItem] = useState<BudgetUtilizationItemWithAmount | null>(null);
   const [editModalForm, setEditModalForm] = useState<ItemForm>(emptyMainForm);
   const [editModalError, setEditModalError] = useState<string | null>(null);
@@ -481,6 +542,156 @@ export function BudgetUtilizationItemsPage() {
     return summarizeBudgetItems(allBudgetItems);
   }, [allBudgetItems]);
 
+  const formulaAuditItems = useMemo(() => {
+    return hierarchyItems.filter((item) => item.row_type !== 'total');
+  }, [hierarchyItems]);
+
+  const formulaAuditItem = useMemo(() => {
+    return formulaAuditItems.find((item) => item.id === formulaAuditItemId)
+      ?? formulaAuditItems[0]
+      ?? null;
+  }, [formulaAuditItemId, formulaAuditItems]);
+
+  const formulaAuditRows = useMemo<FormulaAuditRow[]>(() => {
+    if (!formulaAuditItem) return [];
+
+    const amount = rollupMap.get(formulaAuditItem.id) ?? normalizeAmount(formulaAuditItem.amount);
+    const allocationTotal = toNumber(amount.allocation_total_amount) || (
+      amount.allocation_tranche_1_amount
+      + amount.allocation_tranche_2_amount
+      + amount.allocation_tranche_3_amount
+    );
+    const expectedNet = allocationTotal
+      + amount.central_transfer_in_amount
+      - amount.central_transfer_out_amount
+      + amount.department_request_increase_amount
+      - amount.department_transfer_out_amount
+      + amount.division_transfer_in_amount
+      - amount.division_transfer_out_amount;
+    const expectedCommitted = amount.committed_po_amount + amount.committed_without_po_amount;
+    const expectedDisbursed = amount.disbursed_general_amount + amount.disbursed_advance_amount;
+    const expectedUtilization = expectedCommitted + expectedDisbursed;
+    const expectedRemaining = expectedNet - expectedUtilization;
+    const expectedDisbursementRate = percent(expectedDisbursed, expectedNet);
+    const expectedUtilizationRate = percent(expectedUtilization, expectedNet);
+    const money = (value: number) => formatBudgetAmount(value);
+
+    return [
+      {
+        key: 'net',
+        title: `ยอดสุทธิหลังโอนเปลี่ยนแปลง (1)`,
+        formula: 'ผลรวมงวดจัดสรร + รับ/ขอเพิ่ม - โอนออก',
+        substitutedFormula: `${money(allocationTotal)} + ${money(amount.central_transfer_in_amount)} - ${money(amount.central_transfer_out_amount)} + ${money(amount.department_request_increase_amount)} - ${money(amount.department_transfer_out_amount)} + ${money(amount.division_transfer_in_amount)} - ${money(amount.division_transfer_out_amount)}`,
+        expected: expectedNet,
+        displayed: amount.net_budget_after_transfer_amount,
+        tone: 'lime',
+      },
+      {
+        key: 'committed',
+        title: 'ผูกพันรวม (6)',
+        formula: 'มี PO (4) + ไม่มี PO (5)',
+        substitutedFormula: `${money(amount.committed_po_amount)} + ${money(amount.committed_without_po_amount)}`,
+        expected: expectedCommitted,
+        displayed: amount.committed_total_amount,
+        tone: 'purple',
+      },
+      {
+        key: 'disbursed',
+        title: 'เบิกจ่ายรวม (9)',
+        formula: 'เบิกจ่ายทั่วไป (7) + เงินยืมราชการ (8)',
+        substitutedFormula: `${money(amount.disbursed_general_amount)} + ${money(amount.disbursed_advance_amount)}`,
+        expected: expectedDisbursed,
+        displayed: amount.disbursed_total_amount,
+        tone: 'emerald',
+      },
+      {
+        key: 'utilization',
+        title: 'รวม (10)',
+        formula: 'ผูกพันรวม (6) + เบิกจ่ายรวม (9)',
+        substitutedFormula: `${money(expectedCommitted)} + ${money(expectedDisbursed)}`,
+        expected: expectedUtilization,
+        displayed: amount.utilization_total_amount,
+        tone: 'sky',
+      },
+      {
+        key: 'remaining',
+        title: 'คงเหลือ (11)',
+        formula: 'ยอดสุทธิ (1) - รวม (10)',
+        substitutedFormula: `${money(expectedNet)} - ${money(expectedUtilization)}`,
+        expected: expectedRemaining,
+        displayed: amount.remaining_amount,
+        tone: 'slate',
+      },
+      {
+        key: 'disbursement-rate',
+        title: 'ร้อยละเบิกจ่าย (12)',
+        formula: 'เบิกจ่ายรวม (9) x 100 / ยอดสุทธิ (1)',
+        substitutedFormula: `${money(expectedDisbursed)} x 100 / ${money(expectedNet)}`,
+        expected: expectedDisbursementRate,
+        displayed: amount.disbursement_rate ?? 0,
+        suffix: '%',
+        tone: 'teal',
+      },
+      {
+        key: 'utilization-rate',
+        title: 'ร้อยละรวม PO',
+        formula: 'รวม (10) x 100 / ยอดสุทธิ (1)',
+        substitutedFormula: `${money(expectedUtilization)} x 100 / ${money(expectedNet)}`,
+        expected: expectedUtilizationRate,
+        displayed: amount.utilization_with_po_rate ?? 0,
+        suffix: '%',
+        tone: 'blue',
+      },
+    ];
+  }, [formulaAuditItem, rollupMap]);
+
+  const hierarchyAuditIssues = useMemo<HierarchyAuditIssue[]>(() => {
+    const itemById = new Map(allBudgetItems.map((item) => [item.id, item]));
+    const childrenByParent = new Map<string, BudgetUtilizationItemWithAmount[]>();
+    allBudgetItems.forEach((item) => {
+      if (!item.parent_id) return;
+      const children = childrenByParent.get(item.parent_id) ?? [];
+      children.push(item);
+      childrenByParent.set(item.parent_id, children);
+    });
+
+    const issues: HierarchyAuditIssue[] = [];
+    allBudgetItems.filter((item) => item.row_type !== 'total').forEach((item) => {
+      const parent = item.parent_id ? itemById.get(item.parent_id) : null;
+      const addIssue = (message: string) => issues.push({
+        itemId: item.id,
+        sequenceLabel: item.sequence_label ?? '-',
+        itemName: item.item_name,
+        message,
+      });
+
+      if (item.parent_id && !parent) {
+        addIssue('ไม่พบรายการแม่ที่เชื่อมโยง');
+      } else if (item.row_type === 'major_project' && parent && parent.row_type !== 'budget_category') {
+        addIssue('โครงการใหญ่ต้องอยู่ภายใต้ประเภทหลัก');
+      } else if (item.row_type === 'sub_project' && parent && parent.row_type !== 'major_project') {
+        addIssue('โครงการย่อยต้องอยู่ภายใต้โครงการใหญ่');
+      } else if (item.row_type === 'activity' && parent && parent.row_type !== 'sub_project') {
+        addIssue('กิจกรรมต้องอยู่ภายใต้โครงการย่อย');
+      }
+
+      const children = childrenByParent.get(item.id) ?? [];
+      if (children.length === 0) return;
+      const parentPlan = toNumber(item.amount.planned_budget_amount);
+      const childPlan = children.reduce((sum, child) => sum + toNumber(child.amount.planned_budget_amount), 0);
+      if (parentPlan > 0 && childPlan - parentPlan > 0.01) {
+        addIssue(`วงเงินรายการลูก ${formatBudgetAmount(childPlan)} บาท เกินวงเงินรายการแม่ ${formatBudgetAmount(parentPlan)} บาท`);
+      }
+    });
+
+    return issues;
+  }, [allBudgetItems]);
+
+  const openFormulaAudit = () => {
+    setFormulaAuditItemId((current) => current || formulaAuditItems[0]?.id || '');
+    setIsFormulaAuditOpen(true);
+  };
+
   const filteredItems = useMemo(() => {
     const normalizedKeyword = keyword.trim().toLowerCase();
     if (!normalizedKeyword) return hierarchyItems;
@@ -575,9 +786,9 @@ export function BudgetUtilizationItemsPage() {
     return hierarchyItems.filter((item) => {
       if (item.parent_id === null) return false;
       const isStructuralMajorProject = item.row_type === 'major_project'
-        && (item.source_import_batch_id === null || allBudgetItems.some((candidate) => candidate.parent_id === item.id));
+        && allBudgetItems.some((candidate) => candidate.parent_id === item.id);
       const isStructuralSubActivity = item.row_type === 'sub_project'
-        && (item.source_import_batch_id === null || allBudgetItems.some((candidate) => candidate.parent_id === item.id));
+        && allBudgetItems.some((candidate) => candidate.parent_id === item.id);
       return !isStructuralMajorProject && !isStructuralSubActivity;
     });
   }, [allBudgetItems, hierarchyItems]);
@@ -835,6 +1046,25 @@ export function BudgetUtilizationItemsPage() {
       } else if (cellEdit.field) {
         const nextForm = formFromItem(cellEdit.item);
         nextForm[cellEdit.field] = cellEdit.value;
+        if (cellEdit.field === 'disbursedGeneralAmount' || cellEdit.field === 'disbursedAdvanceAmount') {
+          const previousDisbursedTotal = cellEdit.item.amount.disbursed_general_amount
+            + cellEdit.item.amount.disbursed_advance_amount;
+          const nextDisbursedTotal = toNumber(nextForm.disbursedGeneralAmount)
+            + toNumber(nextForm.disbursedAdvanceAmount);
+          settleCommitmentsFromDisbursement(nextForm, previousDisbursedTotal, nextDisbursedTotal);
+        }
+        if (cellEdit.field === 'committedPoAmount' || cellEdit.field === 'committedWithoutPoAmount') {
+          const committedTotal = toNumber(nextForm.committedPoAmount) + toNumber(nextForm.committedWithoutPoAmount);
+          const availableForCommitment = Math.max(
+            0,
+            toNumber(nextForm.netBudgetAfterTransferAmount)
+              - toNumber(nextForm.disbursedGeneralAmount)
+              - toNumber(nextForm.disbursedAdvanceAmount),
+          );
+          if (committedTotal - availableForCommitment > 0.01) {
+            throw new Error(`ยอดผูกพันคงค้างต้องไม่เกินวงเงินที่ยังไม่เบิกจ่าย ${formatBudgetAmount(availableForCommitment)} บาท`);
+          }
+        }
         await updateBudgetItemAmounts(toItemPayload(
           activeReportPeriodId,
           nextForm,
@@ -960,6 +1190,9 @@ export function BudgetUtilizationItemsPage() {
       const disbursedGeneral = toNumber(disbursementForm.disbursedGeneralAmount);
       const disbursedAdvance = toNumber(disbursementForm.disbursedAdvanceAmount);
       const disbursedTotal = disbursedGeneral + disbursedAdvance;
+      const previousDisbursedTotal = selectedDisbursementItem.amount.disbursed_general_amount
+        + selectedDisbursementItem.amount.disbursed_advance_amount;
+      settleCommitmentsFromDisbursement(nextForm, previousDisbursedTotal, disbursedTotal);
       const committedTotal = toNumber(nextForm.committedTotalAmount);
       const utilizationTotal = committedTotal + disbursedTotal;
       const effectiveBudget = toNumber(nextForm.netBudgetAfterTransferAmount);
@@ -1104,6 +1337,10 @@ export function BudgetUtilizationItemsPage() {
       const disbursedTotal = toNumber(nextForm.disbursedTotalAmount);
       const utilizationTotal = committedTotal + disbursedTotal;
       const effectiveBudget = toNumber(nextForm.netBudgetAfterTransferAmount);
+      const availableForCommitment = Math.max(0, effectiveBudget - disbursedTotal);
+      if (committedTotal - availableForCommitment > 0.01) {
+        throw new Error(`ยอดผูกพันคงค้างต้องไม่เกินวงเงินที่ยังไม่เบิกจ่าย ${formatBudgetAmount(availableForCommitment)} บาท`);
+      }
       const remainingAmount = effectiveBudget - utilizationTotal;
 
       nextForm.committedPoAmount = commitmentForm.committedPoAmount;
@@ -2079,15 +2316,25 @@ export function BudgetUtilizationItemsPage() {
       <section className="overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm">
         <div className="flex flex-col gap-3 border-b border-slate-100 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
           <h2 className="text-base font-semibold text-slate-950">รายการงบประมาณทั้งหมด</h2>
-          <label className="relative block w-full sm:max-w-xs">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" aria-hidden="true" />
-            <input
-              value={keyword}
-              onChange={(event) => setKeyword(event.target.value)}
-              className="w-full rounded-md border border-slate-300 py-2 pl-9 pr-3 text-sm outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
-              placeholder="ค้นหารายการงบประมาณ"
-            />
-          </label>
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+            <button
+              type="button"
+              onClick={openFormulaAudit}
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-sky-200 bg-sky-50 px-4 text-sm font-semibold text-sky-800 transition hover:border-sky-300 hover:bg-sky-100"
+            >
+              <Calculator className="h-4 w-4" aria-hidden="true" />
+              ตรวจสอบสูตรและโครงสร้าง
+            </button>
+            <label className="relative block w-full sm:w-80">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" aria-hidden="true" />
+              <input
+                value={keyword}
+                onChange={(event) => setKeyword(event.target.value)}
+                className="h-10 w-full rounded-md border border-slate-300 py-2 pl-9 pr-3 text-sm outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
+                placeholder="ค้นหารายการงบประมาณ"
+              />
+            </label>
+          </div>
         </div>
         <div className="max-h-[72vh] overflow-auto">
           <table
@@ -2143,9 +2390,9 @@ export function BudgetUtilizationItemsPage() {
               ) : filteredItems.map((item) => {
                 const isCategory = item.parent_id === null;
                 const isMajorProject = item.row_type === 'major_project'
-                  && (item.source_import_batch_id === null || getDirectChildCount(item.id) > 0);
+                  && getDirectChildCount(item.id) > 0;
                 const isSubActivity = item.row_type === 'sub_project'
-                  && (item.source_import_batch_id === null || getDirectChildCount(item.id) > 0);
+                  && getDirectChildCount(item.id) > 0;
                 const isHeading = isCategory || isMajorProject || isSubActivity;
                 const itemAmount = rollupMap.get(item.id) ?? normalizeAmount(item.amount);
                 const netTotal = itemAmount.net_budget_after_transfer_amount;
@@ -2327,6 +2574,132 @@ export function BudgetUtilizationItemsPage() {
           </table>
         </div>
       </section>
+      ) : null}
+
+      {isFormulaAuditOpen ? (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-3 sm:p-6" role="dialog" aria-modal="true" aria-labelledby="budget-formula-audit-title">
+          <button type="button" className="absolute inset-0 bg-slate-950/55 backdrop-blur-sm" onClick={() => setIsFormulaAuditOpen(false)} aria-label="ปิดหน้าต่างตรวจสอบสูตร" />
+          <div className="relative flex max-h-[94vh] w-full max-w-6xl flex-col overflow-hidden rounded-md bg-white shadow-2xl">
+            <div className="flex shrink-0 items-center justify-between border-b border-slate-200 px-4 py-3 sm:px-6">
+              <div>
+                <h2 id="budget-formula-audit-title" className="flex items-center gap-2 text-lg font-bold text-slate-950">
+                  <Calculator className="h-5 w-5 text-sky-700" aria-hidden="true" />
+                  ตรวจสอบสูตรและโครงสร้างงบประมาณ
+                </h2>
+                <p className="mt-1 text-xs text-slate-500">ตรวจค่าที่ตารางแสดงเทียบกับสูตร และตรวจลำดับประเภทหลัก โครงการใหญ่ โครงการย่อย และกิจกรรม</p>
+              </div>
+              <button type="button" onClick={() => setIsFormulaAuditOpen(false)} className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-slate-200 text-slate-600 transition hover:bg-slate-50" title="ปิด">
+                <X className="h-4 w-4" aria-hidden="true" />
+              </button>
+            </div>
+
+            <div className="min-h-0 flex-1 overflow-y-auto bg-slate-50">
+              <div className="border-b border-slate-200 bg-white px-4 py-4 sm:px-6">
+                <label className="block">
+                  <span className="text-sm font-semibold text-slate-800">เลือกรายการที่ต้องการตรวจสอบ</span>
+                  <select
+                    value={formulaAuditItem?.id ?? ''}
+                    onChange={(event) => setFormulaAuditItemId(event.target.value)}
+                    className="mt-2 h-11 w-full rounded-md border border-slate-300 bg-white px-3 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
+                  >
+                    {formulaAuditItems.map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {[item.sequence_label, item.item_name].filter(Boolean).join(' ')}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {formulaAuditItem ? (
+                  <p className="mt-2 text-xs text-slate-500">
+                    ระดับข้อมูล: {formulaAuditItem.row_type} · รายการที่มีข้อมูลลูกจะแสดงยอดรวมจากลำดับชั้นเดียวกับตาราง
+                  </p>
+                ) : null}
+              </div>
+
+              <div className="px-4 py-5 sm:px-6">
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                  <h3 className="text-base font-bold text-slate-950">ผลตรวจสูตรคำนวณ</h3>
+                  <span className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold ${formulaAuditRows.every((row) => isFormulaValueEqual(row.expected, row.displayed)) ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'}`}>
+                    {formulaAuditRows.every((row) => isFormulaValueEqual(row.expected, row.displayed)) ? <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" /> : <AlertCircle className="h-3.5 w-3.5" aria-hidden="true" />}
+                    {formulaAuditRows.every((row) => isFormulaValueEqual(row.expected, row.displayed)) ? 'ตรงตามสูตรทุกช่อง' : 'พบค่าที่ควรตรวจสอบ'}
+                  </span>
+                </div>
+
+                <div className="grid gap-3 lg:grid-cols-2">
+                  {formulaAuditRows.map((row) => {
+                    const isValid = isFormulaValueEqual(row.expected, row.displayed);
+                    return (
+                      <section key={row.key} className={`rounded-md border p-4 ${formulaAuditToneClasses[row.tone]}`}>
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <h4 className="text-sm font-bold text-slate-950">{row.title}</h4>
+                            <p className="mt-1 text-xs font-medium text-slate-700">{row.formula}</p>
+                          </div>
+                          <span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-1 text-xs font-semibold ${isValid ? 'bg-white/80 text-emerald-800' : 'bg-red-100 text-red-800'}`}>
+                            {isValid ? <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" /> : <AlertCircle className="h-3.5 w-3.5" aria-hidden="true" />}
+                            {isValid ? 'ถูกต้อง' : 'ไม่ตรง'}
+                          </span>
+                        </div>
+                        <p className="mt-3 break-words rounded-md bg-white/75 px-3 py-2 font-mono text-xs text-slate-700">{row.substitutedFormula}</p>
+                        <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
+                          <div>
+                            <p className="text-xs text-slate-500">ค่าที่ควรได้</p>
+                            <p className="mt-1 font-bold text-slate-950">{formatBudgetAmount(row.expected)}{row.suffix ?? ' บาท'}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-slate-500">ค่าที่ตารางแสดง</p>
+                            <p className={`mt-1 font-bold ${isValid ? 'text-slate-950' : 'text-red-700'}`}>{formatBudgetAmount(row.displayed)}{row.suffix ?? ' บาท'}</p>
+                          </div>
+                        </div>
+                      </section>
+                    );
+                  })}
+                </div>
+
+                <section className="mt-6 border-t border-slate-200 pt-5">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <h3 className="text-base font-bold text-slate-950">ผลตรวจโครงสร้างโครงการ</h3>
+                      <p className="mt-1 text-xs text-slate-500">ประเภทหลัก → โครงการใหญ่ → โครงการย่อย → กิจกรรม และวงเงินลูกต้องไม่เกินวงเงินแม่</p>
+                    </div>
+                    <span className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold ${hierarchyAuditIssues.length === 0 ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-900'}`}>
+                      {hierarchyAuditIssues.length === 0 ? <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" /> : <AlertCircle className="h-3.5 w-3.5" aria-hidden="true" />}
+                      {hierarchyAuditIssues.length === 0 ? 'โครงสร้างถูกต้อง' : `พบ ${hierarchyAuditIssues.length} จุดที่ควรตรวจสอบ`}
+                    </span>
+                  </div>
+
+                  {hierarchyAuditIssues.length === 0 ? (
+                    <div className="mt-3 flex items-center gap-2 rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+                      <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden="true" />
+                      รายการทั้งหมดเชื่อมโยงตามลำดับและไม่พบวงเงินรายการลูกเกินวงเงินรายการแม่
+                    </div>
+                  ) : (
+                    <div className="mt-3 max-h-56 overflow-y-auto rounded-md border border-amber-200 bg-white">
+                      {hierarchyAuditIssues.map((issue, index) => (
+                        <button
+                          key={`${issue.itemId}-${index}`}
+                          type="button"
+                          onClick={() => setFormulaAuditItemId(issue.itemId)}
+                          className="flex w-full items-start gap-3 border-b border-amber-100 px-4 py-3 text-left transition last:border-b-0 hover:bg-amber-50"
+                        >
+                          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" aria-hidden="true" />
+                          <span className="min-w-0">
+                            <span className="block text-sm font-semibold text-slate-900">{issue.sequenceLabel} {issue.itemName}</span>
+                            <span className="mt-1 block text-xs text-amber-800">{issue.message}</span>
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </section>
+              </div>
+            </div>
+
+            <div className="flex shrink-0 justify-end border-t border-slate-200 bg-white px-4 py-3 sm:px-6">
+              <button type="button" onClick={() => setIsFormulaAuditOpen(false)} className="rounded-md bg-slate-800 px-5 py-2 text-sm font-semibold text-white transition hover:bg-slate-900">ปิด</button>
+            </div>
+          </div>
+        </div>
       ) : null}
 
       {cellEdit ? (
