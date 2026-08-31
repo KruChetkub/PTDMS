@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
-import { BarChart3, Bell, CalendarCheck2, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, ClipboardList, Clock, Edit3, Filter, Hourglass, LayoutDashboard, List, MapPin, Plus, RefreshCw, RotateCcw, UserRound, X, XCircle } from 'lucide-react';
+import { BarChart3, Bell, CalendarCheck2, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, ClipboardList, Clock, Edit3, FileDown, Filter, Hourglass, LayoutDashboard, List, MapPin, Plus, RefreshCw, RotateCcw, X, XCircle } from 'lucide-react';
 import {
   Area,
   AreaChart,
@@ -30,6 +30,7 @@ import {
 import { useAuthStore } from '../../stores/auth.store';
 import { cn } from '../../utils/cn';
 import { getSafeUserErrorMessage } from '../../utils/errorHandling';
+import { recordAuditLog } from '../../services/audit.service';
 
 const thaiMonths = [
   'มกราคม',
@@ -308,6 +309,11 @@ function buildWorkGroupColorMap(workGroups: Array<string | null | undefined>) {
   }, {});
 }
 
+function safeExcelText(value: string | null | undefined) {
+  const text = value || '';
+  return /^[=+\-@]/.test(text.trimStart()) ? `'${text}` : text;
+}
+
 function getWorkGroupColor(ownerWorkGroup: string | null | undefined, colorMap?: WorkGroupColorMap) {
   const name = getWorkGroupName(ownerWorkGroup);
   return colorMap?.[name] || workGroupColorPalette[0];
@@ -420,6 +426,11 @@ export function StrategyCalendarPage() {
   const [dashboardFilterMode, setDashboardFilterMode] = useState<DashboardFilterMode>('all');
   const [dashboardMonth, setDashboardMonth] = useState(() => new Date().getMonth() + 1);
   const [dashboardYear, setDashboardYear] = useState(() => new Date().getFullYear());
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [exportStartDate, setExportStartDate] = useState(() => `${new Date().getFullYear()}-01-01`);
+  const [exportEndDate, setExportEndDate] = useState(() => toDateKey(new Date()));
+  const [exportError, setExportError] = useState<string | null>(null);
+  const [isExporting, setIsExporting] = useState(false);
   const [listPage, setListPage] = useState(0);
   const [selectedUpcomingEvent, setSelectedUpcomingEvent] = useState<StrategyEventRow | null>(null);
   const [selectedWorkGroup, setSelectedWorkGroup] = useState<string | null>(null);
@@ -438,7 +449,11 @@ export function StrategyCalendarPage() {
   const calendarDays = useMemo(() => getCalendarDays(monthDate), [monthDate]);
   const currentMonthDays = useMemo(() => calendarDays.filter((date) => date.getMonth() === monthDate.getMonth()), [calendarDays, monthDate]);
   const todayKey = toDateKey(new Date());
-  const canFilterDashboard = profile?.role === 'super_admin' || profile?.role === 'admin';
+  const canFilterDashboard =
+    profile?.role === 'super_admin'
+    || profile?.role === 'admin'
+    || profile?.role === 'executive';
+  const canExportExcel = profile?.role === 'super_admin' || profile?.role === 'admin';
   const canViewUpcomingEventDetails = canFilterDashboard;
   const dashboardYearOptions = useMemo(() => {
     const currentYear = new Date().getFullYear();
@@ -805,6 +820,105 @@ export function StrategyCalendarPage() {
     }
   };
 
+  const handleExportExcel = async () => {
+    if (!canExportExcel) return;
+    if (!exportStartDate || !exportEndDate) {
+      setExportError('กรุณาเลือกวันที่เริ่มต้นและวันที่สิ้นสุด');
+      return;
+    }
+    if (exportStartDate > exportEndDate) {
+      setExportError('วันที่เริ่มต้นต้องไม่เกินวันที่สิ้นสุด');
+      return;
+    }
+
+    setIsExporting(true);
+    setExportError(null);
+    try {
+      const exportEvents = await listStrategyEvents(exportStartDate, exportEndDate);
+      if (exportEvents.length === 0) {
+        setExportError('ไม่พบกิจกรรมในช่วงวันที่ที่เลือก');
+        return;
+      }
+
+      const completedCount = exportEvents.filter(
+        (event) => event.status === 'published' && getEventEndKey(event) < todayKey,
+      ).length;
+      const inProgressCount = exportEvents.filter(
+        (event) => event.status === 'published' && getEventEndKey(event) >= todayKey,
+      ).length;
+      const pendingCount = exportEvents.filter((event) => event.status === 'draft').length;
+      const cancelledCount = exportEvents.filter((event) => event.status === 'cancelled').length;
+      const XLSX = await import('xlsx');
+      const summarySheet = XLSX.utils.aoa_to_sheet([
+        ['รายงาน', 'ปฏิทินกิจกรรมกองยุทธศาสตร์และแผนงาน'],
+        ['จากวันที่', formatThaiDate(exportStartDate)],
+        ['ถึงวันที่', formatThaiDate(exportEndDate)],
+        ['วันเวลาที่ Export', new Date().toLocaleString('th-TH')],
+        [],
+        ['สถานะ', 'จำนวนกิจกรรม'],
+        ['กิจกรรมทั้งหมด', exportEvents.length],
+        ['เสร็จสิ้นแล้ว', completedCount],
+        ['กำลังดำเนินการ/กำลังจะมาถึง', inProgressCount],
+        ['รออนุมัติ', pendingCount],
+        ['ยกเลิก', cancelledCount],
+      ]);
+      summarySheet['!cols'] = [{ wch: 34 }, { wch: 54 }];
+
+      const detailRows = exportEvents.map((event, index) => ({
+        ลำดับ: index + 1,
+        ชื่อกิจกรรม: safeExcelText(event.title),
+        รายละเอียดกิจกรรม: safeExcelText(event.description),
+        วันที่เริ่มกิจกรรม: formatThaiDate(event.event_date),
+        วันที่สิ้นสุดกิจกรรม: formatThaiDate(event.end_date || event.event_date),
+        เวลาเริ่ม: event.start_time?.slice(0, 5) || 'ทั้งวัน',
+        เวลาสิ้นสุด: event.end_time?.slice(0, 5) || '',
+        สถานที่: safeExcelText(event.location),
+        กลุ่มงานเจ้าของกิจกรรม: safeExcelText(event.owner_work_group),
+        สถานะ: statusLabel(event.status),
+        วันที่สร้างรายการ: new Date(event.created_at).toLocaleString('th-TH'),
+        วันที่แก้ไขล่าสุด: new Date(event.updated_at).toLocaleString('th-TH'),
+      }));
+      const detailSheet = XLSX.utils.json_to_sheet(detailRows);
+      detailSheet['!cols'] = [
+        { wch: 8 },
+        { wch: 42 },
+        { wch: 70 },
+        { wch: 22 },
+        { wch: 22 },
+        { wch: 14 },
+        { wch: 14 },
+        { wch: 34 },
+        { wch: 36 },
+        { wch: 16 },
+        { wch: 24 },
+        { wch: 24 },
+      ];
+      detailSheet['!autofilter'] = { ref: `A1:L${detailRows.length + 1}` };
+
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, summarySheet, 'สรุปภาพรวม');
+      XLSX.utils.book_append_sheet(workbook, detailSheet, 'รายการกิจกรรม');
+      XLSX.writeFile(workbook, `strategy-calendar-${exportStartDate}_to_${exportEndDate}.xlsx`);
+
+      void recordAuditLog({
+        module: 'strategy_calendar',
+        action: 'strategy_calendar_export_excel',
+        route: '/strategy-calendar',
+        targetType: 'strategy_events',
+        metadata: {
+          start_date: exportStartDate,
+          end_date: exportEndDate,
+          event_count: exportEvents.length,
+        },
+      });
+      setIsExportModalOpen(false);
+    } catch (exportFailure) {
+      setExportError(getSafeUserErrorMessage(exportFailure, 'ไม่สามารถ Export Excel ได้'));
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   useEffect(() => {
     void loadEvents();
   }, [monthDate]);
@@ -1004,6 +1118,19 @@ export function StrategyCalendarPage() {
               <p className="text-sm text-slate-500">{dashboardFilterLabel}</p>
               {canFilterDashboard ? (
                 <div className="flex flex-wrap items-center gap-2">
+                  {canExportExcel ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setExportError(null);
+                        setIsExportModalOpen(true);
+                      }}
+                      className="inline-flex items-center justify-center gap-2 rounded-md border border-emerald-600 bg-white px-3 py-1.5 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-50"
+                    >
+                      <FileDown className="h-4 w-4" aria-hidden="true" />
+                      Export Excel
+                    </button>
+                  ) : null}
                   <div className="inline-flex rounded-md border border-slate-200 bg-white p-0.5">
                     {([
                       ['all', 'ทั้งหมด'],
@@ -1071,9 +1198,6 @@ export function StrategyCalendarPage() {
                 <button type="button" className="relative inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 shadow-sm" aria-label="การแจ้งเตือน">
                   <Bell className="h-4 w-4" aria-hidden="true" />
                   <span className="absolute -right-0.5 -top-0.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">{upcomingDashboardEvents.length}</span>
-                </button>
-                <button type="button" className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 shadow-sm" aria-label="ผู้ใช้งาน">
-                  <UserRound className="h-4 w-4" aria-hidden="true" />
                 </button>
               </div>
             </div>
@@ -2078,6 +2202,93 @@ export function StrategyCalendarPage() {
 
         </aside>
       </div>
+
+      {isExportModalOpen && canExportExcel ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4"
+          onClick={() => {
+            if (!isExporting) setIsExportModalOpen(false);
+          }}
+        >
+          <div
+            className="w-full max-w-lg rounded-md bg-white shadow-2xl"
+            onClick={(mouseEvent) => mouseEvent.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-4 border-b border-slate-200 p-5">
+              <div>
+                <h2 className="text-lg font-semibold text-slate-950">Export ปฏิทินกิจกรรม</h2>
+                <p className="mt-1 text-sm text-slate-500">เลือกช่วงวันที่สำหรับจัดทำรายงาน Excel</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsExportModalOpen(false)}
+                disabled={isExporting}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-md text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 disabled:opacity-50"
+                aria-label="ปิดหน้าต่าง Export Excel"
+              >
+                <X className="h-5 w-5" aria-hidden="true" />
+              </button>
+            </div>
+
+            <div className="space-y-4 p-5">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <label className="block">
+                  <span className="text-xs font-medium text-slate-600">จากวันที่</span>
+                  <input
+                    type="date"
+                    value={exportStartDate}
+                    max={exportEndDate || undefined}
+                    onChange={(event) => {
+                      setExportStartDate(event.target.value);
+                      setExportError(null);
+                    }}
+                    className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-xs font-medium text-slate-600">ถึงวันที่</span>
+                  <input
+                    type="date"
+                    value={exportEndDate}
+                    min={exportStartDate || undefined}
+                    onChange={(event) => {
+                      setExportEndDate(event.target.value);
+                      setExportError(null);
+                    }}
+                    className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                  />
+                </label>
+              </div>
+
+              {exportError ? (
+                <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700">
+                  {exportError}
+                </div>
+              ) : null}
+
+              <div className="flex flex-col-reverse gap-2 border-t border-slate-200 pt-4 sm:flex-row sm:justify-end">
+                <button
+                  type="button"
+                  onClick={() => setIsExportModalOpen(false)}
+                  disabled={isExporting}
+                  className="inline-flex items-center justify-center rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+                >
+                  ยกเลิก
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleExportExcel()}
+                  disabled={isExporting}
+                  className="inline-flex items-center justify-center gap-2 rounded-md bg-emerald-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <FileDown className="h-4 w-4" aria-hidden="true" />
+                  {isExporting ? 'กำลัง Export...' : 'Export Excel'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <StrategyEventDetailModal event={selectedUpcomingEvent} onClose={() => setSelectedUpcomingEvent(null)} workGroupColorMap={workGroupColorMap} />
     </div>

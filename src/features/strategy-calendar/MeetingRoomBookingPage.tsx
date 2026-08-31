@@ -8,6 +8,7 @@ import {
   Clock,
   Edit3,
   ExternalLink,
+  FileDown,
   Home,
   Library,
   LineChart,
@@ -37,6 +38,7 @@ import { useAuditPageAccess } from '../../hooks/useAuditPageAccess';
 import { createStrategyEvent } from '../../services/strategy-calendar.service';
 import { cn } from '../../utils/cn';
 import { getSafeUserErrorMessage, reportClientError } from '../../utils/errorHandling';
+import { recordAuditLog } from '../../services/audit.service';
 
 const thaiMonths = [
   'มกราคม',
@@ -142,6 +144,11 @@ function formatTime(value: string) {
   return value.slice(0, 5);
 }
 
+function safeExcelText(value: string | null | undefined) {
+  const text = value || '';
+  return /^[=+\-@]/.test(text.trimStart()) ? `'${text}` : text;
+}
+
 function roomStyle(room: string) {
   if (room === 'ห้องประชุม 1') {
     return {
@@ -218,6 +225,11 @@ export function MeetingRoomBookingPage() {
   const [dashboardUsageSelection, setDashboardUsageSelection] = useState<DashboardUsageSelection>(null);
   const [highlightedReservationId, setHighlightedReservationId] = useState<string | null>(null);
   const [isLinkNotificationPanelOpen, setIsLinkNotificationPanelOpen] = useState(false);
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [exportStartDate, setExportStartDate] = useState(() => `${new Date().getFullYear()}-01-01`);
+  const [exportEndDate, setExportEndDate] = useState(todayKey);
+  const [exportError, setExportError] = useState<string | null>(null);
+  const [isExporting, setIsExporting] = useState(false);
 
   const calendarDays = useMemo(() => getCalendarDays(monthDate), [monthDate]);
   const currentMonthDays = useMemo(() => calendarDays.filter((date) => date.getMonth() === monthDate.getMonth()), [calendarDays, monthDate]);
@@ -397,6 +409,128 @@ export function MeetingRoomBookingPage() {
       setMessage({ type: 'error', text: getSafeUserErrorMessage(error, 'ไม่สามารถโหลดข้อมูลแดชบอร์ดได้') });
     } finally {
       setDashboardLoading(false);
+    }
+  };
+
+  const handleExportExcel = async () => {
+    if (!canManageAll) return;
+    if (!exportStartDate || !exportEndDate) {
+      setExportError('กรุณาเลือกวันที่เริ่มต้นและวันที่สิ้นสุด');
+      return;
+    }
+    if (exportStartDate > exportEndDate) {
+      setExportError('วันที่เริ่มต้นต้องไม่เกินวันที่สิ้นสุด');
+      return;
+    }
+
+    setIsExporting(true);
+    setExportError(null);
+    try {
+      const exportReservations = await listMeetingRoomReservations(exportStartDate, exportEndDate);
+      if (exportReservations.length === 0) {
+        setExportError('ไม่พบรายการจองห้องประชุมในช่วงวันที่ที่เลือก');
+        return;
+      }
+
+      const totalHours = exportReservations.reduce(
+        (sum, reservation) => sum + reservationDurationHours(reservation),
+        0,
+      );
+      const usageByRoom = rooms.map((room) => {
+        const roomReservations = exportReservations.filter((reservation) => reservation.room === room);
+        return {
+          room,
+          count: roomReservations.length,
+          hours: roomReservations.reduce((sum, reservation) => sum + reservationDurationHours(reservation), 0),
+        };
+      });
+      const topRoom = [...usageByRoom].sort((left, right) => right.count - left.count || right.hours - left.hours)[0];
+      const usageByWorkGroup = Object.entries(
+        exportReservations.reduce<Record<string, { count: number; hours: number }>>((result, reservation) => {
+          const workGroup = reservation.work_group || 'ไม่ระบุกลุ่มงาน';
+          const current = result[workGroup] || { count: 0, hours: 0 };
+          result[workGroup] = {
+            count: current.count + 1,
+            hours: current.hours + reservationDurationHours(reservation),
+          };
+          return result;
+        }, {}),
+      ).sort((left, right) => right[1].count - left[1].count);
+
+      const XLSX = await import('xlsx');
+      const summarySheet = XLSX.utils.aoa_to_sheet([
+        ['รายงาน', 'การใช้ห้องประชุม กองยุทธศาสตร์และแผนงาน'],
+        ['จากวันที่', formatThaiDate(exportStartDate)],
+        ['ถึงวันที่', formatThaiDate(exportEndDate)],
+        ['วันเวลาที่ Export', new Date().toLocaleString('th-TH')],
+        ['จำนวนการจองทั้งหมด', exportReservations.length],
+        ['จำนวนชั่วโมงใช้งานรวม', Number(totalHours.toFixed(2))],
+        ['ห้องที่ถูกใช้มากที่สุด', topRoom?.count ? topRoom.room : '-'],
+        [],
+        ['การใช้งานแยกตามห้อง', 'จำนวนการจอง', 'ชั่วโมงใช้งาน'],
+        ...usageByRoom.map((item) => [item.room, item.count, Number(item.hours.toFixed(2))]),
+        [],
+        ['การใช้งานแยกตามกลุ่มงาน', 'จำนวนการจอง', 'ชั่วโมงใช้งาน'],
+        ...usageByWorkGroup.map(([workGroup, value]) => [safeExcelText(workGroup), value.count, Number(value.hours.toFixed(2))]),
+      ]);
+      summarySheet['!cols'] = [{ wch: 44 }, { wch: 22 }, { wch: 22 }];
+
+      const detailRows = exportReservations.map((reservation, index) => ({
+        ลำดับ: index + 1,
+        วันที่จอง: formatThaiDate(reservation.reservation_date),
+        ห้องประชุม: safeExcelText(reservation.room),
+        หัวข้อการประชุม: safeExcelText(reservation.topic),
+        รูปแบบการประชุม: safeExcelText(reservation.meeting_type),
+        เวลาเริ่ม: formatTime(reservation.start_time),
+        เวลาสิ้นสุด: formatTime(reservation.end_time),
+        'ระยะเวลาใช้งาน (ชั่วโมง)': Number(reservationDurationHours(reservation).toFixed(2)),
+        ชื่อผู้จอง: safeExcelText(reservation.booker_name),
+        กลุ่มงาน: safeExcelText(reservation.work_group),
+        ลิงก์ประชุมออนไลน์: safeExcelText(reservation.online_meeting_url),
+        รายละเอียดเพิ่มเติม: safeExcelText(reservation.details),
+        วันที่สร้างรายการ: new Date(reservation.created_at).toLocaleString('th-TH'),
+        วันที่แก้ไขล่าสุด: new Date(reservation.updated_at).toLocaleString('th-TH'),
+      }));
+      const detailSheet = XLSX.utils.json_to_sheet(detailRows);
+      detailSheet['!cols'] = [
+        { wch: 8 },
+        { wch: 22 },
+        { wch: 22 },
+        { wch: 44 },
+        { wch: 32 },
+        { wch: 14 },
+        { wch: 14 },
+        { wch: 24 },
+        { wch: 28 },
+        { wch: 36 },
+        { wch: 54 },
+        { wch: 64 },
+        { wch: 24 },
+        { wch: 24 },
+      ];
+      detailSheet['!autofilter'] = { ref: `A1:N${detailRows.length + 1}` };
+
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, summarySheet, 'สรุปภาพรวม');
+      XLSX.utils.book_append_sheet(workbook, detailSheet, 'รายการจองห้องประชุม');
+      XLSX.writeFile(workbook, `meeting-room-bookings-${exportStartDate}_to_${exportEndDate}.xlsx`);
+
+      void recordAuditLog({
+        module: 'meeting_room',
+        action: 'meeting_room_export_excel',
+        route: '/strategy-calendar/meeting-room-booking',
+        targetType: 'meeting_room_reservations',
+        metadata: {
+          start_date: exportStartDate,
+          end_date: exportEndDate,
+          reservation_count: exportReservations.length,
+        },
+      });
+      setIsExportModalOpen(false);
+    } catch (exportFailure) {
+      setExportError(getSafeUserErrorMessage(exportFailure, 'ไม่สามารถ Export Excel ได้'));
+    } finally {
+      setIsExporting(false);
     }
   };
 
@@ -909,6 +1043,19 @@ export function MeetingRoomBookingPage() {
               <p className="mt-1 text-xs text-slate-500">{dashboardLoading ? 'กำลังโหลดข้อมูลแดชบอร์ด...' : dashboardFilterLabel}</p>
             </div>
             <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
+              {canManageAll ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setExportError(null);
+                    setIsExportModalOpen(true);
+                  }}
+                  className="inline-flex items-center justify-center gap-2 rounded-md border border-emerald-600 bg-white px-3 py-1.5 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-50"
+                >
+                  <FileDown className="h-4 w-4" aria-hidden="true" />
+                  Export Excel
+                </button>
+              ) : null}
               <div className="inline-flex rounded-md border border-slate-200 bg-white p-0.5">
                 {([
                   ['all', 'ทั้งหมด'],
@@ -1328,6 +1475,96 @@ export function MeetingRoomBookingPage() {
             </div>
         </section>
       </div>
+
+      {isExportModalOpen && canManageAll ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="meeting-room-export-title"
+          onClick={() => {
+            if (!isExporting) setIsExportModalOpen(false);
+          }}
+        >
+          <div
+            className="w-full max-w-lg rounded-md bg-white shadow-2xl"
+            onClick={(mouseEvent) => mouseEvent.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-4 border-b border-slate-200 p-5">
+              <div>
+                <h2 id="meeting-room-export-title" className="text-lg font-semibold text-slate-950">Export การใช้ห้องประชุม</h2>
+                <p className="mt-1 text-sm text-slate-500">เลือกช่วงวันที่สำหรับจัดทำรายงาน Excel</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsExportModalOpen(false)}
+                disabled={isExporting}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-md text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 disabled:opacity-50"
+                aria-label="ปิดหน้าต่าง Export Excel"
+              >
+                <X className="h-5 w-5" aria-hidden="true" />
+              </button>
+            </div>
+
+            <div className="space-y-4 p-5">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <label className="block">
+                  <span className="text-xs font-medium text-slate-600">จากวันที่</span>
+                  <input
+                    type="date"
+                    value={exportStartDate}
+                    max={exportEndDate || undefined}
+                    onChange={(event) => {
+                      setExportStartDate(event.target.value);
+                      setExportError(null);
+                    }}
+                    className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-xs font-medium text-slate-600">ถึงวันที่</span>
+                  <input
+                    type="date"
+                    value={exportEndDate}
+                    min={exportStartDate || undefined}
+                    onChange={(event) => {
+                      setExportEndDate(event.target.value);
+                      setExportError(null);
+                    }}
+                    className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                  />
+                </label>
+              </div>
+
+              {exportError ? (
+                <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700">
+                  {exportError}
+                </div>
+              ) : null}
+
+              <div className="flex flex-col-reverse gap-2 border-t border-slate-200 pt-4 sm:flex-row sm:justify-end">
+                <button
+                  type="button"
+                  onClick={() => setIsExportModalOpen(false)}
+                  disabled={isExporting}
+                  className="inline-flex items-center justify-center rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+                >
+                  ยกเลิก
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleExportExcel()}
+                  disabled={isExporting}
+                  className="inline-flex items-center justify-center gap-2 rounded-md bg-emerald-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <FileDown className="h-4 w-4" aria-hidden="true" />
+                  {isExporting ? 'กำลัง Export...' : 'Export Excel'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {isBookingModalOpen ? (
         <div
