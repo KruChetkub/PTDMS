@@ -6,6 +6,7 @@ import { listPersonnel, type PersonnelSummary } from '../../services/personnel.s
 import { roleLabels } from '../../types/roles';
 import { formatThaiDate } from '../../utils/thaiDate';
 import { getSafeUserErrorMessage } from '../../utils/errorHandling';
+import { useAuthStore } from '../../stores/auth.store';
 
 function statusStyle(status: PersonnelSummary['status']) {
   if (status === 'active') return 'bg-emerald-50 text-emerald-700 ring-emerald-200';
@@ -15,6 +16,7 @@ function statusStyle(status: PersonnelSummary['status']) {
 
 export function PersonnelListPage() {
   const location = useLocation();
+  const viewerRole = useAuthStore((state) => state.profile?.role);
   const personnelListState = location.state?.personnelList as { focusUserId?: string; search?: string } | undefined;
   const restoredFocusRef = useRef(false);
   const [personnel, setPersonnel] = useState<PersonnelSummary[]>([]);
@@ -26,7 +28,7 @@ export function PersonnelListPage() {
     setLoading(true);
     setError(null);
     try {
-      const data = await listPersonnel();
+      const data = await listPersonnel(viewerRole);
       setPersonnel(data);
     } catch (err) {
       setError(getSafeUserErrorMessage(err, 'ไม่สามารถโหลดข้อมูลรายชื่อบุคลากรได้'));
@@ -37,7 +39,7 @@ export function PersonnelListPage() {
 
   useEffect(() => {
     void loadData();
-  }, []);
+  }, [viewerRole]);
 
   useEffect(() => {
     if (loading || restoredFocusRef.current || !personnelListState?.focusUserId) return;

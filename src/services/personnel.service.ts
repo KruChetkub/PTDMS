@@ -1,6 +1,7 @@
 import { supabase } from '../lib/supabase';
 import { runSupabaseQuery } from '../lib/supabase-query';
 import type { Profile, TrainingRecord, Certificate, DevelopmentAnalysis } from '../types/database.types';
+import type { UserRole } from '../types/roles';
 import { getCurrentThaiFiscalYear } from '../utils/thaiDate';
 
 export type PersonnelSummary = Profile & {
@@ -36,9 +37,15 @@ function toArray<T>(value: T | T[] | null | undefined): T[] {
   return Array.isArray(value) ? value : [value];
 }
 
-export async function listPersonnel(): Promise<PersonnelSummary[]> {
+export async function listPersonnel(viewerRole?: UserRole): Promise<PersonnelSummary[]> {
+  let profileQuery = supabase.from('profiles').select('*').order('full_name');
+
+  if (viewerRole === 'admin') {
+    profileQuery = profileQuery.neq('role', 'super_admin');
+  }
+
   const [profileResult, trainingResult] = await Promise.all([
-    runSupabaseQuery(supabase.from('profiles').select('*').order('full_name'), 'โหลดรายชื่อบุคลากร'),
+    runSupabaseQuery(profileQuery, 'โหลดรายชื่อบุคลากร'),
     runSupabaseQuery(supabase.from('training_records').select('user_id, category, date, year'), 'โหลดสถิติอบรมของบุคลากร'),
   ]);
 

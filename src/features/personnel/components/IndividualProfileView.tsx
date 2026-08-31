@@ -65,7 +65,6 @@ export function IndividualProfileView({ userId, isMyProfile }: IndividualProfile
   const currentUser = useAuthStore((state) => state.profile);
   const authUser = useAuthStore((state) => state.user);
   const navigate = useNavigate();
-  const canEdit = isMyProfile || currentUser?.role === 'super_admin' || currentUser?.role === 'admin' || currentUser?.role === 'hr';
 
   const loadData = async (options: { showLoading?: boolean } = {}) => {
     const showLoading = options.showLoading ?? !data;
@@ -204,6 +203,12 @@ export function IndividualProfileView({ userId, isMyProfile }: IndividualProfile
   }
 
   const { profile, records, certificates, analysis, chartData } = data;
+  const canEdit = Boolean(
+    isMyProfile
+      || currentUser?.role === 'super_admin'
+      || currentUser?.role === 'hr'
+      || (currentUser?.role === 'admin' && profile.role !== 'super_admin'),
+  );
   const certMap = new Map(certificates.map(c => [c.training_id, c]));
   const analysisMap = new Map(analysis.map(a => [a.training_id, a]));
   const exportTrainingRecords = records;
