@@ -205,14 +205,14 @@ export function IndividualProfileView({ userId, isMyProfile }: IndividualProfile
   const canEdit = Boolean(
     isMyProfile
       || currentUser?.role === 'super_admin'
-      || currentUser?.role === 'hr'
+      || (currentUser?.role === 'hr' && profile.role !== 'super_admin')
       || (currentUser?.role === 'admin' && profile.role !== 'super_admin'),
   );
   const canViewDevelopmentDashboard = Boolean(
     isMyProfile
       || currentUser?.role === 'super_admin'
-      || currentUser?.role === 'admin'
-      || currentUser?.role === 'hr',
+      || (currentUser?.role === 'admin' && profile.role !== 'super_admin')
+      || (currentUser?.role === 'hr' && profile.role !== 'super_admin'),
   );
   const certMap = new Map(certificates.map(c => [c.training_id, c]));
   const analysisMap = new Map(analysis.map(a => [a.training_id, a]));

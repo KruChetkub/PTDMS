@@ -40,7 +40,7 @@ function toArray<T>(value: T | T[] | null | undefined): T[] {
 export async function listPersonnel(viewerRole?: UserRole): Promise<PersonnelSummary[]> {
   let profileQuery = supabase.from('profiles').select('*').order('full_name');
 
-  if (viewerRole === 'admin') {
+  if (viewerRole === 'admin' || viewerRole === 'hr') {
     profileQuery = profileQuery.neq('role', 'super_admin');
   }
 
