@@ -54,6 +54,8 @@ type EditFormState = {
   employment_type: '' | 'ข้าราชการ' | 'พนักงานราชการ' | 'พนักงานกระทรวงสาธารณสุข' | 'ลูกจ้างชั่วคราว' | 'จ้างเหมาบริการฯ (พขร.)';
 };
 
+type ManageRoleValue = UserRole | 'finance_officer';
+
 const genderLabels = {
   male: 'ชาย',
   female: 'หญิง',
@@ -503,7 +505,6 @@ export function UserManagementPage() {
   useAuditPageAccess({ module: 'user_management', action: 'user_management_access', route: '/admin/users' });
   const [users, setUsers] = useState<UserManagementProfile[]>([]);
   const [financeOfficerUserIds, setFinanceOfficerUserIds] = useState<Set<string>>(new Set());
-  const [editFinanceOfficer, setEditFinanceOfficer] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
@@ -586,16 +587,32 @@ export function UserManagementPage() {
     void loadUsers();
   }, []);
 
-  const handleRoleChange = async (userId: string, newRole: UserRole) => {
+  const handleRoleChange = async (userId: string, newRole: ManageRoleValue) => {
     if (!currentUser || !canManageRoleAndStatus) return;
-    if (!availableManageRoleOptions.includes(newRole)) {
+    const isFinanceOfficer = newRole === 'finance_officer';
+    if (isFinanceOfficer && currentRole !== 'super_admin') {
+      setError('เฉพาะ Super Admin เท่านั้นที่สามารถกำหนดสิทธิ์เจ้าหน้าที่การเงินได้');
+      return;
+    }
+    if (!isFinanceOfficer && !availableManageRoleOptions.includes(newRole)) {
       setError('คุณไม่มีสิทธิ์กำหนด Role ที่สูงกว่าสิทธิ์ของคุณ');
       return;
     }
     const targetUser = users.find((user) => user.user_id === userId);
+    const hadFinancePermission = financeOfficerUserIds.has(userId);
     setUpdating(userId);
     try {
-      await updateUserRole(userId, newRole);
+      const nextRole: UserRole = isFinanceOfficer ? 'personnel' : newRole;
+      if (targetUser?.role !== nextRole) {
+        await updateUserRole(userId, nextRole);
+      }
+
+      if (isFinanceOfficer && !hadFinancePermission) {
+        await setUserPermission(userId, BUDGET_ITEMS_MANAGE_PERMISSION, true);
+      } else if (!isFinanceOfficer && hadFinancePermission && currentRole === 'super_admin') {
+        await setUserPermission(userId, BUDGET_ITEMS_MANAGE_PERMISSION, false);
+      }
+
       void recordAuditLog({
         module: 'user_management',
         action: 'user_role_change',
@@ -603,7 +620,7 @@ export function UserManagementPage() {
         targetType: 'user',
         targetId: userId,
         beforeData: { role: targetUser?.role ?? null },
-        afterData: { role: newRole },
+        afterData: { role: nextRole, supplemental_permission: isFinanceOfficer ? BUDGET_ITEMS_MANAGE_PERMISSION : null },
         metadata: { target_email: targetUser?.email ?? null, target_name: targetUser?.full_name ?? null },
       });
       await loadUsers();
@@ -946,7 +963,6 @@ export function UserManagementPage() {
   };
 
   const handleOpenEdit = (user: UserManagementProfile) => {
-    setEditFinanceOfficer(financeOfficerUserIds.has(user.user_id));
     setEditModal({
       isOpen: true,
       user,
@@ -1025,19 +1041,6 @@ export function UserManagementPage() {
         start_work_date: startWorkDateIso,
         employment_type: editModal.form.employment_type || null,
       });
-
-      const financePermissionChanged =
-        currentRole === 'super_admin'
-        && editModal.user.role === 'personnel'
-        && editFinanceOfficer !== financeOfficerUserIds.has(editModal.user.user_id);
-
-      if (financePermissionChanged) {
-        await setUserPermission(
-          editModal.user.user_id,
-          BUDGET_ITEMS_MANAGE_PERMISSION,
-          editFinanceOfficer,
-        );
-      }
 
       void recordAuditLog({
         module: 'user_management',
@@ -1184,13 +1187,16 @@ export function UserManagementPage() {
                     <td className="px-6 py-4">
                       <select
                         className="rounded-md border border-slate-200 px-2 py-1 text-xs font-medium bg-white focus:border-brand-500 outline-none disabled:bg-slate-100 disabled:text-slate-500"
-                        value={u.role}
-                        onChange={(e) => handleRoleChange(u.user_id, e.target.value as UserRole)}
+                        value={financeOfficerUserIds.has(u.user_id) ? 'finance_officer' : u.role}
+                        onChange={(e) => handleRoleChange(u.user_id, e.target.value as ManageRoleValue)}
                         disabled={!canManageRoleAndStatus}
                       >
                         {availableManageRoleOptions.map((role) => (
                           <option key={role} value={role}>{roleLabels[role]}</option>
                         ))}
+                        {currentRole === 'super_admin' ? (
+                          <option value="finance_officer">เจ้าหน้าที่การเงิน</option>
+                        ) : null}
                       </select>
                     </td>
                     <td className="px-6 py-4">
@@ -1438,22 +1444,6 @@ export function UserManagementPage() {
                 </option>
               ))}
             </select>
-            {currentRole === 'super_admin' && editModal.user?.role === 'personnel' ? (
-              <label className="flex cursor-pointer items-start gap-3 rounded-md border border-teal-200 bg-teal-50 p-3 sm:col-span-2">
-                <input
-                  type="checkbox"
-                  checked={editFinanceOfficer}
-                  onChange={(event) => setEditFinanceOfficer(event.target.checked)}
-                  className="mt-0.5 h-4 w-4 rounded border-slate-300 text-teal-700 focus:ring-teal-600"
-                />
-                <span>
-                  <span className="block text-sm font-semibold text-teal-900">เจ้าหน้าที่การเงิน</span>
-                  <span className="mt-0.5 block text-xs text-teal-800">
-                    เพิ่มและแก้ไขข้อมูลใน Budget Utilization &gt; รายการงบประมาณ โดยสิทธิ์หน้าอื่นยังคงเป็น Personnel
-                  </span>
-                </span>
-              </label>
-            ) : null}
           </div>
         )}
         confirmLabel="บันทึก"
