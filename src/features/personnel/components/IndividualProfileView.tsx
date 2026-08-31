@@ -208,6 +208,12 @@ export function IndividualProfileView({ userId, isMyProfile }: IndividualProfile
       || currentUser?.role === 'hr'
       || (currentUser?.role === 'admin' && profile.role !== 'super_admin'),
   );
+  const canViewDevelopmentDashboard = Boolean(
+    isMyProfile
+      || currentUser?.role === 'super_admin'
+      || currentUser?.role === 'admin'
+      || currentUser?.role === 'hr',
+  );
   const certMap = new Map(certificates.map(c => [c.training_id, c]));
   const analysisMap = new Map(analysis.map(a => [a.training_id, a]));
   const filteredTrainingRecords = records.filter((record) =>
@@ -371,7 +377,7 @@ export function IndividualProfileView({ userId, isMyProfile }: IndividualProfile
         </div>
 
         <div className="space-y-6 lg:col-span-2">
-          {!isMyProfile && <div className="grid gap-4 sm:grid-cols-3">
+          {!canViewDevelopmentDashboard && <div className="grid gap-4 sm:grid-cols-3">
             <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
               <div className="flex items-center gap-3">
                 <div className="rounded-lg bg-brand-50 p-2 text-brand-600">
@@ -411,14 +417,16 @@ export function IndividualProfileView({ userId, isMyProfile }: IndividualProfile
             </div>
           </div>}
 
-          {isMyProfile && (
+          {canViewDevelopmentDashboard && (
             <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
               <div className="mb-5">
                 <h3 className="flex items-center gap-2 font-bold text-slate-900">
                   <BookOpen className="h-4 w-4 text-brand-600" aria-hidden="true" />
                   การพัฒนาตามประเภทหลักสูตร
                 </h3>
-                <p className="mt-1 text-sm text-slate-500">สรุปจากประวัติการพัฒนาของท่าน</p>
+                <p className="mt-1 text-sm text-slate-500">
+                  {isMyProfile ? 'สรุปจากประวัติการพัฒนาของท่าน' : `สรุปจากประวัติการพัฒนาของ ${profile.full_name}`}
+                </p>
               </div>
 
               <div className="grid items-center gap-6 md:grid-cols-[minmax(220px,0.8fr)_minmax(0,1.2fr)]">
