@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react';
+﻿import { useEffect, useRef, useState } from 'react';
 import { Calendar, BookOpen, Award, BarChart3, Clock, ExternalLink, Lightbulb, ChevronLeft, ChevronRight } from 'lucide-react';
 import { 
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
-  Cell 
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  Cell, Pie, PieChart,
 } from 'recharts';
 import { useNavigate } from 'react-router-dom';
 import { PageHeader } from '../../../components/ui/PageHeader';
@@ -23,6 +23,7 @@ import { normalizeTrainingType, type TrainingFormValues } from '../../self-servi
 import { Trash2 } from 'lucide-react';
 import { recordAuditLog } from '../../../services/audit.service';
 import { getSafeUserErrorMessage, reportClientError } from '../../../utils/errorHandling';
+import { trainingTypeOptions } from '../../../constants/training';
 
 type IndividualProfileViewProps = {
   userId: string;
@@ -30,6 +31,7 @@ type IndividualProfileViewProps = {
 };
 
 const trainingPageSize = 5;
+const trainingTypeColors = ['#2563eb', '#059669', '#d97706', '#e11d48', '#7c3aed'];
 
 function getExportDatePart() {
   return new Date().toISOString().slice(0, 10);
@@ -50,9 +52,12 @@ export function IndividualProfileView({ userId, isMyProfile }: IndividualProfile
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [trainingPage, setTrainingPage] = useState(1);
+  const [selectedTrainingType, setSelectedTrainingType] = useState<string | null>(null);
+  const [selectedTrainingYear, setSelectedTrainingYear] = useState<number | null>(null);
   const [trainingExportMessage, setTrainingExportMessage] = useState<string | null>(null);
   const [trainingDeleteTarget, setTrainingDeleteTarget] = useState<{ id: string; course: string } | null>(null);
   const [isDeletingTraining, setIsDeletingTraining] = useState(false);
+  const trainingHistoryRef = useRef<HTMLDivElement>(null);
 
   const [isSubmittingTraining, setIsSubmittingTraining] = useState(false);
   const [trainingSubmitError, setTrainingSubmitError] = useState<string | null>(null);
@@ -95,17 +100,11 @@ export function IndividualProfileView({ userId, isMyProfile }: IndividualProfile
   useEffect(() => {
     if (!userId) return;
     setTrainingPage(1);
+    setSelectedTrainingType(null);
+    setSelectedTrainingYear(null);
     setTrainingExportMessage(null);
     void loadData({ showLoading: true });
   }, [userId]);
-
-  const trainingTotalPages = Math.max(1, Math.ceil((data?.records.length || 0) / trainingPageSize));
-
-  useEffect(() => {
-    if (trainingPage > trainingTotalPages) {
-      setTrainingPage(trainingTotalPages);
-    }
-  }, [trainingPage, trainingTotalPages]);
 
   const refreshTrainingData = () => {
     void loadData({ showLoading: false });
@@ -211,10 +210,56 @@ export function IndividualProfileView({ userId, isMyProfile }: IndividualProfile
   );
   const certMap = new Map(certificates.map(c => [c.training_id, c]));
   const analysisMap = new Map(analysis.map(a => [a.training_id, a]));
-  const exportTrainingRecords = records;
+  const filteredTrainingRecords = records.filter((record) =>
+    (!selectedTrainingType || record.category === selectedTrainingType)
+    && (!selectedTrainingYear || record.year === selectedTrainingYear),
+  );
+  const trainingTotalPages = Math.max(1, Math.ceil(filteredTrainingRecords.length / trainingPageSize));
   const trainingCurrentPage = Math.min(trainingPage, trainingTotalPages);
   const trainingPageStart = (trainingCurrentPage - 1) * trainingPageSize;
-  const visibleTrainingRecords = records.slice(trainingPageStart, trainingPageStart + trainingPageSize);
+  const visibleTrainingRecords = filteredTrainingRecords.slice(trainingPageStart, trainingPageStart + trainingPageSize);
+  const trainingTypeTotal = records.filter((record) =>
+    trainingTypeOptions.includes(record.category as (typeof trainingTypeOptions)[number]),
+  ).length;
+  const trainingTypeData = trainingTypeOptions.map((category, index) => {
+    const count = records.filter((record) => record.category === category).length;
+
+    return {
+      category,
+      count,
+      color: trainingTypeColors[index],
+    };
+  });
+  const populatedTrainingTypes = trainingTypeData.filter((item) => item.count > 0);
+  const exportTrainingRecords = records;
+  const hasTrainingFilters = Boolean(selectedTrainingType || selectedTrainingYear);
+
+  const revealTrainingHistory = () => {
+    window.requestAnimationFrame(() => {
+      trainingHistoryRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  };
+
+  const toggleTrainingType = (category: string) => {
+    setSelectedTrainingType((current) => current === category ? null : category);
+    setTrainingPage(1);
+    setTrainingExportMessage(null);
+    revealTrainingHistory();
+  };
+
+  const toggleTrainingYear = (year: number) => {
+    setSelectedTrainingYear((current) => current === year ? null : year);
+    setTrainingPage(1);
+    setTrainingExportMessage(null);
+    revealTrainingHistory();
+  };
+
+  const clearTrainingFilters = () => {
+    setSelectedTrainingType(null);
+    setSelectedTrainingYear(null);
+    setTrainingPage(1);
+    setTrainingExportMessage(null);
+  };
 
   const handleExportTrainingHistory = async () => {
     if (exportTrainingRecords.length === 0) {
@@ -326,7 +371,7 @@ export function IndividualProfileView({ userId, isMyProfile }: IndividualProfile
         </div>
 
         <div className="space-y-6 lg:col-span-2">
-          <div className="grid gap-4 sm:grid-cols-3">
+          {!isMyProfile && <div className="grid gap-4 sm:grid-cols-3">
             <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
               <div className="flex items-center gap-3">
                 <div className="rounded-lg bg-brand-50 p-2 text-brand-600">
@@ -364,12 +409,89 @@ export function IndividualProfileView({ userId, isMyProfile }: IndividualProfile
                 </div>
               </div>
             </div>
-          </div>
+          </div>}
+
+          {isMyProfile && (
+            <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+              <div className="mb-5">
+                <h3 className="flex items-center gap-2 font-bold text-slate-900">
+                  <BookOpen className="h-4 w-4 text-brand-600" aria-hidden="true" />
+                  การพัฒนาตามประเภทหลักสูตร
+                </h3>
+                <p className="mt-1 text-sm text-slate-500">สรุปจากประวัติการพัฒนาของท่าน</p>
+              </div>
+
+              <div className="grid items-center gap-6 md:grid-cols-[minmax(220px,0.8fr)_minmax(0,1.2fr)]">
+                <div className="relative h-[240px] min-w-0">
+                  {populatedTrainingTypes.length > 0 ? (
+                    <>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie
+                            data={populatedTrainingTypes}
+                            dataKey="count"
+                            nameKey="category"
+                            cx="50%"
+                            cy="50%"
+                            innerRadius={62}
+                            outerRadius={92}
+                            paddingAngle={2}
+                            stroke="#ffffff"
+                            strokeWidth={2}
+                          >
+                            {populatedTrainingTypes.map((item) => (
+                              <Cell
+                                key={item.category}
+                                fill={item.color}
+                                opacity={!selectedTrainingType || selectedTrainingType === item.category ? 1 : 0.3}
+                                className="cursor-pointer outline-none"
+                                onClick={() => toggleTrainingType(item.category)}
+                              />
+                            ))}
+                          </Pie>
+                          <Tooltip
+                            formatter={(value) => [`${Number(value).toLocaleString('th-TH')} หลักสูตร`, 'จำนวน']}
+                            contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0', boxShadow: '0 4px 12px rgb(15 23 42 / 0.08)' }}
+                          />
+                        </PieChart>
+                      </ResponsiveContainer>
+                      <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center">
+                        <span className="text-3xl font-bold text-slate-950">{trainingTypeTotal.toLocaleString('th-TH')}</span>
+                        <span className="text-xs text-slate-500">หลักสูตรทั้งหมด</span>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="flex h-full items-center justify-center rounded-md border border-dashed border-slate-300 bg-slate-50 text-sm text-slate-500">
+                      ยังไม่มีข้อมูลประเภทหลักสูตร
+                    </div>
+                  )}
+                </div>
+
+                <div className="divide-y divide-slate-100">
+                  {trainingTypeData.map((item) => (
+                    <button
+                      key={item.category}
+                      type="button"
+                      disabled={item.count === 0}
+                      onClick={() => toggleTrainingType(item.category)}
+                      className={`grid w-full grid-cols-[12px_minmax(0,1fr)_auto] items-start gap-3 py-3 text-left transition first:pt-0 last:pb-0 ${
+                        selectedTrainingType === item.category ? 'bg-brand-50' : item.count > 0 ? 'hover:bg-slate-50' : 'cursor-default'
+                      }`}
+                    >
+                      <span className="mt-1.5 h-3 w-3 rounded-sm" style={{ backgroundColor: item.color }} aria-hidden="true" />
+                      <span className="text-sm leading-5 text-slate-700">{item.category}</span>
+                      <span className="min-w-20 text-right text-sm font-semibold text-slate-900">{item.count.toLocaleString('th-TH')} หลักสูตร</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </section>
+          )}
 
           <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
             <h3 className="mb-4 flex items-center gap-2 font-bold text-slate-900">
               <BarChart3 className="h-4 w-4 text-brand-600" />
-              Training Trend
+              สถิติการฝึกอบรม
             </h3>
             <div className="h-[240px] w-full">
               <ResponsiveContainer width="100%" height="100%">
@@ -384,8 +506,14 @@ export function IndividualProfileView({ userId, isMyProfile }: IndividualProfile
                     labelFormatter={(label) => `ปี: ${label}`}
                   />
                   <Bar dataKey="count" radius={[4, 4, 0, 0]} barSize={40}>
-                    {chartData.map((_entry, index) => (
-                      <Cell key={`cell-${index}`} fill="#2563eb" />
+                    {chartData.map((entry, index) => (
+                      <Cell
+                        key={`cell-${index}`}
+                        fill="#2563eb"
+                        opacity={!selectedTrainingYear || selectedTrainingYear === entry.year ? 1 : 0.3}
+                        className="cursor-pointer outline-none"
+                        onClick={() => toggleTrainingYear(entry.year)}
+                      />
                     ))}
                   </Bar>
                 </BarChart>
@@ -395,9 +523,26 @@ export function IndividualProfileView({ userId, isMyProfile }: IndividualProfile
         </div>
       </div>
 
-      <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+      <div ref={trainingHistoryRef} className="scroll-mt-20 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
         <div className="flex flex-col gap-3 border-b border-slate-100 bg-slate-50/50 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
-          <h3 className="font-bold text-slate-900">ประวัติการอบรม</h3>
+          <div className="min-w-0">
+            <h3 className="font-bold text-slate-900">ประวัติการอบรม</h3>
+            {hasTrainingFilters && (
+              <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-600">
+                {selectedTrainingType && <span>ประเภท: {selectedTrainingType}</span>}
+                {selectedTrainingYear && <span>ปีงบประมาณ: {selectedTrainingYear}</span>}
+                <span>{filteredTrainingRecords.length.toLocaleString('th-TH')} รายการ</span>
+                <button
+                  type="button"
+                  onClick={clearTrainingFilters}
+                  className="inline-flex items-center gap-1 font-medium text-brand-600 hover:text-brand-700"
+                >
+                  <X className="h-3.5 w-3.5" aria-hidden="true" />
+                  ล้างตัวกรอง
+                </button>
+              </div>
+            )}
+          </div>
           <div className="flex flex-wrap items-center gap-2">
             {canEdit && (
               <button
@@ -439,8 +584,8 @@ export function IndividualProfileView({ userId, isMyProfile }: IndividualProfile
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {records.length === 0 ? (
-                <tr><td colSpan={canEdit ? 6 : 5} className="px-6 py-8 text-center text-slate-500">ยังไม่มีข้อมูลประวัติการอบรม</td></tr>
+              {filteredTrainingRecords.length === 0 ? (
+                <tr><td colSpan={canEdit ? 6 : 5} className="px-6 py-8 text-center text-slate-500">{hasTrainingFilters ? 'ไม่พบประวัติการอบรมตามตัวกรองที่เลือก' : 'ยังไม่มีข้อมูลประวัติการอบรม'}</td></tr>
               ) : (
                 visibleTrainingRecords.map((record, index) => {
                   const cert = certMap.get(record.id);
@@ -510,10 +655,10 @@ export function IndividualProfileView({ userId, isMyProfile }: IndividualProfile
           </table>
         </div>
 
-        {records.length > trainingPageSize ? (
+        {filteredTrainingRecords.length > trainingPageSize ? (
           <div className="flex flex-col gap-3 border-t border-slate-100 px-6 py-4 text-sm text-slate-600 sm:flex-row sm:items-center sm:justify-between">
             <p>
-              แสดง {trainingPageStart + 1}-{Math.min(trainingPageStart + visibleTrainingRecords.length, records.length)} จาก {records.length} รายการ
+              แสดง {trainingPageStart + 1}-{Math.min(trainingPageStart + visibleTrainingRecords.length, filteredTrainingRecords.length)} จาก {filteredTrainingRecords.length} รายการ
             </p>
             <div className="flex items-center gap-2">
               <button
