@@ -212,6 +212,7 @@ export function IndividualProfileView({ userId, isMyProfile }: IndividualProfile
     isMyProfile
       || currentUser?.role === 'super_admin'
       || (currentUser?.role === 'admin' && profile.role !== 'super_admin')
+      || (currentUser?.role === 'executive' && profile.role !== 'super_admin')
       || (currentUser?.role === 'hr' && profile.role !== 'super_admin'),
   );
   const certMap = new Map(certificates.map(c => [c.training_id, c]));

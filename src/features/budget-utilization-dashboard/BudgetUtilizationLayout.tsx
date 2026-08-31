@@ -6,7 +6,7 @@ import { useAuthStore } from '../../stores/auth.store';
 import { roleLabels } from '../../types/roles';
 import { cn } from '../../utils/cn';
 import { reportClientError } from '../../utils/errorHandling';
-import { canManageBudgetUtilization } from './services/budgetUtilization.service';
+import { canManageBudgetItems, canManageBudgetUtilization } from './services/budgetUtilization.service';
 
 type BudgetNavItem = {
   to: string;
@@ -19,8 +19,13 @@ const baseNavItems: BudgetNavItem[] = [
   { to: '/budget-utilization', label: 'Dashboard', icon: BarChart3, end: true },
 ];
 
+const budgetItemsNavItem: BudgetNavItem = {
+  to: '/budget-utilization/items',
+  label: 'รายการงบประมาณ',
+  icon: ListTree,
+};
+
 const adminNavItems: BudgetNavItem[] = [
-  { to: '/budget-utilization/items', label: 'รายการงบประมาณ', icon: ListTree },
   { to: '/budget-utilization/import', label: 'นำเข้าข้อมูล', icon: FileSpreadsheet },
   { to: '/budget-utilization/manage', label: 'จัดการรอบรายงาน', icon: DatabaseZap },
 ];
@@ -30,9 +35,13 @@ export function BudgetUtilizationLayout() {
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-  const { profile, signOut } = useAuthStore();
+  const { profile, permissions, signOut } = useAuthStore();
   const role = profile?.role;
-  const navItems = canManageBudgetUtilization(role) ? [...baseNavItems, ...adminNavItems] : baseNavItems;
+  const navItems = [
+    ...baseNavItems,
+    ...(canManageBudgetItems(role, permissions) ? [budgetItemsNavItem] : []),
+    ...(canManageBudgetUtilization(role) ? adminNavItems : []),
+  ];
 
   const handleSignOut = async () => {
     try {

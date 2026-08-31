@@ -56,7 +56,7 @@ const navItems: NavItem[] = [
     to: '/records',
     label: 'Training Records',
     icon: ClipboardList,
-    roles: ['super_admin', 'admin', 'executive', 'hr'],
+    roles: ['super_admin', 'admin', 'hr'],
   },
   {
     to: '/personnel',

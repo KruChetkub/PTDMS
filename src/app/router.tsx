@@ -46,6 +46,7 @@ import { SpdServiceTelegramSettingsPage } from '../features/spd-service/SpdServi
 import { SpdServiceTicketListPage } from '../features/spd-service/SpdServiceTicketListPage';
 import { ForbiddenPage } from '../features/system/ForbiddenPage';
 import { NotFoundPage } from '../features/system/NotFoundPage';
+import { BUDGET_ITEMS_MANAGE_PERMISSION } from '../constants/permissions';
 
 export const router = createBrowserRouter([
   {
@@ -244,6 +245,25 @@ export const router = createBrowserRouter([
     ],
   },
   {
+    element: (
+      <ProtectedRoute
+        allowedRoles={['super_admin', 'admin']}
+        allowedPermissions={[BUDGET_ITEMS_MANAGE_PERMISSION]}
+      />
+    ),
+    children: [
+      {
+        element: <BudgetUtilizationLayout />,
+        children: [
+          {
+            path: '/budget-utilization/items',
+            element: <BudgetUtilizationItemsPage />,
+          },
+        ],
+      },
+    ],
+  },
+  {
     element: <ProtectedRoute allowedRoles={['super_admin', 'admin']} />,
     children: [
       {
@@ -253,10 +273,6 @@ export const router = createBrowserRouter([
       {
         element: <BudgetUtilizationLayout />,
         children: [
-          {
-            path: '/budget-utilization/items',
-            element: <BudgetUtilizationItemsPage />,
-          },
           {
             path: '/budget-utilization/import',
             element: <BudgetUtilizationImportPage />,

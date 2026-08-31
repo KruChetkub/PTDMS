@@ -1,4 +1,5 @@
 import { supabase } from '../../../lib/supabase';
+import { BUDGET_ITEMS_MANAGE_PERMISSION } from '../../../constants/permissions';
 import { runSupabaseQuery } from '../../../lib/supabase-query';
 import { sanitizePlainTextInput } from '../../../utils/inputSecurity';
 import { parseRawBudgetWorkbookRows } from './budgetUtilizationImport';
@@ -154,6 +155,10 @@ async function saveBudgetTransactionReferences(
 
 export function canManageBudgetUtilization(role: string | null | undefined) {
   return role === 'super_admin' || role === 'admin';
+}
+
+export function canManageBudgetItems(role: string | null | undefined, permissions: string[] = []) {
+  return canManageBudgetUtilization(role) || permissions.includes(BUDGET_ITEMS_MANAGE_PERMISSION);
 }
 
 export async function listBudgetReportPeriods() {

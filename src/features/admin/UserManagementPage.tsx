@@ -15,7 +15,7 @@ import {
 import { PageHeader } from '../../components/ui/PageHeader';
 import { useAuditPageAccess } from '../../hooks/useAuditPageAccess';
 import { ConfirmModal } from '../../components/ui/ConfirmModal';
-import { createManagedUser, listAllUsers, updateUserDetails, updateUserRole, updateUserStatus, deleteUser, updateUserEmail } from '../../services/admin.service';
+import { createManagedUser, listAllUsers, listUserPermissionAssignments, setUserPermission, updateUserDetails, updateUserRole, updateUserStatus, deleteUser, updateUserEmail } from '../../services/admin.service';
 import { recordAuditLog } from '../../services/audit.service';
 import type { UpdateUserDetailsPayload, UserManagementProfile } from '../../services/admin.service';
 import type { Profile } from '../../types/database.types';
@@ -23,6 +23,7 @@ import { useAuthStore } from '../../stores/auth.store';
 import type { UserRole, ProfileStatus } from '../../types/roles';
 import { roleLabels } from '../../types/roles';
 import { getSafeUserErrorMessage } from '../../utils/errorHandling';
+import { BUDGET_ITEMS_MANAGE_PERMISSION } from '../../constants/permissions';
 
 type CreateFormState = {
   employee_code: string;
@@ -501,6 +502,8 @@ function getCreateUserErrorMessage(err: unknown) {
 export function UserManagementPage() {
   useAuditPageAccess({ module: 'user_management', action: 'user_management_access', route: '/admin/users' });
   const [users, setUsers] = useState<UserManagementProfile[]>([]);
+  const [financeOfficerUserIds, setFinanceOfficerUserIds] = useState<Set<string>>(new Set());
+  const [editFinanceOfficer, setEditFinanceOfficer] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
@@ -563,8 +566,14 @@ export function UserManagementPage() {
   const loadUsers = async () => {
     setLoading(true);
     try {
-      const data = await listAllUsers();
+      const [data, financeOfficerIds] = await Promise.all([
+        listAllUsers(),
+        currentRole === 'super_admin'
+          ? listUserPermissionAssignments(BUDGET_ITEMS_MANAGE_PERMISSION)
+          : Promise.resolve([]),
+      ]);
       setUsers(data);
+      setFinanceOfficerUserIds(new Set(financeOfficerIds));
       setError(null);
     } catch (err) {
       setError(getSafeUserErrorMessage(err, 'ไม่สามารถโหลดข้อมูลผู้ใช้งานได้'));
@@ -937,6 +946,7 @@ export function UserManagementPage() {
   };
 
   const handleOpenEdit = (user: UserManagementProfile) => {
+    setEditFinanceOfficer(financeOfficerUserIds.has(user.user_id));
     setEditModal({
       isOpen: true,
       user,
@@ -1015,6 +1025,19 @@ export function UserManagementPage() {
         start_work_date: startWorkDateIso,
         employment_type: editModal.form.employment_type || null,
       });
+
+      const financePermissionChanged =
+        currentRole === 'super_admin'
+        && editModal.user.role === 'personnel'
+        && editFinanceOfficer !== financeOfficerUserIds.has(editModal.user.user_id);
+
+      if (financePermissionChanged) {
+        await setUserPermission(
+          editModal.user.user_id,
+          BUDGET_ITEMS_MANAGE_PERMISSION,
+          editFinanceOfficer,
+        );
+      }
 
       void recordAuditLog({
         module: 'user_management',
@@ -1415,6 +1438,22 @@ export function UserManagementPage() {
                 </option>
               ))}
             </select>
+            {currentRole === 'super_admin' && editModal.user?.role === 'personnel' ? (
+              <label className="flex cursor-pointer items-start gap-3 rounded-md border border-teal-200 bg-teal-50 p-3 sm:col-span-2">
+                <input
+                  type="checkbox"
+                  checked={editFinanceOfficer}
+                  onChange={(event) => setEditFinanceOfficer(event.target.checked)}
+                  className="mt-0.5 h-4 w-4 rounded border-slate-300 text-teal-700 focus:ring-teal-600"
+                />
+                <span>
+                  <span className="block text-sm font-semibold text-teal-900">เจ้าหน้าที่การเงิน</span>
+                  <span className="mt-0.5 block text-xs text-teal-800">
+                    เพิ่มและแก้ไขข้อมูลใน Budget Utilization &gt; รายการงบประมาณ โดยสิทธิ์หน้าอื่นยังคงเป็น Personnel
+                  </span>
+                </span>
+              </label>
+            ) : null}
           </div>
         )}
         confirmLabel="บันทึก"

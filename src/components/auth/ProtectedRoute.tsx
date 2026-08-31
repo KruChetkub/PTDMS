@@ -8,11 +8,12 @@ import { ForcedPasswordChangeGate } from './ForcedPasswordChangeGate';
 
 type ProtectedRouteProps = {
   allowedRoles?: UserRole[];
+  allowedPermissions?: string[];
 };
 
-export function ProtectedRoute({ allowedRoles }: ProtectedRouteProps) {
+export function ProtectedRoute({ allowedRoles, allowedPermissions }: ProtectedRouteProps) {
   const location = useLocation();
-  const { initialize, initialized, loading, user, profile, refreshProfile } = useAuthStore();
+  const { initialize, initialized, loading, user, profile, permissions, refreshProfile } = useAuthStore();
   useAutoLogoutTimer(Boolean(initialized && user && profile?.status === 'active' && !profile.force_password_change));
 
   useEffect(() => {
@@ -92,7 +93,11 @@ export function ProtectedRoute({ allowedRoles }: ProtectedRouteProps) {
     return <ForcedPasswordChangeGate />;
   }
 
-  if (!canAccess(profile.role, allowedRoles)) {
+  const roleAllowed = Boolean(allowedRoles?.length && canAccess(profile.role, allowedRoles));
+  const permissionAllowed = Boolean(allowedPermissions?.some((permission) => permissions.includes(permission)));
+  const hasAccessRule = Boolean(allowedRoles?.length || allowedPermissions?.length);
+
+  if (hasAccessRule && !roleAllowed && !permissionAllowed) {
     return <Navigate to="/forbidden" replace />;
   }
 

@@ -16,6 +16,25 @@ export async function listAllUsers() {
   return data as UserManagementProfile[];
 }
 
+export async function listUserPermissionAssignments(permissionKey: string) {
+  const { data, error } = await (supabase as any).rpc('list_user_permission_assignments', {
+    p_permission_key: permissionKey,
+  });
+
+  if (error) throw error;
+  return Array.isArray(data) ? data.filter((userId): userId is string => typeof userId === 'string') : [];
+}
+
+export async function setUserPermission(userId: string, permissionKey: string, enabled: boolean) {
+  const { error } = await (supabase as any).rpc('set_user_permission', {
+    p_target_user_id: userId,
+    p_permission_key: permissionKey,
+    p_enabled: enabled,
+  });
+
+  if (error) throw error;
+}
+
 export async function updateUserRole(userId: string, role: UserRole) {
   const { error } = await supabase
     .from('profiles')

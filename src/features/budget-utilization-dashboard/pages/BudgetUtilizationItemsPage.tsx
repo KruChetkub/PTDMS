@@ -4,7 +4,7 @@ import { PageHeader } from '../../../components/ui/PageHeader';
 import { ConfirmModal } from '../../../components/ui/ConfirmModal';
 import { useAuditPageAccess } from '../../../hooks/useAuditPageAccess';
 import { useAuthStore } from '../../../stores/auth.store';
-import { canManageBudgetUtilization, createBudgetItem, createBudgetReportPeriod, deleteBudgetItem, getBudgetDashboardSummary, saveBudgetAllocationTrancheDefinitions, saveBudgetItemAllocation, updateBudgetItem, updateBudgetItemAmounts, updateBudgetItemDetails } from '../services/budgetUtilization.service';
+import { canManageBudgetItems, createBudgetItem, createBudgetReportPeriod, deleteBudgetItem, getBudgetDashboardSummary, saveBudgetAllocationTrancheDefinitions, saveBudgetItemAllocation, updateBudgetItem, updateBudgetItemAmounts, updateBudgetItemDetails } from '../services/budgetUtilization.service';
 import { buildHierarchyRollupMap, formatBudgetAmount, getNetAllocationTotal, normalizeAmount, percent, summarizeBudgetItems, toNumber } from '../utils/budgetUtilizationCalculations';
 import type { BudgetUtilizationDashboardSummary, BudgetUtilizationItemInput, BudgetUtilizationItemWithAmount, BudgetUtilizationRowType, BudgetUtilizationTransactionType } from '../types/budgetUtilization.types';
 import { getSafeUserErrorMessage } from '../../../utils/errorHandling';
@@ -489,7 +489,8 @@ function getCurrentThaiFiscalYear() {
 export function BudgetUtilizationItemsPage() {
   useAuditPageAccess({ module: 'budget_utilization', action: 'budget_items_access', route: '/budget-utilization/items' });
   const role = useAuthStore((state) => state.profile?.role);
-  const canManage = canManageBudgetUtilization(role);
+  const permissions = useAuthStore((state) => state.permissions);
+  const canManage = canManageBudgetItems(role, permissions);
   const [reportPeriodId, setReportPeriodId] = useState('');
   const [summary, setSummary] = useState<BudgetUtilizationDashboardSummary | null>(null);
   const [keyword, setKeyword] = useState('');

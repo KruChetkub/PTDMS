@@ -9,11 +9,13 @@ type AuthState = {
   session: Session | null;
   user: User | null;
   profile: Profile | null;
+  permissions: string[];
   initialized: boolean;
   loading: boolean;
   error: string | null;
   initialize: () => Promise<void>;
   loadProfile: (userId: string) => Promise<Profile | null>;
+  loadPermissions: () => Promise<string[]>;
   refreshProfile: () => Promise<Profile | null>;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string, fullName: string) => Promise<void>;
@@ -50,6 +52,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   session: null,
   user: null,
   profile: null,
+  permissions: [],
   initialized: false,
   loading: false,
   error: null,
@@ -74,9 +77,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
       const session = data.session;
       const user = session?.user ?? null;
-      const profile = user ? await get().loadProfile(user.id) : null;
+      const [profile, permissions] = user
+        ? await Promise.all([get().loadProfile(user.id), get().loadPermissions()])
+        : [null, []];
 
-      set({ session, user, profile, initialized: true, loading: false });
+      set({ session, user, profile, permissions, initialized: true, loading: false });
 
       authSubscription?.unsubscribe();
       const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
@@ -88,6 +93,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           session: nextSession,
           user: nextUser,
           profile: nextUser ? (profileStillMatches ? currentProfile : null) : null,
+          permissions: nextUser && profileStillMatches ? get().permissions : [],
           initialized: true,
           loading: nextUser ? !profileStillMatches : false,
         });
@@ -98,9 +104,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
         window.setTimeout(() => {
           void (async () => {
-            const nextProfile = await get().loadProfile(nextUser.id);
+            const [nextProfile, permissions] = await Promise.all([
+              get().loadProfile(nextUser.id),
+              get().loadPermissions(),
+            ]);
             if (get().user?.id === nextUser.id) {
-              set({ profile: nextProfile, loading: false });
+              set({ profile: nextProfile, permissions, loading: false });
             }
           })();
         }, 0);
@@ -133,14 +142,27 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     return data;
   },
 
+  loadPermissions: async () => {
+    const { data, error } = await (supabase as any).rpc('list_my_permissions');
+    if (error) {
+      set({ error: error.message });
+      return [];
+    }
+
+    return Array.isArray(data) ? data.filter((item): item is string => typeof item === 'string') : [];
+  },
+
   refreshProfile: async () => {
     const userId = get().user?.id;
     if (!userId) {
       return null;
     }
 
-    const profile = await get().loadProfile(userId);
-    set({ profile });
+    const [profile, permissions] = await Promise.all([
+      get().loadProfile(userId),
+      get().loadPermissions(),
+    ]);
+    set({ profile, permissions });
     return profile;
   },
 
@@ -159,8 +181,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       throw error;
     }
 
-    const profile = data.user ? await get().loadProfile(data.user.id) : null;
-    set({ session: data.session, user: data.user, profile, loading: false });
+    const [profile, permissions] = data.user
+      ? await Promise.all([get().loadProfile(data.user.id), get().loadPermissions()])
+      : [null, []];
+    set({ session: data.session, user: data.user, profile, permissions, loading: false });
 
     void recordLoginAttempt({
       email: normalizedEmail,
@@ -252,7 +276,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       throw error;
     }
 
-    set({ session: null, user: null, profile: null, loading: false });
+    set({ session: null, user: null, profile: null, permissions: [], loading: false });
   },
 
   clearError: () => set({ error: null }),
