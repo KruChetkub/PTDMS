@@ -549,6 +549,7 @@ export function UserManagementPage() {
   const canManageRoleAndStatus = currentRole === 'super_admin' || currentRole === 'admin';
   const canCreateUsers = currentRole === 'super_admin' || currentRole === 'admin' || currentRole === 'hr';
   const canManageUsers = currentRole === 'super_admin' || currentRole === 'admin' || currentRole === 'hr';
+  const canUseBulkUserTools = currentRole === 'super_admin' || currentRole === 'admin';
   const availableCreateRoleOptions = useMemo<UserRole[]>(() => {
     if (currentRole === 'super_admin') return allRoleOptions;
     if (currentRole === 'hr') return ['personnel'];
@@ -1076,31 +1077,35 @@ export function UserManagementPage() {
           <div className="text-xs text-slate-500">จำนวนผู้ใช้ทั้งหมด: {visibleUsers.length} ท่าน</div>
           {canCreateUsers && (
             <div className="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={handleDownloadTemplate}
-                className="inline-flex items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-              >
-                <Download className="h-4 w-4" aria-hidden="true" />
-                เทมเพลต Excel
-              </button>
-              <button
-                type="button"
-                onClick={handleExportUsers}
-                className="inline-flex items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-              >
-                <Download className="h-4 w-4" aria-hidden="true" />
-                Export ผู้ใช้งาน
-              </button>
-              <button
-                type="button"
-                onClick={handleOpenImport}
-                disabled={bulkImporting}
-                className="inline-flex items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
-              >
-                <Upload className="h-4 w-4" aria-hidden="true" />
-                {bulkImporting ? 'กำลังนำเข้า...' : 'นำเข้า Excel'}
-              </button>
+              {canUseBulkUserTools && (
+                <>
+                  <button
+                    type="button"
+                    onClick={handleDownloadTemplate}
+                    className="inline-flex items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                  >
+                    <Download className="h-4 w-4" aria-hidden="true" />
+                    เทมเพลต Excel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleExportUsers}
+                    className="inline-flex items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                  >
+                    <Download className="h-4 w-4" aria-hidden="true" />
+                    Export ผู้ใช้งาน
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleOpenImport}
+                    disabled={bulkImporting}
+                    className="inline-flex items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
+                  >
+                    <Upload className="h-4 w-4" aria-hidden="true" />
+                    {bulkImporting ? 'กำลังนำเข้า...' : 'นำเข้า Excel'}
+                  </button>
+                </>
+              )}
               <button
                 type="button"
                 onClick={handleOpenCreate}
