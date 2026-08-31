@@ -975,8 +975,8 @@ export function BudgetUtilizationDashboardPage() {
     <div>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <PageHeader
-          title="Budget Utilization Dashboard"
-          description="การใช้จ่ายงบประมาณ กองยุทธศาสตร์และแผนงาน"
+          title="ติดตามการใช้จ่ายงบประมาณ"
+          description="กองยุทธศาสตร์และแผนงาน"
         />
         <button
           type="button"
