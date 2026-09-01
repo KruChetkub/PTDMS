@@ -217,6 +217,7 @@ export function SiteManagerSatisfactionSurveyEditor({
   const [responsePage, setResponsePage] = useState(0);
   const [dashboardStartDate, setDashboardStartDate] = useState('');
   const [dashboardEndDate, setDashboardEndDate] = useState('');
+  const [comparisonSurveyIds, setComparisonSurveyIds] = useState<string[]>([]);
   const [likertView, setLikertView] = useState<LikertView>('question_order');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -239,6 +240,11 @@ export function SiteManagerSatisfactionSurveyEditor({
       ]);
       setSurveys(surveyList);
       setDashboardData(nextDashboardData);
+      setComparisonSurveyIds((current) => {
+        const availableIds = nextDashboardData.surveys.map((survey) => survey.id);
+        const retainedIds = current.filter((id) => availableIds.includes(id));
+        return retainedIds.length > 0 ? retainedIds : availableIds;
+      });
       setSelectedId(nextBundle?.survey.id || '');
       setBundle(nextBundle ? {
         ...nextBundle,
@@ -376,7 +382,9 @@ export function SiteManagerSatisfactionSurveyEditor({
     average: Number((values.reduce((sum, value) => sum + value, 0) / values.length).toFixed(2)),
     averageLabel: (values.reduce((sum, value) => sum + value, 0) / values.length).toFixed(2),
   }));
-  const trendData = dashboardData.surveys.slice().sort((left, right) => left.version - right.version).map((survey) => {
+  const comparisonSurveys = dashboardData.surveys.slice().sort((left, right) => left.version - right.version);
+  const comparisonSurveyIdSet = new Set(comparisonSurveyIds);
+  const trendData = comparisonSurveys.filter((survey) => comparisonSurveyIdSet.has(survey.id)).map((survey) => {
     const responseIds = new Set(dashboardData.responses.filter((response) => response.survey_id === survey.id).map((response) => response.id));
     const values = dashboardData.answers.filter((answer) => responseIds.has(answer.response_id) && answer.rating_value !== null);
     return {
@@ -664,6 +672,12 @@ export function SiteManagerSatisfactionSurveyEditor({
       .filter((question) => question.id !== deleteQuestionId)
       .map((question, index) => ({ ...question, position: index + 1 })));
     setDeleteQuestionId(null);
+  };
+
+  const toggleComparisonSurvey = (surveyId: string) => {
+    setComparisonSurveyIds((current) => current.includes(surveyId)
+      ? current.filter((id) => id !== surveyId)
+      : [...current, surveyId]);
   };
 
   const updateContextOptionLabel = (
@@ -1125,10 +1139,11 @@ export function SiteManagerSatisfactionSurveyEditor({
                   </div>
                 </section>
                 <section className="rounded-md border border-slate-200 bg-white p-4">
-                  <h4 className="text-sm font-semibold text-slate-900">แนวโน้มเปรียบเทียบแต่ละรอบ</h4>
-                  <div className="mt-4 h-72">
+                  <div className="flex flex-wrap items-center justify-between gap-3"><div><h4 className="text-sm font-semibold text-slate-900">แนวโน้มเปรียบเทียบแต่ละรอบ</h4><p className="mt-1 text-xs text-slate-500">เลือกเฉพาะรอบที่ต้องการนำมาเปรียบเทียบในกราฟ</p></div><div className="flex items-center gap-2"><button type="button" onClick={() => setComparisonSurveyIds(comparisonSurveys.map((survey) => survey.id))} className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">เลือกทั้งหมด</button><button type="button" onClick={() => setComparisonSurveyIds([])} className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">ล้างที่เลือก</button></div></div>
+                  <fieldset className="mt-4 border-y border-slate-200 py-3"><legend className="sr-only">เลือกรอบสำหรับเปรียบเทียบ</legend><div className="flex flex-wrap gap-x-5 gap-y-3">{comparisonSurveys.map((survey) => <label key={survey.id} className="flex cursor-pointer items-center gap-2 text-xs text-slate-700"><input type="checkbox" checked={comparisonSurveyIdSet.has(survey.id)} onChange={() => toggleComparisonSurvey(survey.id)} className="h-4 w-4" /><span><strong>รอบ {survey.version}</strong> · {(responseCountBySurvey.get(survey.id) || 0).toLocaleString('th-TH')} คน</span></label>)}</div></fieldset>
+                  {trendData.length > 0 ? <div className="mt-4 h-72">
                     <ResponsiveContainer width="100%" height="100%"><LineChart data={trendData} margin={{ top: 8, right: 8, left: -10, bottom: 4 }}><CartesianGrid strokeDasharray="3 3" vertical={false} /><XAxis dataKey="name" fontSize={12} /><YAxis yAxisId="score" domain={[0, 5]} fontSize={12} /><YAxis yAxisId="people" orientation="right" allowDecimals={false} fontSize={12} /><Tooltip /><Legend /><Line yAxisId="score" type="monotone" dataKey="average" name="คะแนนเฉลี่ย" stroke="#7c3aed" strokeWidth={3} dot={{ r: 4 }} /><Line yAxisId="people" type="monotone" dataKey="respondents" name="จำนวนผู้ตอบ" stroke="#d97706" strokeWidth={2} /></LineChart></ResponsiveContainer>
-                  </div>
+                  </div> : <div className="flex h-72 items-center justify-center text-sm text-slate-500">กรุณาเลือกอย่างน้อย 1 รอบเพื่อแสดงกราฟ</div>}
                 </section>
               </div>
 
