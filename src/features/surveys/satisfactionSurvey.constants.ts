@@ -31,6 +31,27 @@ export const SURVEY_SERVICE_OPTIONS = [
   { value: 'other', label: 'อื่น ๆ' },
 ] as const;
 
+export const SURVEY_ANALYSIS_DIMENSIONS = [
+  'ประสิทธิภาพการติดตามงาน',
+  'ความครบถ้วนของข้อมูลการดำเนินงาน',
+  'การใช้ข้อมูลเพื่อการตัดสินใจของผู้บริหาร',
+  'ประสิทธิภาพการบริหารจัดการของหน่วย',
+  'คุณภาพการใช้งานระบบ',
+  'ความพึงพอใจโดยรวม',
+] as const;
+
+const SURVEY_ANALYSIS_DIMENSION_ALIASES: Record<string, (typeof SURVEY_ANALYSIS_DIMENSIONS)[number]> = {
+  'ความครบถ้วนของข้อมูล': 'ความครบถ้วนของข้อมูลการดำเนินงาน',
+  'การใช้ข้อมูลเพื่อการตัดสินใจ': 'การใช้ข้อมูลเพื่อการตัดสินใจของผู้บริหาร',
+  'ประสิทธิภาพการบริหารจัดการ': 'ประสิทธิภาพการบริหารจัดการของหน่วย',
+};
+
+export function normalizeSurveyAnalysisDimension(value: string | null | undefined) {
+  if (!value) return null;
+  const normalized = SURVEY_ANALYSIS_DIMENSION_ALIASES[value] || value;
+  return SURVEY_ANALYSIS_DIMENSIONS.find((dimension) => dimension === normalized) || null;
+}
+
 export function createDefaultSurveyContextSettings(surveyId: string): SmartDspSurveyContextSettings {
   return {
     survey_id: surveyId,

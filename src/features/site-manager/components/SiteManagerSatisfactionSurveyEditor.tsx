@@ -21,7 +21,7 @@ import {
   type SatisfactionSurveyAdminBundle,
   type SatisfactionSurveyDashboardData,
 } from '../../surveys/satisfactionSurvey.service';
-import { getSurveyOptionLabel, SURVEY_RESPONDENT_ROLE_OPTIONS, SURVEY_SERVICE_OPTIONS, SURVEY_USAGE_FREQUENCY_OPTIONS } from '../../surveys/satisfactionSurvey.constants';
+import { getSurveyOptionLabel, normalizeSurveyAnalysisDimension, SURVEY_ANALYSIS_DIMENSIONS, SURVEY_RESPONDENT_ROLE_OPTIONS, SURVEY_SERVICE_OPTIONS, SURVEY_USAGE_FREQUENCY_OPTIONS } from '../../surveys/satisfactionSurvey.constants';
 
 type View = 'settings' | 'questions' | 'results' | 'dashboard';
 type LikertView = 'question_order' | 'improvement_priority' | 'strength';
@@ -248,7 +248,10 @@ export function SiteManagerSatisfactionSurveyEditor({
           instructions: '',
         },
       } : null);
-      setQuestions(nextBundle?.questions || []);
+      setQuestions((nextBundle?.questions || []).map((question) => ({
+        ...question,
+        dimension: surveyCode && question.question_type === 'rating_5' ? normalizeSurveyAnalysisDimension(question.dimension) : question.dimension,
+      })));
       setOptions(nextBundle?.ratingOptions || []);
       setResponsePage(0);
     } catch (error) {
@@ -621,7 +624,7 @@ export function SiteManagerSatisfactionSurveyEditor({
     setSaving(true);
     setMessage(null);
     try {
-      await saveSurveyQuestions(bundle.survey.id, questions);
+      await saveSurveyQuestions(bundle.survey.id, questions, Boolean(surveyCode));
       await saveSurveyRatingOptions(options);
       await saveSurveyContextSettings(bundle.contextSettings);
       await load(bundle.survey.id);
@@ -645,7 +648,7 @@ export function SiteManagerSatisfactionSurveyEditor({
         position: current.length + 1,
         question_type: 'rating_5',
         prompt: 'คำถามใหม่',
-        dimension: null,
+        dimension: surveyCode ? SURVEY_ANALYSIS_DIMENSIONS[0] : null,
         help_text: null,
         is_required: true,
         is_active: true,
@@ -985,10 +988,10 @@ export function SiteManagerSatisfactionSurveyEditor({
                 <div className="grid gap-3 md:grid-cols-[64px_1fr_220px]">
                   <div className="text-sm font-bold text-brand-700">ข้อ {question.position}</div>
                   <textarea disabled={structureLocked || !canManageQuestions} rows={2} value={question.prompt} onChange={(event) => setQuestions((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, prompt: event.target.value } : item))} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-50" />
-                  <input disabled={structureLocked || !canManageQuestions} value={question.dimension || ''} onChange={(event) => setQuestions((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, dimension: event.target.value || null } : item))} placeholder="มิติที่วัด" className="rounded-md border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-50" />
+                  {surveyCode ? question.question_type === 'rating_5' ? <select disabled={structureLocked || !canManageQuestions} value={question.dimension || ''} onChange={(event) => setQuestions((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, dimension: event.target.value } : item))} aria-label={`มิติที่วัดของคำถามข้อ ${question.position}`} className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm disabled:bg-slate-50"><option value="" disabled>เลือกมิติที่วัด</option>{SURVEY_ANALYSIS_DIMENSIONS.map((dimension) => <option key={dimension} value={dimension}>{dimension}</option>)}</select> : <div className="flex items-center rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-500">ไม่นำไปคำนวณคะแนนตามมิติ</div> : <input disabled={structureLocked || !canManageQuestions} value={question.dimension || ''} onChange={(event) => setQuestions((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, dimension: event.target.value || null } : item))} placeholder="มิติที่วัด" className="rounded-md border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-50" />}
                 </div>
                 <div className="mt-3 flex flex-wrap items-center gap-4 pl-0 text-xs text-slate-600 md:pl-16">
-                  <select disabled={structureLocked || !canManageQuestions} value={question.question_type} onChange={(event) => setQuestions((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, question_type: event.target.value === 'open_text' ? 'open_text' : 'rating_5' } : item))} aria-label={`รูปแบบคำตอบข้อ ${question.position}`} className="rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs disabled:bg-slate-50"><option value="rating_5">คะแนน 1–5</option><option value="open_text">ข้อเสนอแนะข้อความ</option></select>
+                  <select disabled={structureLocked || !canManageQuestions} value={question.question_type} onChange={(event) => { const questionType = event.target.value === 'open_text' ? 'open_text' : 'rating_5'; setQuestions((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, question_type: questionType, dimension: surveyCode ? questionType === 'rating_5' ? normalizeSurveyAnalysisDimension(item.dimension) || SURVEY_ANALYSIS_DIMENSIONS[0] : null : item.dimension } : item)); }} aria-label={`รูปแบบคำตอบข้อ ${question.position}`} className="rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs disabled:bg-slate-50"><option value="rating_5">คะแนน 1–5</option><option value="open_text">ข้อเสนอแนะข้อความ</option></select>
                   <label className="flex items-center gap-2"><input type="checkbox" disabled={structureLocked || !canManageQuestions} checked={question.is_required} onChange={(event) => setQuestions((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, is_required: event.target.checked } : item))} /> บังคับตอบ</label>
                   <label className="flex items-center gap-2"><input type="checkbox" disabled={structureLocked || !canManageQuestions} checked={question.is_active} onChange={(event) => setQuestions((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, is_active: event.target.checked } : item))} /> เปิดใช้คำถาม</label>
                   {canManageQuestions && !structureLocked ? <button type="button" onClick={() => setDeleteQuestionId(question.id)} title={`ลบคำถามข้อ ${question.position}`} aria-label={`ลบคำถามข้อ ${question.position}`} className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-red-200 bg-white text-red-600 hover:bg-red-50"><Trash2 className="h-4 w-4" aria-hidden="true" /></button> : null}

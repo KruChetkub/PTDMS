@@ -13,6 +13,7 @@ import type {
 import { optionalPlainTextInput, sanitizePlainTextInput } from '../../utils/inputSecurity';
 import {
   createDefaultSurveyContextSettings,
+  normalizeSurveyAnalysisDimension,
 } from './satisfactionSurvey.constants';
 
 export const SMARTDSP_SURVEY_CODE = 'smartdsp-satisfaction';
@@ -374,13 +375,16 @@ export async function saveSurveySettings(draft: SatisfactionSurveyDraft) {
   return data as SmartDspSurvey;
 }
 
-export async function saveSurveyQuestions(surveyId: string, questions: SmartDspSurveyQuestion[]) {
+export async function saveSurveyQuestions(surveyId: string, questions: SmartDspSurveyQuestion[], useStandardAnalysisDimensions = false) {
   if (questions.length > 100) throw new Error('เพิ่มคำถามได้ไม่เกิน 100 ข้อ');
   const submittedQuestions = questions.map((question, index) => {
     const prompt = sanitizePlainTextInput(question.prompt, { fieldName: `คำถามข้อ ${question.position}`, maxLength: 1000, allowNewlines: true });
-    const dimension = optionalPlainTextInput(question.dimension, { fieldName: 'มิติที่วัด', maxLength: 200, allowNewlines: false });
+    const dimension = useStandardAnalysisDimensions && question.question_type === 'rating_5'
+      ? normalizeSurveyAnalysisDimension(question.dimension)
+      : optionalPlainTextInput(question.dimension, { fieldName: 'มิติที่วัด', maxLength: 200, allowNewlines: false });
     const helpText = optionalPlainTextInput(question.help_text, { fieldName: 'คำอธิบายคำถาม', maxLength: 1000, allowNewlines: true });
     if (!prompt) throw new Error(`กรุณากรอกคำถามข้อ ${question.position}`);
+    if (useStandardAnalysisDimensions && question.question_type === 'rating_5' && !dimension) throw new Error(`กรุณาเลือกมิติที่วัดสำหรับคำถามข้อ ${question.position}`);
     return {
       id: question.id,
       position: index + 1,
