@@ -411,9 +411,11 @@ export type SmartDspSurveyRespondentContext = {
   usage_frequency: string;
   used_services: string[];
   used_services_other: string | null;
-  custom_answers: Record<string, string[]>;
+  custom_answers: Record<string, SmartDspSurveyCustomContextAnswer>;
   created_at: string;
 };
+
+export type SmartDspSurveyCustomContextAnswer = string[] | number | string;
 
 export type SmartDspSurveyContextOption = {
   value: string;
@@ -423,7 +425,7 @@ export type SmartDspSurveyContextOption = {
 export type SmartDspSurveyAdditionalContextField = {
   id: string;
   prompt: string;
-  selection_type: 'single' | 'multiple';
+  selection_type: 'single' | 'multiple' | 'rating_5' | 'open_text';
   is_required: boolean;
   is_active: boolean;
   options: SmartDspSurveyContextOption[];
@@ -759,7 +761,7 @@ export type Database = {
           usage_frequency: string;
           used_services: string[];
           used_services_other?: string | null;
-          custom_answers?: Record<string, string[]>;
+          custom_answers?: Record<string, SmartDspSurveyCustomContextAnswer>;
           created_at?: string;
         };
         Update: Partial<Omit<SmartDspSurveyRespondentContext, 'response_id' | 'created_at'>>;
@@ -1093,7 +1095,7 @@ export type Database = {
             usage_frequency: string;
             used_services: string[];
             used_services_other?: string;
-            custom_answers: Record<string, string[]>;
+            custom_answers: Record<string, SmartDspSurveyCustomContextAnswer>;
           };
           consent_record_id: string;
         };
@@ -1130,7 +1132,7 @@ export type Database = {
             usage_frequency: string;
             used_services: string[];
             used_services_other?: string;
-            custom_answers: Record<string, string[]>;
+            custom_answers: Record<string, SmartDspSurveyCustomContextAnswer>;
           };
         };
         Returns: undefined;

@@ -4,6 +4,7 @@ import type {
   SmartDspSurvey,
   SmartDspSurveyAnswer,
   SmartDspSurveyContextSettings,
+  SmartDspSurveyCustomContextAnswer,
   SmartDspSurveyQuestion,
   SmartDspSurveyRatingOption,
   SmartDspSurveyRespondentContext,
@@ -70,7 +71,7 @@ export type SurveyRespondentContextInput = {
   usage_frequency: string;
   used_services: string[];
   used_services_other?: string;
-  custom_answers: Record<string, string[]>;
+  custom_answers: Record<string, SmartDspSurveyCustomContextAnswer>;
 };
 
 export type SurveyConsentConfirmation = {
@@ -432,13 +433,17 @@ export async function saveSurveyContextSettings(settings: SmartDspSurveyContextS
     seenFieldIds.add(field.id);
     const prompt = sanitizePlainTextInput(field.prompt, { fieldName: `หัวข้อเพิ่มเติม ${index + 1}`, maxLength: 500, allowNewlines: false });
     if (!prompt) throw new Error(`กรุณากรอกชื่อหัวข้อเพิ่มเติม ${index + 1}`);
+    const selectionType = ['single', 'multiple', 'rating_5', 'open_text'].includes(field.selection_type)
+      ? field.selection_type
+      : 'single';
+    const usesOptions = selectionType === 'single' || selectionType === 'multiple';
     return {
       id: field.id,
       prompt,
-      selection_type: field.selection_type === 'multiple' ? 'multiple' as const : 'single' as const,
+      selection_type: selectionType,
       is_required: Boolean(field.is_required),
       is_active: Boolean(field.is_active),
-      options: sanitizeOptions(field.options, `ตัวเลือกของหัวข้อ “${prompt}”`),
+      options: usesOptions ? sanitizeOptions(field.options, `ตัวเลือกของหัวข้อ “${prompt}”`) : [],
     };
   });
 

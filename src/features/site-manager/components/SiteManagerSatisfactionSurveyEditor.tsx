@@ -3,7 +3,7 @@ import { BarChart3, ChevronLeft, ChevronRight, ClipboardCheck, CopyPlus, Downloa
 import { Bar, BarChart, CartesianGrid, Cell, LabelList, Legend, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { ConfirmModal } from '../../../components/ui/ConfirmModal';
 import { useAuthStore } from '../../../stores/auth.store';
-import type { SmartDspSurveyQuestion, SmartDspSurveyRatingOption, SmartDspSurveyStatus } from '../../../types/database.types';
+import type { SmartDspSurveyAdditionalContextField, SmartDspSurveyCustomContextAnswer, SmartDspSurveyQuestion, SmartDspSurveyRatingOption, SmartDspSurveyStatus } from '../../../types/database.types';
 import { cn } from '../../../utils/cn';
 import { getSafeUserErrorMessage, reportClientError } from '../../../utils/errorHandling';
 import {
@@ -117,6 +117,18 @@ function formatDistributionValue(value: unknown, respondentCount: number) {
   const percentage = respondentCount > 0 ? total / respondentCount * 100 : 0;
   const percentageLabel = Number.isInteger(percentage) ? percentage.toFixed(0) : percentage.toFixed(1);
   return `${total} คน (${percentageLabel}%)`;
+}
+
+function getCustomContextLabels(field: SmartDspSurveyAdditionalContextField, answer: SmartDspSurveyCustomContextAnswer | undefined) {
+  if (field.selection_type === 'rating_5') return typeof answer === 'number' ? [`${answer} คะแนน`] : [];
+  if (field.selection_type === 'open_text') return [];
+  return Array.isArray(answer) ? answer.map((value) => getSurveyOptionLabel(field.options, value)) : [];
+}
+
+function formatCustomContextAnswer(field: SmartDspSurveyAdditionalContextField, answer: SmartDspSurveyCustomContextAnswer | undefined) {
+  if (field.selection_type === 'rating_5') return typeof answer === 'number' ? `${answer} คะแนน` : '';
+  if (field.selection_type === 'open_text') return typeof answer === 'string' ? answer.trim() : '';
+  return getCustomContextLabels(field, answer).join(', ');
 }
 
 function ServiceAxisTick({ y = 0, payload }: { y?: number; payload?: { value?: string } }) {
@@ -374,14 +386,14 @@ export function SiteManagerSatisfactionSurveyEditor({
   const resultFrequencyDistribution = countLabels((bundle?.respondentContexts || []).map((context) => getSurveyOptionLabel(frequencyOptions, context.usage_frequency)), frequencyLabelOrder);
   const resultServiceDistribution = countLabels((bundle?.respondentContexts || []).flatMap((context) => context.used_services.map((service) => getSurveyOptionLabel(serviceOptions, service))), serviceLabelOrder);
   const additionalResultDistributions = (bundle?.contextSettings.additional_fields || [])
-    .filter((field) => field.is_active)
+    .filter((field) => field.is_active && field.selection_type !== 'open_text')
     .map((field) => ({
       title: field.prompt,
       data: countLabels(
         (bundle?.respondentContexts || []).flatMap((context) =>
-          (context.custom_answers?.[field.id] || []).map((value) => getSurveyOptionLabel(field.options, value)),
+          getCustomContextLabels(field, context.custom_answers?.[field.id]),
         ),
-        field.options.map((option) => option.label),
+        field.selection_type === 'rating_5' ? [1, 2, 3, 4, 5].map((score) => `${score} คะแนน`) : field.options.map((option) => option.label),
       ),
     }));
   const contextMissingCount = Math.max(0, (bundle?.responses.length || 0) - (bundle?.respondentContexts.length || 0));
@@ -389,18 +401,30 @@ export function SiteManagerSatisfactionSurveyEditor({
   const frequencyDistribution = addDistributionPercentage(countLabels(filteredContexts.map((context) => getSurveyOptionLabel(frequencyOptions, context.usage_frequency)), frequencyLabelOrder), filteredContexts.length);
   const serviceDistribution = addDistributionPercentage(countLabels(filteredContexts.flatMap((context) => context.used_services.map((service) => getSurveyOptionLabel(serviceOptions, service))), serviceLabelOrder), filteredContexts.length);
   const additionalDashboardDistributions = (bundle?.contextSettings.additional_fields || [])
-    .filter((field) => field.is_active)
+    .filter((field) => field.is_active && field.selection_type !== 'open_text')
     .map((field) => ({
       title: field.prompt,
       data: addDistributionPercentage(
         countLabels(
           filteredContexts.flatMap((context) =>
-            (context.custom_answers?.[field.id] || []).map((value) => getSurveyOptionLabel(field.options, value)),
+            getCustomContextLabels(field, context.custom_answers?.[field.id]),
           ),
-          field.options.map((option) => option.label),
+          field.selection_type === 'rating_5' ? [1, 2, 3, 4, 5].map((score) => `${score} คะแนน`) : field.options.map((option) => option.label),
         ),
         filteredContexts.length,
       ),
+    }));
+  const additionalResultTextAnswers = (bundle?.contextSettings.additional_fields || [])
+    .filter((field) => field.is_active && field.selection_type === 'open_text')
+    .map((field) => ({
+      title: field.prompt,
+      answers: (bundle?.respondentContexts || []).map((context) => formatCustomContextAnswer(field, context.custom_answers?.[field.id])).filter(Boolean),
+    }));
+  const additionalDashboardTextAnswers = (bundle?.contextSettings.additional_fields || [])
+    .filter((field) => field.is_active && field.selection_type === 'open_text')
+    .map((field) => ({
+      title: field.prompt,
+      answers: filteredContexts.map((context) => formatCustomContextAnswer(field, context.custom_answers?.[field.id])).filter(Boolean),
     }));
   const openTextQuestions = questions
     .filter((question) => question.question_type === 'open_text')
@@ -474,9 +498,7 @@ export function SiteManagerSatisfactionSurveyEditor({
           'ส่วนงานหรือบริการอื่น ๆ': safeExcelText(context?.used_services_other),
         };
         for (const field of bundle.contextSettings.additional_fields.filter((item) => item.is_active)) {
-          row[field.prompt] = context
-            ? (context.custom_answers?.[field.id] || []).map((value) => getSurveyOptionLabel(field.options, value)).join(', ')
-            : '';
+          row[field.prompt] = context ? safeExcelText(formatCustomContextAnswer(field, context.custom_answers?.[field.id])) : '';
         }
         for (const answer of responseAnswerMap.get(response.id) || []) {
           row[`ข้อ ${answer.question_position}`] = answer.rating_value ?? safeExcelText(answer.text_value);
@@ -888,7 +910,7 @@ export function SiteManagerSatisfactionSurveyEditor({
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <h4 className="text-sm font-semibold text-slate-900">หัวข้อข้อมูลผู้ตอบเพิ่มเติม</h4>
-                  <p className="mt-1 text-xs leading-5 text-slate-500">เพิ่มหัวข้อแบบเลือกหนึ่งข้อหรือหลายข้อ รหัสภายในจะสร้างอัตโนมัติและไม่แสดงบนหน้าจอ</p>
+                  <p className="mt-1 text-xs leading-5 text-slate-500">เพิ่มหัวข้อแบบตัวเลือก คะแนน 1–5 หรือข้อความ รหัสภายในจะสร้างอัตโนมัติและไม่แสดงบนหน้าจอ</p>
                 </div>
                 {!structureLocked ? <button type="button" onClick={addAdditionalContextField} className="inline-flex items-center gap-2 rounded-md bg-brand-700 px-3 py-2 text-sm font-semibold text-white hover:bg-brand-800"><Plus className="h-4 w-4" aria-hidden="true" /> เพิ่มหัวข้อใหม่</button> : null}
               </div>
@@ -899,14 +921,14 @@ export function SiteManagerSatisfactionSurveyEditor({
                   <section key={field.id} className="rounded-md border border-slate-200 bg-slate-50/60 p-4">
                     <div className="grid gap-3 lg:grid-cols-[minmax(280px,1fr)_180px_auto]">
                       <label className="text-xs font-medium text-slate-600">ชื่อหัวข้อ<input disabled={structureLocked} value={field.prompt} onChange={(event) => updateAdditionalContextField(fieldIndex, { prompt: event.target.value })} className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 disabled:bg-slate-100" /></label>
-                      <label className="text-xs font-medium text-slate-600">รูปแบบคำตอบ<select disabled={structureLocked} value={field.selection_type} onChange={(event) => updateAdditionalContextField(fieldIndex, { selection_type: event.target.value === 'multiple' ? 'multiple' : 'single' })} className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm disabled:bg-slate-100"><option value="single">เลือกหนึ่งข้อ</option><option value="multiple">เลือกได้หลายข้อ</option></select></label>
+                      <label className="text-xs font-medium text-slate-600">รูปแบบคำตอบ<select disabled={structureLocked} value={field.selection_type} onChange={(event) => { const selectionType = event.target.value as SmartDspSurveyAdditionalContextField['selection_type']; updateAdditionalContextField(fieldIndex, { selection_type: selectionType, options: (selectionType === 'single' || selectionType === 'multiple') && field.options.length === 0 ? [{ value: createContextKey('option'), label: 'ตัวเลือกใหม่' }] : field.options }); }} className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm disabled:bg-slate-100"><option value="single">เลือกหนึ่งข้อ</option><option value="multiple">เลือกได้หลายข้อ</option><option value="rating_5">คะแนน 1–5</option><option value="open_text">ข้อเสนอแนะข้อความ</option></select></label>
                       {!structureLocked ? <button type="button" onClick={() => removeAdditionalContextField(fieldIndex)} title="ลบหัวข้อ" className="mt-5 inline-flex h-9 w-9 items-center justify-center rounded-md border border-red-200 text-red-600 hover:bg-red-50"><Trash2 className="h-4 w-4" aria-hidden="true" /></button> : null}
                     </div>
                     <div className="mt-3 flex flex-wrap gap-5 text-xs text-slate-600">
                       <label className="flex items-center gap-2"><input type="checkbox" disabled={structureLocked} checked={field.is_required} onChange={(event) => updateAdditionalContextField(fieldIndex, { is_required: event.target.checked })} /> บังคับตอบ</label>
                       <label className="flex items-center gap-2"><input type="checkbox" disabled={structureLocked} checked={field.is_active} onChange={(event) => updateAdditionalContextField(fieldIndex, { is_active: event.target.checked })} /> เปิดใช้งาน</label>
                     </div>
-                    <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                    {field.selection_type === 'single' || field.selection_type === 'multiple' ? <><div className="mt-4 grid gap-2 sm:grid-cols-2">
                       {field.options.map((option, optionIndex) => (
                         <div key={option.value} className="flex min-w-0 items-center gap-2">
                           <input disabled={structureLocked} value={option.label} onChange={(event) => updateAdditionalContextField(fieldIndex, { options: field.options.map((item, index) => index === optionIndex ? { ...item, label: event.target.value } : item) })} className="min-w-0 flex-1 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm disabled:bg-slate-100" />
@@ -914,7 +936,7 @@ export function SiteManagerSatisfactionSurveyEditor({
                         </div>
                       ))}
                     </div>
-                    {!structureLocked ? <button type="button" onClick={() => updateAdditionalContextField(fieldIndex, { options: [...field.options, { value: createContextKey('option'), label: 'ตัวเลือกใหม่' }] })} className="mt-3 inline-flex items-center gap-2 rounded-md border border-brand-200 bg-white px-3 py-2 text-xs font-semibold text-brand-700 hover:bg-brand-50"><Plus className="h-4 w-4" aria-hidden="true" /> เพิ่มตัวเลือก</button> : null}
+                    {!structureLocked ? <button type="button" onClick={() => updateAdditionalContextField(fieldIndex, { options: [...field.options, { value: createContextKey('option'), label: 'ตัวเลือกใหม่' }] })} className="mt-3 inline-flex items-center gap-2 rounded-md border border-brand-200 bg-white px-3 py-2 text-xs font-semibold text-brand-700 hover:bg-brand-50"><Plus className="h-4 w-4" aria-hidden="true" /> เพิ่มตัวเลือก</button> : null}</> : <p className="mt-4 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs text-slate-500">{field.selection_type === 'rating_5' ? 'ผู้ตอบจะเลือกคะแนนตั้งแต่ 1 ถึง 5' : 'ผู้ตอบจะกรอกข้อความได้ไม่เกิน 4,000 ตัวอักษร'}</p>}
                   </section>
                 ))}
               </div>
@@ -942,6 +964,7 @@ export function SiteManagerSatisfactionSurveyEditor({
                 { title: bundle.contextSettings.services_prompt, data: resultServiceDistribution },
                 ...additionalResultDistributions,
               ].map((group) => <div key={group.title}><h4 className="text-xs font-semibold text-slate-600">{group.title}</h4><div className="mt-2 divide-y divide-slate-100 border-y border-slate-100">{group.data.length > 0 ? group.data.map((item) => <div key={item.name} className="flex items-start justify-between gap-3 py-2 text-sm"><span className="text-slate-700">{item.name}</span><strong className="shrink-0 text-slate-900">{item.total}</strong></div>) : <p className="py-3 text-sm text-slate-400">ยังไม่มีข้อมูล</p>}</div></div>)}
+              {additionalResultTextAnswers.map((group) => <div key={group.title} className="md:col-span-2 xl:col-span-3"><h4 className="text-xs font-semibold text-slate-600">{group.title}</h4><div className="mt-2 max-h-64 divide-y divide-slate-100 overflow-y-auto border-y border-slate-100">{group.answers.length > 0 ? group.answers.map((answer, index) => <p key={`${group.title}-${index}`} className="whitespace-pre-wrap py-2 text-sm leading-6 text-slate-700">{answer}</p>) : <p className="py-3 text-sm text-slate-400">ยังไม่มีข้อมูล</p>}</div></div>)}
             </div>
           </section>
           <div className="overflow-x-auto rounded-md border border-slate-200 bg-white"><table className="min-w-full text-left text-sm"><thead className="bg-slate-50 text-slate-600"><tr><th className="px-4 py-3">ข้อ</th><th className="px-4 py-3">มิติที่วัด</th><th className="px-4 py-3">คะแนนเฉลี่ย</th><th className="px-4 py-3">จำนวนคำตอบ</th></tr></thead><tbody className="divide-y divide-slate-100">{questions.filter((question) => question.question_type === 'rating_5').map((question) => { const values = bundle.answers.filter((answer) => answer.question_id === question.id && answer.rating_value !== null); const avg = values.length ? values.reduce((sum, answer) => sum + (answer.rating_value || 0), 0) / values.length : 0; return <tr key={question.id}><td className="px-4 py-3 font-semibold">{question.position}</td><td className="px-4 py-3">{question.dimension || question.prompt}</td><td className="px-4 py-3">{avg.toFixed(2)}</td><td className="px-4 py-3">{values.length}</td></tr>; })}</tbody></table></div>
@@ -961,7 +984,7 @@ export function SiteManagerSatisfactionSurveyEditor({
                         {respondent?.full_name || 'ไม่พบชื่อผู้ตอบ'} · {new Intl.DateTimeFormat('th-TH', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(response.submitted_at))}
                       </summary>
                       <div className="border-t border-slate-100 px-4 py-3">
-                        {context ? <div className="mb-3 grid gap-3 rounded-md bg-slate-50 p-3 text-xs text-slate-600 sm:grid-cols-2 xl:grid-cols-3"><span><strong>{bundle.contextSettings.role_prompt}:</strong> {getSurveyOptionLabel(roleOptions, context.respondent_role)}{context.respondent_role_other ? `: ${context.respondent_role_other}` : ''}</span><span><strong>{bundle.contextSettings.frequency_prompt}:</strong> {getSurveyOptionLabel(frequencyOptions, context.usage_frequency)}</span><span><strong>{bundle.contextSettings.services_prompt}:</strong> {context.used_services.map((service) => getSurveyOptionLabel(serviceOptions, service)).join(', ')}{context.used_services_other ? `: ${context.used_services_other}` : ''}</span>{bundle.contextSettings.additional_fields.filter((field) => field.is_active).map((field) => <span key={field.id}><strong>{field.prompt}:</strong> {(context.custom_answers?.[field.id] || []).map((value) => getSurveyOptionLabel(field.options, value)).join(', ') || '-'}</span>)}</div> : null}
+                        {context ? <div className="mb-3 grid gap-3 rounded-md bg-slate-50 p-3 text-xs text-slate-600 sm:grid-cols-2 xl:grid-cols-3"><span><strong>{bundle.contextSettings.role_prompt}:</strong> {getSurveyOptionLabel(roleOptions, context.respondent_role)}{context.respondent_role_other ? `: ${context.respondent_role_other}` : ''}</span><span><strong>{bundle.contextSettings.frequency_prompt}:</strong> {getSurveyOptionLabel(frequencyOptions, context.usage_frequency)}</span><span><strong>{bundle.contextSettings.services_prompt}:</strong> {context.used_services.map((service) => getSurveyOptionLabel(serviceOptions, service)).join(', ')}{context.used_services_other ? `: ${context.used_services_other}` : ''}</span>{bundle.contextSettings.additional_fields.filter((field) => field.is_active).map((field) => <span key={field.id} className="whitespace-pre-wrap"><strong>{field.prompt}:</strong> {formatCustomContextAnswer(field, context.custom_answers?.[field.id]) || '-'}</span>)}</div> : null}
                         {(answersByResponse.get(response.id) || []).map((answer) => <div key={answer.id} className="border-b border-slate-100 py-2 last:border-0"><p className="text-xs text-slate-500">ข้อ {answer.question_position}: {answer.question_prompt}</p><p className="mt-1 text-sm text-slate-800">{answer.rating_value !== null ? `${answer.rating_value} คะแนน` : answer.text_value}</p></div>)}
                       </div>
                     </details>
@@ -1035,6 +1058,7 @@ export function SiteManagerSatisfactionSurveyEditor({
                     <div><h5 className="text-center text-xs font-semibold text-slate-600">{bundle.contextSettings.frequency_prompt}</h5><div className="h-72"><ResponsiveContainer width="100%" height="100%"><BarChart data={frequencyDistribution} margin={{ top: 30, right: 10, left: -18, bottom: 42 }}><CartesianGrid strokeDasharray="3 3" vertical={false} /><XAxis dataKey="name" interval={0} angle={-24} textAnchor="end" fontSize={10} /><YAxis allowDecimals={false} fontSize={11} /><Tooltip formatter={(value) => [formatDistributionValue(value, filteredContexts.length), 'จำนวนและร้อยละ']} /><Bar dataKey="total" fill="#0d9488" radius={[4, 4, 0, 0]}><LabelList dataKey="display" position="top" fill="#334155" fontSize={12} fontWeight={600} /></Bar></BarChart></ResponsiveContainer></div></div>
                     <div className="xl:col-span-2"><h5 className="text-center text-xs font-semibold text-slate-600">{bundle.contextSettings.services_prompt}</h5><div className="mt-3 divide-y divide-slate-100 md:hidden">{serviceDistribution.map((item) => <div key={item.name} className="flex items-start justify-between gap-3 py-2 text-sm"><span className="text-slate-700">{item.name}</span><strong className="shrink-0 text-blue-700">{item.display}</strong></div>)}</div><div className="hidden md:block" style={{ height: Math.max(340, serviceDistribution.length * 46) }}><ResponsiveContainer width="100%" height="100%"><BarChart data={serviceDistribution} layout="vertical" margin={{ top: 10, right: 130, left: 0, bottom: 4 }}><CartesianGrid strokeDasharray="3 3" horizontal={false} /><XAxis type="number" allowDecimals={false} fontSize={12} /><YAxis type="category" dataKey="name" width={280} tick={<ServiceAxisTick />} /><Tooltip formatter={(value) => [formatDistributionValue(value, filteredContexts.length), 'จำนวนและร้อยละ']} /><Bar dataKey="total" fill="#0369a1" radius={[0, 4, 4, 0]}><LabelList dataKey="display" position="right" fill="#334155" fontSize={12} fontWeight={600} /></Bar></BarChart></ResponsiveContainer></div></div>
                     {additionalDashboardDistributions.map((group) => <div key={group.title} className="xl:col-span-2"><h5 className="text-center text-xs font-semibold text-slate-600">{group.title}</h5><div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">{group.data.map((item) => <div key={item.name} className="flex items-start justify-between gap-3 rounded-md border border-slate-200 px-3 py-2 text-sm"><span className="text-slate-700">{item.name}</span><strong className="shrink-0 text-blue-700">{item.display}</strong></div>)}</div></div>)}
+                    {additionalDashboardTextAnswers.map((group) => <div key={group.title} className="xl:col-span-2"><div className="flex items-center justify-between gap-3"><h5 className="text-xs font-semibold text-slate-600">{group.title}</h5><span className="text-xs text-slate-500">{group.answers.length} คำตอบ</span></div><div className="mt-3 max-h-64 divide-y divide-slate-100 overflow-y-auto rounded-md border border-slate-200 px-3">{group.answers.length > 0 ? group.answers.map((answer, index) => <p key={`${group.title}-${index}`} className="whitespace-pre-wrap py-2 text-sm leading-6 text-slate-700">{answer}</p>) : <p className="py-3 text-sm text-slate-400">ยังไม่มีข้อมูล</p>}</div></div>)}
                   </div>
                 ) : <p className="py-8 text-center text-sm text-slate-500">ยังไม่มีข้อมูลบทบาท ความถี่ และบริการในช่วงที่เลือก</p>}
               </section>

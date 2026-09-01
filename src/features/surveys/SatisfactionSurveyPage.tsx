@@ -4,6 +4,7 @@ import { Link, useParams } from 'react-router-dom';
 import { ConfirmModal } from '../../components/ui/ConfirmModal';
 import { useAuthStore } from '../../stores/auth.store';
 import { getSafeUserErrorMessage, reportClientError } from '../../utils/errorHandling';
+import type { SmartDspSurveyAdditionalContextField, SmartDspSurveyCustomContextAnswer } from '../../types/database.types';
 import type { SatisfactionSurveyBundle, SurveySubmissionAnswer } from './satisfactionSurvey.service';
 import {
   acceptSatisfactionSurveyPdpa,
@@ -29,6 +30,18 @@ function mergeSurveyDetails(description: string, instructions: string) {
   return `${details}\n\n${guidance}`;
 }
 
+function hasCustomContextAnswer(field: SmartDspSurveyAdditionalContextField, answer: SmartDspSurveyCustomContextAnswer | undefined) {
+  if (field.selection_type === 'rating_5') return typeof answer === 'number' && answer >= 1 && answer <= 5;
+  if (field.selection_type === 'open_text') return typeof answer === 'string' && answer.trim().length > 0;
+  return Array.isArray(answer) && answer.length > 0;
+}
+
+function formatCustomContextAnswer(field: SmartDspSurveyAdditionalContextField, answer: SmartDspSurveyCustomContextAnswer | undefined) {
+  if (field.selection_type === 'rating_5') return typeof answer === 'number' ? `${answer} คะแนน` : 'ไม่มีข้อมูล';
+  if (field.selection_type === 'open_text') return typeof answer === 'string' && answer.trim() ? answer : 'ไม่มีข้อมูล';
+  return Array.isArray(answer) ? answer.map((value) => getSurveyOptionLabel(field.options, value)).join(', ') || 'ไม่มีข้อมูล' : 'ไม่มีข้อมูล';
+}
+
 export function SatisfactionSurveyPage() {
   const { surveyCode } = useParams<{ surveyCode?: string }>();
   const surveyConfig = getSystemSurveyConfig(surveyCode);
@@ -41,7 +54,7 @@ export function SatisfactionSurveyPage() {
   const [usageFrequency, setUsageFrequency] = useState('');
   const [usedServices, setUsedServices] = useState<string[]>([]);
   const [usedServicesOther, setUsedServicesOther] = useState('');
-  const [customContextAnswers, setCustomContextAnswers] = useState<Record<string, string[]>>({});
+  const [customContextAnswers, setCustomContextAnswers] = useState<Record<string, SmartDspSurveyCustomContextAnswer>>({});
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [acceptingPdpa, setAcceptingPdpa] = useState(false);
@@ -120,10 +133,10 @@ export function SatisfactionSurveyPage() {
       return false;
     }
     const missingCustomField = bundle?.contextSettings.additional_fields.find((field) => (
-      field.is_active && field.is_required && (customContextAnswers[field.id]?.length || 0) === 0
+      field.is_active && field.is_required && !hasCustomContextAnswer(field, customContextAnswers[field.id])
     ));
     if (missingCustomField) {
-      setMessage(`กรุณาเลือกคำตอบสำหรับ “${missingCustomField.prompt}”`);
+      setMessage(`กรุณาตอบ “${missingCustomField.prompt}”`);
       return false;
     }
     setMessage(null);
@@ -293,7 +306,7 @@ export function SatisfactionSurveyPage() {
                   {bundle.contextSettings.additional_fields.filter((field) => field.is_active).map((field) => (
                     <div key={field.id}>
                       <dt className="text-xs font-semibold text-slate-500">{field.prompt}</dt>
-                      <dd className="mt-1 text-sm leading-6 text-slate-800">{(bundle.ownContext?.custom_answers?.[field.id] || []).map((value) => getSurveyOptionLabel(field.options, value)).join(', ') || 'ไม่มีข้อมูล'}</dd>
+                      <dd className="mt-1 whitespace-pre-wrap text-sm leading-6 text-slate-800">{formatCustomContextAnswer(field, bundle.ownContext?.custom_answers?.[field.id])}</dd>
                     </div>
                   ))}
                 </dl>
@@ -322,36 +335,34 @@ export function SatisfactionSurveyPage() {
                     {usedServices.includes('other') ? <input value={usedServicesOther} onChange={(event) => setUsedServicesOther(event.target.value)} maxLength={500} placeholder="โปรดระบุส่วนงานหรือบริการ" className="mt-3 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:ring-2 focus:ring-brand-100" /> : null}
                   </fieldset>
 
-                  {bundle.contextSettings.additional_fields.filter((field) => field.is_active).map((field) => (
-                    <fieldset key={field.id}>
-                      <legend className="text-sm font-semibold text-slate-800">{field.prompt} {field.is_required ? <span className="text-red-600">*</span> : null}</legend>
-                      <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                        {field.options.map((option) => {
-                          const selectedValues = customContextAnswers[field.id] || [];
-                          const checked = selectedValues.includes(option.value);
-                          return (
-                            <label key={option.value} className={`flex min-h-11 cursor-pointer items-center gap-3 rounded-md border px-3 py-2 text-sm ${checked ? 'border-violet-500 bg-violet-50 text-violet-800' : 'border-slate-200 text-slate-700 hover:border-violet-300'}`}>
-                              <input
-                                type={field.selection_type === 'single' ? 'radio' : 'checkbox'}
-                                name={`context-${field.id}`}
-                                checked={checked}
-                                onChange={(event) => setCustomContextAnswers((current) => ({
-                                  ...current,
-                                  [field.id]: field.selection_type === 'single'
-                                    ? [option.value]
-                                    : event.target.checked
-                                      ? [...(current[field.id] || []), option.value]
-                                      : (current[field.id] || []).filter((value) => value !== option.value),
-                                }))}
-                                className="h-4 w-4"
-                              />
-                              {option.label}
-                            </label>
-                          );
-                        })}
-                      </div>
-                    </fieldset>
-                  ))}
+                  {bundle.contextSettings.additional_fields.filter((field) => field.is_active).map((field) => {
+                    const currentAnswer = customContextAnswers[field.id];
+                    return (
+                      <fieldset key={field.id}>
+                        <legend className="text-sm font-semibold text-slate-800">{field.prompt} {field.is_required ? <span className="text-red-600">*</span> : null}</legend>
+                        {field.selection_type === 'rating_5' ? (
+                          <div className="mt-3 grid grid-cols-5 gap-2">
+                            {[1, 2, 3, 4, 5].map((score) => <button key={score} type="button" onClick={() => setCustomContextAnswers((current) => ({ ...current, [field.id]: score }))} className={`min-h-11 rounded-md border text-sm font-semibold ${currentAnswer === score ? 'border-brand-600 bg-brand-50 text-brand-800' : 'border-slate-200 bg-white text-slate-700 hover:border-brand-300'}`} aria-pressed={currentAnswer === score}>{score}</button>)}
+                          </div>
+                        ) : field.selection_type === 'open_text' ? (
+                          <textarea value={typeof currentAnswer === 'string' ? currentAnswer : ''} onChange={(event) => setCustomContextAnswers((current) => ({ ...current, [field.id]: event.target.value }))} rows={4} maxLength={4000} placeholder="กรอกความคิดเห็นหรือข้อเสนอแนะ" className="mt-3 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:ring-2 focus:ring-brand-100" />
+                        ) : (
+                          <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                            {field.options.map((option) => {
+                              const selectedValues = Array.isArray(currentAnswer) ? currentAnswer : [];
+                              const checked = selectedValues.includes(option.value);
+                              return (
+                                <label key={option.value} className={`flex min-h-11 cursor-pointer items-center gap-3 rounded-md border px-3 py-2 text-sm ${checked ? 'border-violet-500 bg-violet-50 text-violet-800' : 'border-slate-200 text-slate-700 hover:border-violet-300'}`}>
+                                  <input type={field.selection_type === 'single' ? 'radio' : 'checkbox'} name={`context-${field.id}`} checked={checked} onChange={(event) => setCustomContextAnswers((current) => ({ ...current, [field.id]: field.selection_type === 'single' ? [option.value] : event.target.checked ? [...selectedValues, option.value] : selectedValues.filter((value) => value !== option.value) }))} className="h-4 w-4" />
+                                  {option.label}
+                                </label>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </fieldset>
+                    );
+                  })}
                 </div>
               )}
             </section>
