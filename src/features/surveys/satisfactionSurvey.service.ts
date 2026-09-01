@@ -374,20 +374,30 @@ export async function saveSurveySettings(draft: SatisfactionSurveyDraft) {
   return data as SmartDspSurvey;
 }
 
-export async function saveSurveyQuestions(questions: SmartDspSurveyQuestion[]) {
-  for (const question of questions) {
+export async function saveSurveyQuestions(surveyId: string, questions: SmartDspSurveyQuestion[]) {
+  if (questions.length > 100) throw new Error('เพิ่มคำถามได้ไม่เกิน 100 ข้อ');
+  const submittedQuestions = questions.map((question, index) => {
     const prompt = sanitizePlainTextInput(question.prompt, { fieldName: `คำถามข้อ ${question.position}`, maxLength: 1000, allowNewlines: true });
     const dimension = optionalPlainTextInput(question.dimension, { fieldName: 'มิติที่วัด', maxLength: 200, allowNewlines: false });
     const helpText = optionalPlainTextInput(question.help_text, { fieldName: 'คำอธิบายคำถาม', maxLength: 1000, allowNewlines: true });
     if (!prompt) throw new Error(`กรุณากรอกคำถามข้อ ${question.position}`);
+    return {
+      id: question.id,
+      position: index + 1,
+      question_type: question.question_type,
+      prompt,
+      dimension,
+      help_text: helpText,
+      is_required: Boolean(question.is_required),
+      is_active: Boolean(question.is_active),
+    };
+  });
 
-    const { error } = await supabase
-      .from('smartdsp_survey_questions')
-      .update({ prompt, dimension, help_text: helpText, is_required: question.is_required, is_active: question.is_active })
-      .eq('id', question.id);
-
-    if (error) throw new Error(`บันทึกคำถามข้อ ${question.position} ไม่สำเร็จ: ${error.message}`);
-  }
+  const { error } = await supabase.rpc('save_smartdsp_survey_questions', {
+    target_survey_id: surveyId,
+    submitted_questions: submittedQuestions,
+  });
+  if (error) throw new Error(`บันทึกคำถามไม่สำเร็จ: ${error.message}`);
 }
 
 export async function saveSurveyRatingOptions(options: SmartDspSurveyRatingOption[]) {

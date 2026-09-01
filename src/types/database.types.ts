@@ -1081,6 +1081,22 @@ export type Database = {
         };
         Returns: string;
       };
+      save_smartdsp_survey_questions: {
+        Args: {
+          target_survey_id: string;
+          submitted_questions: Array<{
+            id: string;
+            position: number;
+            question_type: SmartDspSurveyQuestionType;
+            prompt: string;
+            dimension?: string | null;
+            help_text?: string | null;
+            is_required: boolean;
+            is_active: boolean;
+          }>;
+        };
+        Returns: undefined;
+      };
       submit_smartdsp_survey_with_context: {
         Args: {
           target_survey_id: string;
