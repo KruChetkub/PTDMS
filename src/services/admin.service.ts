@@ -7,6 +7,7 @@ import type { UserRole, ProfileStatus } from '../types/roles';
 
 export type UserManagementProfile = Profile & {
   email: string | null;
+  mfa_enabled?: boolean;
 };
 
 export async function listAllUsers() {
@@ -14,6 +15,14 @@ export async function listAllUsers() {
 
   if (error) throw error;
   return data as UserManagementProfile[];
+}
+
+export async function adminResetUserMfa(userId: string) {
+  const { error } = await (supabase as any).rpc('admin_reset_user_mfa', {
+    target_user_id: userId,
+  });
+
+  if (error) throw error;
 }
 
 export async function listUserPermissionAssignments(permissionKey: string) {

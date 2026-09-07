@@ -6,6 +6,8 @@ import {
   Download,
   MoreVertical,
   Search,
+  ShieldAlert,
+  ShieldCheck,
   Trash2,
   Upload,
   UserCheck,
@@ -15,7 +17,18 @@ import {
 import { PageHeader } from '../../components/ui/PageHeader';
 import { useAuditPageAccess } from '../../hooks/useAuditPageAccess';
 import { ConfirmModal } from '../../components/ui/ConfirmModal';
-import { createManagedUser, listAllUsers, listUserPermissionAssignments, setUserPermission, updateUserDetails, updateUserRole, updateUserStatus, deleteUser, updateUserEmail } from '../../services/admin.service';
+import {
+  adminResetUserMfa,
+  createManagedUser,
+  listAllUsers,
+  listUserPermissionAssignments,
+  setUserPermission,
+  updateUserDetails,
+  updateUserRole,
+  updateUserStatus,
+  deleteUser,
+  updateUserEmail,
+} from '../../services/admin.service';
 import { recordAuditLog } from '../../services/audit.service';
 import type { UpdateUserDetailsPayload, UserManagementProfile } from '../../services/admin.service';
 import type { Profile } from '../../types/database.types';
@@ -523,6 +536,16 @@ export function UserManagementPage() {
     userId: '',
     fullName: '',
   });
+  const [mfaResetModal, setMfaResetModal] = useState<{
+    isOpen: boolean;
+    user: UserManagementProfile | null;
+    loading: boolean;
+  }>({
+    isOpen: false,
+    user: null,
+    loading: false,
+  });
+  const [mfaSuccessMessage, setMfaSuccessMessage] = useState<string | null>(null);
   const [createModal, setCreateModal] = useState<{ isOpen: boolean; form: CreateFormState; error: string | null }>({
     isOpen: false,
     form: getEmptyCreateForm('personnel'),
@@ -551,6 +574,7 @@ export function UserManagementPage() {
   const currentProfile = useAuthStore((state) => state.profile);
   const currentRole = currentProfile?.role;
   const canManageRoleAndStatus = currentRole === 'super_admin' || currentRole === 'admin';
+  const canResetMfa = currentRole === 'super_admin' || currentRole === 'admin';
   const canCreateUsers = currentRole === 'super_admin' || currentRole === 'admin' || currentRole === 'hr';
   const canManageUsers = currentRole === 'super_admin' || currentRole === 'admin' || currentRole === 'hr';
   const canUseBulkUserTools = currentRole === 'super_admin' || currentRole === 'admin';
@@ -686,6 +710,57 @@ export function UserManagementPage() {
       void recordAuditLog({ module: 'user_management', action: 'user_delete_error', route: '/admin/users', targetType: 'user', targetId: deleteModal.userId, status: 'fail', errorMessage: getErrorMessage(err, 'delete_user_error') });
     } finally {
       setUpdating(null);
+    }
+  };
+
+  const handleOpenResetMfa = (user: UserManagementProfile) => {
+    setMfaSuccessMessage(null);
+    setError(null);
+    setMfaResetModal({
+      isOpen: true,
+      user,
+      loading: false,
+    });
+  };
+
+  const handleConfirmResetMfa = async () => {
+    if (!currentUser || !mfaResetModal.user) return;
+    const target = mfaResetModal.user;
+    setMfaResetModal((prev) => ({ ...prev, loading: true }));
+    try {
+      await adminResetUserMfa(target.user_id);
+      void recordAuditLog({
+        module: 'user_management',
+        action: 'user_reset_mfa',
+        route: '/admin/users',
+        targetType: 'user',
+        targetId: target.user_id,
+        metadata: {
+          target_email: target.email ?? null,
+          target_name: target.full_name,
+          reset_by_role: currentRole,
+        },
+      });
+      setUsers((prev) =>
+        prev.map((u) =>
+          u.user_id === target.user_id ? { ...u, mfa_enabled: false } : u
+        )
+      );
+      setMfaResetModal({ isOpen: false, user: null, loading: false });
+      setMfaSuccessMessage(`รีเซ็ต 2-Step Verification สำหรับ "${target.full_name}" สำเร็จแล้ว ผู้ใช้สามารถเข้าสู่ระบบด้วยรหัสผ่านได้ทันที`);
+      setTimeout(() => setMfaSuccessMessage(null), 6000);
+    } catch (err: any) {
+      setError(getSafeUserErrorMessage(err, 'ไม่สามารถรีเซ็ต 2-Step Verification ได้'));
+      void recordAuditLog({
+        module: 'user_management',
+        action: 'user_reset_mfa_error',
+        route: '/admin/users',
+        targetType: 'user',
+        targetId: target.user_id,
+        status: 'fail',
+        errorMessage: getErrorMessage(err, 'mfa_reset_error'),
+      });
+      setMfaResetModal((prev) => ({ ...prev, loading: false }));
     }
   };
 
@@ -1146,6 +1221,12 @@ export function UserManagementPage() {
       </div>
 
       {error && <div className="rounded-md bg-red-50 p-4 text-sm text-red-600">{error}</div>}
+      {mfaSuccessMessage && (
+        <div className="flex items-center gap-2 rounded-md bg-emerald-50 border border-emerald-200 p-4 text-sm text-emerald-800">
+          <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0" />
+          <span>{mfaSuccessMessage}</span>
+        </div>
+      )}
 
       <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
@@ -1200,27 +1281,40 @@ export function UserManagementPage() {
                       </select>
                     </td>
                     <td className="px-6 py-4">
-                      <div className="flex items-center gap-2">
-                        {u.status === 'active' ? (
-                          <span className="flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-700">
-                            <UserCheck className="h-3 w-3" /> Active
-                          </span>
-                        ) : u.status === 'pending' ? (
-                          <span className="flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-700">
-                            <Clock className="h-3 w-3" /> Pending
+                      <div className="flex flex-col gap-1.5">
+                        <div className="flex items-center gap-2">
+                          {u.status === 'active' ? (
+                            <span className="flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-700">
+                              <UserCheck className="h-3 w-3" /> Active
+                            </span>
+                          ) : u.status === 'pending' ? (
+                            <span className="flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-700">
+                              <Clock className="h-3 w-3" /> Pending
+                            </span>
+                          ) : (
+                            <span className="flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-600">
+                              <UserX className="h-3 w-3" /> Inactive
+                            </span>
+                          )}
+                          {canManageRoleAndStatus && (
+                            <button
+                              onClick={() => handleStatusChange(u.user_id, u.status === 'active' ? 'inactive' : 'active')}
+                              className="text-[10px] text-brand-600 hover:underline font-bold"
+                            >
+                              {u.status === 'pending' ? 'Approve' : u.status === 'active' ? 'Disable' : 'Enable'}
+                            </button>
+                          )}
+                        </div>
+                        {u.mfa_enabled ? (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-700" title="เปิดใช้งาน 2-Step Verification แล้ว">
+                            <ShieldCheck className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                            <span>2FA เปิดใช้งาน</span>
                           </span>
                         ) : (
-                          <span className="flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-600">
-                            <UserX className="h-3 w-3" /> Inactive
+                          <span className="inline-flex items-center gap-1 text-[11px] text-slate-400" title="ยังไม่ได้เปิดใช้งาน 2-Step Verification">
+                            <ShieldAlert className="h-3.5 w-3.5 text-slate-300 shrink-0" />
+                            <span>2FA ปิดอยู่</span>
                           </span>
-                        )}
-                        {canManageRoleAndStatus && (
-                          <button
-                            onClick={() => handleStatusChange(u.user_id, u.status === 'active' ? 'inactive' : 'active')}
-                            className="text-[10px] text-brand-600 hover:underline font-bold"
-                          >
-                            {u.status === 'pending' ? 'Approve' : u.status === 'active' ? 'Disable' : 'Enable'}
-                          </button>
                         )}
                       </div>
                     </td>
@@ -1238,7 +1332,17 @@ export function UserManagementPage() {
                       )}
                     </td>
                     <td className="px-6 py-4 text-right">
-                      <div className="flex justify-end gap-2">
+                      <div className="flex justify-end items-center gap-2">
+                        {canResetMfa && u.mfa_enabled && !(currentRole === 'admin' && u.role === 'super_admin') && (
+                          <button
+                            onClick={() => handleOpenResetMfa(u)}
+                            className="inline-flex items-center gap-1 rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-800 hover:bg-amber-100 hover:border-amber-300 transition"
+                            title="รีเซ็ตการยืนยันตัวตน 2 ขั้นตอน (Google Authenticator)"
+                          >
+                            <ShieldAlert className="h-3.5 w-3.5 text-amber-600 shrink-0" />
+                            รีเซ็ต 2FA
+                          </button>
+                        )}
                         <button
                           onClick={() => handleOpenEdit(u)}
                           className="rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-700 hover:bg-slate-50"
@@ -1276,6 +1380,32 @@ export function UserManagementPage() {
         confirmLabel="ลบผู้ใช้งาน"
         isLoading={updating === deleteModal.userId}
         variant="danger"
+      />
+
+      <ConfirmModal
+        isOpen={mfaResetModal.isOpen}
+        onClose={() => setMfaResetModal({ isOpen: false, user: null, loading: false })}
+        onConfirm={handleConfirmResetMfa}
+        title="ยืนยันการรีเซ็ต 2-Step Verification (2FA)"
+        variant="warning"
+        confirmLabel="รีเซ็ต 2FA ทันที"
+        cancelLabel="ยกเลิก"
+        isLoading={mfaResetModal.loading}
+        message={
+          <div className="space-y-3 text-left">
+            <p className="text-slate-600 text-sm">
+              คุณกำลังจะรีเซ็ตการยืนยันตัวตน 2 ขั้นตอนของ:
+            </p>
+            <div className="rounded-lg bg-slate-50 border border-slate-200 p-3 text-xs space-y-1">
+              <div><span className="font-semibold text-slate-700">ชื่อ-นามสกุล:</span> {mfaResetModal.user?.full_name}</div>
+              <div><span className="font-semibold text-slate-700">อีเมล:</span> {mfaResetModal.user?.email || '-'}</div>
+              <div><span className="font-semibold text-slate-700">สิทธิ์:</span> {mfaResetModal.user?.role ? roleLabels[mfaResetModal.user.role] : '-'}</div>
+            </div>
+            <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 text-xs text-amber-800 leading-relaxed">
+              ⚠️ หลังจากรีเซ็ต ข้อมูล Google Authenticator (TOTP) ของผู้ใช้รายนี้จะถูกลบทั้งหมด ผู้ใช้จะสามารถเข้าสู่ระบบด้วยอีเมลและรหัสผ่านได้ทันที และสามารถตั้งค่า 2FA ใหม่ได้ในหน้าการตั้งค่าบัญชี
+            </div>
+          </div>
+        }
       />
 
       <ConfirmModal
