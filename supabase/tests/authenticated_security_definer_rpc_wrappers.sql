@@ -1,5 +1,6 @@
 -- Static security contract for CSV v2 SECURITY DEFINER remediation.
--- Run after applying 202609070005_harden_authenticated_security_definer_rpcs.sql.
+-- Run after applying 202609070005_harden_authenticated_security_definer_rpcs.sql
+-- and 202609070011_restrict_trigger_helper_execute.sql.
 
 do $block$
 declare
@@ -11,15 +12,11 @@ declare
     'public.complete_forced_password_change()',
     'public.complete_smartdsp_survey_respondent_context(uuid,jsonb)',
     'public.create_training_record_with_details(uuid,text,text,text,text,date,integer,text,text,text,text,text)',
-    'public.current_user_role()',
     'public.delete_smartdsp_survey_response(uuid)',
     'public.delete_user(uuid)',
     'public.generate_spd_service_ticket_no(text,date)',
     'public.get_spd_assistant_page_context(text)',
     'public.get_spd_service_ai_chatgpt_booking_calendar(date,date)',
-    'public.has_permission(text)',
-    'public.increment_audit_log_retry_count(uuid[])',
-    'public.is_privileged_role(public.user_role[])',
     'public.list_force_password_change_users()',
     'public.list_my_permissions()',
     'public.list_user_management_profiles()',
@@ -28,7 +25,6 @@ declare
     'public.search_spd_assistant_knowledge(text,text,text,integer)',
     'public.set_force_password_change(uuid[],boolean)',
     'public.set_user_permission(uuid,text,boolean)',
-    'public.spd_assistant_match_role(public.user_role[])',
     'public.submit_smartdsp_survey_with_context(uuid,jsonb,jsonb,uuid)',
     'public.update_own_profile_details(text,text,text,text,text,text,text,date,text)',
     'public.update_own_profile_details(text,text,text,text,text,text,text,date,date,text)',
@@ -123,3 +119,7 @@ begin
   end if;
 end;
 $block$;
+
+select
+  'PASS' as result,
+  'authenticated RPC wrappers remain invoker-only and correctly granted' as check_name;

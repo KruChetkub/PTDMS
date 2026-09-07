@@ -1,5 +1,7 @@
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.47.10';
+import { readJsonObject, RequestBodyError } from '../_shared/request-security.ts';
+import { consumeRateLimit, rateLimitHeaders, type RateLimitClient } from '../_shared/rate-limit.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': Deno.env.get('SMARTDSP_ALLOWED_ORIGIN') ?? 'https://ptdms.vercel.app',
@@ -26,14 +28,18 @@ type MeetingRoomReservation = {
   created_at: string;
 };
 
+function isUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
 function escapeHtml(value: string | null | undefined) {
   return (value || '-').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-function jsonResponse(body: unknown, status = 200) {
+function jsonResponse(body: unknown, status = 200, extraHeaders: HeadersInit = {}) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    headers: { ...corsHeaders, 'Content-Type': 'application/json', ...extraHeaders },
   });
 }
 
@@ -116,13 +122,36 @@ serve(async (req) => {
       return jsonResponse({ sent: false, reason: 'unauthorized' }, 401);
     }
 
-    const body = await req.json();
-    const reservationId = typeof body.reservationId === 'string' ? body.reservationId : '';
-    if (body.event !== 'reservation_created' || !reservationId) {
+    let body: Record<string, unknown>;
+    try {
+      body = await readJsonObject(req, 4 * 1024);
+    } catch (error) {
+      if (error instanceof RequestBodyError) {
+        return jsonResponse({ sent: false, reason: error.reason }, error.status);
+      }
+      throw error;
+    }
+    const reservationId = typeof body.reservationId === 'string' ? body.reservationId.trim() : '';
+    if (body.event !== 'reservation_created' || !isUuid(reservationId)) {
       return jsonResponse({ sent: false, reason: 'invalid_payload' }, 400);
     }
 
     const adminClient = createClient(supabaseUrl, supabaseServiceRoleKey, { auth: { persistSession: false } });
+    const rateLimit = await consumeRateLimit(
+      adminClient as unknown as RateLimitClient,
+      'meeting-room-telegram-notify',
+      user.id,
+      20,
+      5 * 60,
+    );
+    if (!rateLimit.allowed) {
+      return jsonResponse(
+        { sent: false, reason: 'rate_limited' },
+        429,
+        rateLimitHeaders(rateLimit),
+      );
+    }
+
     const [{ data: reservation, error: reservationError }, { data: profile, error: profileError }] = await Promise.all([
       adminClient.from('meeting_room_reservations').select('*').eq('id', reservationId).single(),
       adminClient.from('profiles').select('user_id, full_name, role').eq('user_id', user.id).single(),
@@ -173,11 +202,15 @@ serve(async (req) => {
     });
     const telegramResult = await telegramResponse.json();
     if (!telegramResponse.ok) {
-      return jsonResponse({ sent: false, reason: 'telegram_api_error', telegramResult });
+      console.error('Meeting room Telegram API error', {
+        status: telegramResponse.status,
+        result: telegramResult,
+      });
+      return jsonResponse({ sent: false, reason: 'telegram_api_error' }, 502);
     }
     return jsonResponse({ sent: true, telegramMessageId: telegramResult.result?.message_id || null });
   } catch (error) {
     console.error('Meeting room Telegram notification failed:', error);
-    return jsonResponse({ sent: false, reason: 'internal_error' });
+    return jsonResponse({ sent: false, reason: 'internal_error' }, 500);
   }
 });

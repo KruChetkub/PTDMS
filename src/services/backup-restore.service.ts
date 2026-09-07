@@ -63,6 +63,8 @@ function getBackupRestoreErrorMessage(reason?: string | null) {
   if (reason === 'missing_backup_folder_id') return 'กรุณาระบุ Google Drive Folder ของ Backup';
   if (reason === 'storage_manifest_not_found') return 'ไม่พบไฟล์ storage-manifest.json ในโฟลเดอร์ Backup นี้';
   if (reason === 'restore_payload_size_limit') return 'ไฟล์ Storage มีขนาดรวมเกินขีดจำกัดต่อครั้ง กรุณาแบ่ง Restore เป็นชุดเล็กลง';
+  if (reason === 'payload_too_large') return 'ข้อมูลที่ส่งมีขนาดเกินขีดจำกัด';
+  if (reason === 'operation_failed') return 'ระบบ Backup / Restore ทำงานไม่สำเร็จ กรุณาตรวจ Server Logs';
   return reason;
 }
 

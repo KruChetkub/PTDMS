@@ -1,5 +1,7 @@
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.47.10';
+import { readJsonObject, RequestBodyError } from '../_shared/request-security.ts';
+import { consumeRateLimit, rateLimitHeaders, type RateLimitClient } from '../_shared/rate-limit.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': Deno.env.get('SMARTDSP_ALLOWED_ORIGIN') ?? 'https://ptdms.vercel.app',
@@ -14,15 +16,19 @@ type Profile = {
   status: string;
 };
 
-function jsonResponse(body: Record<string, unknown>, status = 200) {
+function jsonResponse(body: Record<string, unknown>, status = 200, extraHeaders: HeadersInit = {}) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    headers: { ...corsHeaders, 'Content-Type': 'application/json', ...extraHeaders },
   });
 }
 
 function isValidEmail(value: string) {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+  return value.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
+function isUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
 
 serve(async (req) => {
@@ -61,11 +67,19 @@ serve(async (req) => {
       return jsonResponse({ error: 'unauthorized' }, 401);
     }
 
-    const body = await req.json().catch(() => ({}));
+    let body: Record<string, unknown>;
+    try {
+      body = await readJsonObject(req, 4 * 1024);
+    } catch (error) {
+      if (error instanceof RequestBodyError) {
+        return jsonResponse({ error: error.reason }, error.status);
+      }
+      throw error;
+    }
     const userId = typeof body.userId === 'string' ? body.userId.trim() : '';
     const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
 
-    if (!userId || !isValidEmail(email)) {
+    if (!isUuid(userId) || !isValidEmail(email)) {
       return jsonResponse({ error: 'invalid_payload' }, 400);
     }
 
@@ -74,6 +88,17 @@ serve(async (req) => {
         persistSession: false,
       },
     });
+
+    const rateLimit = await consumeRateLimit(
+      adminClient as unknown as RateLimitClient,
+      'update-user-email',
+      user.id,
+      10,
+      15 * 60,
+    );
+    if (!rateLimit.allowed) {
+      return jsonResponse({ error: 'rate_limited' }, 429, rateLimitHeaders(rateLimit));
+    }
 
     const [{ data: callerProfile, error: callerError }, { data: targetProfile, error: targetError }] = await Promise.all([
       adminClient.from('profiles').select('user_id, role, status').eq('user_id', user.id).single(),

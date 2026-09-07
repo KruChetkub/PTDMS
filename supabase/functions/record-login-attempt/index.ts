@@ -1,5 +1,7 @@
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.47.10';
+import { readJsonObject, RequestBodyError } from '../_shared/request-security.ts';
+import { consumeRateLimit, rateLimitHeaders, type RateLimitClient } from '../_shared/rate-limit.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': Deno.env.get('SMARTDSP_ALLOWED_ORIGIN') ?? 'https://ptdms.vercel.app',
@@ -15,10 +17,10 @@ type LoginAttemptBody = {
   userAgent?: unknown;
 };
 
-function jsonResponse(body: Record<string, unknown>, status = 200) {
+function jsonResponse(body: Record<string, unknown>, status = 200, extraHeaders: HeadersInit = {}) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    headers: { ...corsHeaders, 'Content-Type': 'application/json', ...extraHeaders },
   });
 }
 
@@ -36,9 +38,9 @@ function stringOrNull(value: unknown, maxLength = 255) {
 }
 
 function normalizeEmail(value: unknown) {
-  const email = stringOrNull(value, 320)?.toLowerCase() ?? null;
+  const email = stringOrNull(value, 254)?.toLowerCase() ?? null;
 
-  if (!email || !email.includes('@')) {
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return null;
   }
 
@@ -73,7 +75,15 @@ serve(async (req) => {
     return jsonResponse({ logged: false, reason: 'missing_environment' }, 500);
   }
 
-  const body = await req.json().catch(() => ({})) as LoginAttemptBody;
+  let body: LoginAttemptBody;
+  try {
+    body = await readJsonObject(req, 4 * 1024) as LoginAttemptBody;
+  } catch (error) {
+    if (error instanceof RequestBodyError) {
+      return jsonResponse({ logged: false, reason: error.reason }, error.status);
+    }
+    throw error;
+  }
   const success = body.success === true;
   const email = normalizeEmail(body.email);
   const errorMessage = success ? null : stringOrNull(body.errorMessage, 160);
@@ -83,6 +93,38 @@ serve(async (req) => {
   const adminClient = createClient(supabaseUrl, supabaseServiceRoleKey, {
     auth: { persistSession: false },
   });
+
+  if (!success) {
+    const failedAttemptLimits = await Promise.all([
+      consumeRateLimit(
+        adminClient as unknown as RateLimitClient,
+        'record-login-attempt:failed-ip',
+        ipAddress ?? 'unknown',
+        60,
+        5 * 60,
+      ),
+      consumeRateLimit(
+        adminClient as unknown as RateLimitClient,
+        'record-login-attempt:failed-account',
+        email ?? 'unknown',
+        20,
+        5 * 60,
+      ),
+    ]).catch(() => null);
+
+    if (!failedAttemptLimits) {
+      return jsonResponse({ logged: false, reason: 'rate_limit_unavailable' }, 503);
+    }
+
+    const deniedLimit = failedAttemptLimits.find((result) => !result.allowed);
+    if (deniedLimit) {
+      return jsonResponse(
+        { logged: false, reason: 'rate_limited' },
+        429,
+        rateLimitHeaders(deniedLimit),
+      );
+    }
+  }
 
   let user: { id: string; email?: string | null } | null = null;
   let profile: { user_id: string; full_name: string | null; role: string | null } | null = null;
@@ -99,6 +141,24 @@ serve(async (req) => {
 
     if (userError || !user) {
       return jsonResponse({ logged: false, reason: 'unauthorized' }, 401);
+    }
+
+    const successfulAttemptLimit = await consumeRateLimit(
+      adminClient as unknown as RateLimitClient,
+      'record-login-attempt:success',
+      user.id,
+      30,
+      5 * 60,
+    ).catch(() => null);
+    if (!successfulAttemptLimit) {
+      return jsonResponse({ logged: false, reason: 'rate_limit_unavailable' }, 503);
+    }
+    if (!successfulAttemptLimit.allowed) {
+      return jsonResponse(
+        { logged: false, reason: 'rate_limited' },
+        429,
+        rateLimitHeaders(successfulAttemptLimit),
+      );
     }
 
     const { data: profileData } = await adminClient

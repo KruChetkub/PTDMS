@@ -1,5 +1,7 @@
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.47.10';
+import { readJsonObject, RequestBodyError } from '../_shared/request-security.ts';
+import { consumeRateLimit, rateLimitHeaders, type RateLimitClient } from '../_shared/rate-limit.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': Deno.env.get('SMARTDSP_ALLOWED_ORIGIN') ?? 'https://ptdms.vercel.app',
@@ -40,6 +42,16 @@ const backupTables = [
   'public_visit_sessions',
   'public_page_views',
 ] as const;
+
+const backupStorageBuckets = [
+  'site-content-assets',
+  'spd-assistant-imports',
+  'spd-service-request-guides',
+] as const;
+
+const backupStorageBucketSet = new Set<string>(backupStorageBuckets);
+const maxRestoreRowsPerTable = 100_000;
+const maxRestoreRowsTotal = 250_000;
 
 type BackupTableName = typeof backupTables[number];
 
@@ -86,10 +98,10 @@ type StorageRestoreResponse = {
   error?: string;
 };
 
-function jsonResponse(body: Record<string, unknown>, status = 200) {
+function jsonResponse(body: Record<string, unknown>, status = 200, extraHeaders: HeadersInit = {}) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    headers: { ...corsHeaders, 'Content-Type': 'application/json', ...extraHeaders },
   });
 }
 
@@ -134,7 +146,8 @@ async function authorizeBackupRequest(req: Request, adminClient: ReturnType<type
     .maybeSingle();
 
   if (profileError) {
-    return { authorized: false, status: 500, reason: profileError.message };
+    console.error('backup authorization profile lookup failed', profileError);
+    return { authorized: false, status: 500, reason: 'profile_lookup_failed' };
   }
 
   if (profile?.role !== 'super_admin' || profile?.status !== 'active') {
@@ -200,12 +213,6 @@ async function exportTables(adminClient: ReturnType<typeof createClient>, tables
 }
 
 async function listStorageObjects(adminClient: ReturnType<typeof createClient>) {
-  const { data: buckets, error: bucketsError } = await adminClient.storage.listBuckets();
-  if (bucketsError) {
-    console.error('backup storage list buckets failed', bucketsError);
-    return [];
-  }
-
   const objects: Array<Record<string, unknown>> = [];
 
   async function walk(bucketName: string, prefix = '') {
@@ -243,8 +250,8 @@ async function listStorageObjects(adminClient: ReturnType<typeof createClient>) 
     }
   }
 
-  for (const bucket of buckets || []) {
-    await walk(bucket.name);
+  for (const bucketName of backupStorageBuckets) {
+    await walk(bucketName);
   }
 
   return objects;
@@ -280,10 +287,14 @@ async function sendBackupToAppsScript(backup: BackupPayload) {
   }
 
   if (!response.ok || parsed?.ok === false) {
+    console.error('backup Apps Script request failed', {
+      status: response.status,
+      body: String(parsed?.error || responseText || response.statusText).slice(0, 500),
+    });
     return {
       ok: false,
       skipped: false,
-      reason: String(parsed?.error || responseText || response.statusText).slice(0, 500),
+      reason: 'apps_script_request_failed',
       status: response.status,
     };
   }
@@ -318,7 +329,15 @@ async function requestStorageFilesFromAppsScript(folderIdOrUrl: string) {
     }),
   });
 
+  const declaredLength = Number(response.headers.get('content-length'));
+  if (Number.isFinite(declaredLength) && declaredLength > 36 * 1024 * 1024) {
+    throw new Error('storage_restore_response_too_large');
+  }
+
   const responseText = await response.text();
+  if (new TextEncoder().encode(responseText).byteLength > 36 * 1024 * 1024) {
+    throw new Error('storage_restore_response_too_large');
+  }
   let parsed: StorageRestoreResponse | null = null;
   try {
     parsed = JSON.parse(responseText) as StorageRestoreResponse;
@@ -328,6 +347,10 @@ async function requestStorageFilesFromAppsScript(folderIdOrUrl: string) {
 
   if (!response.ok || parsed?.ok === false || !parsed) {
     throw new Error(String(parsed?.error || responseText || response.statusText || 'storage_restore_fetch_failed').slice(0, 500));
+  }
+
+  if (!Array.isArray(parsed.files) || parsed.files.length > 200) {
+    throw new Error('invalid_storage_restore_file_count');
   }
 
   return parsed;
@@ -346,14 +369,33 @@ async function restoreStorageFiles(adminClient: ReturnType<typeof createClient>,
   const driveResult = await requestStorageFilesFromAppsScript(folderIdOrUrl);
   const restored: Record<string, number> = {};
   const errors: Array<{ bucket: string; path: string; error: string }> = [];
+  let totalDecodedBytes = 0;
 
   for (const file of driveResult.files || []) {
     if (!file.bucket || !file.path || !file.base64) {
       continue;
     }
 
+    if (!backupStorageBucketSet.has(file.bucket)) {
+      errors.push({
+        bucket: file.bucket,
+        path: file.path,
+        error: 'bucket_not_allowed',
+      });
+      continue;
+    }
+
     try {
       const bytes = base64ToUint8Array(file.base64);
+      totalDecodedBytes += bytes.byteLength;
+      if (totalDecodedBytes > 25 * 1024 * 1024) {
+        errors.push({
+          bucket: file.bucket,
+          path: file.path,
+          error: 'restore_bytes_limit_exceeded',
+        });
+        break;
+      }
       const { error } = await adminClient.storage
         .from(file.bucket)
         .upload(file.path, bytes, {
@@ -418,12 +460,38 @@ async function recordBackupAudit(
 }
 
 function parseBackupPayload(input: unknown): BackupPayload | null {
-  if (!input || typeof input !== 'object') {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) {
     return null;
   }
 
   const value = input as Record<string, unknown>;
-  if (value.app !== 'PTDMS' || value.schema_version !== 1 || !value.tables || typeof value.tables !== 'object') {
+  const tables = value.tables;
+  const backupId = typeof value.backup_id === 'string' ? value.backup_id : '';
+  const createdAt = typeof value.created_at === 'string' ? value.created_at : '';
+
+  if (
+    value.app !== 'PTDMS'
+    || value.schema_version !== 1
+    || !tables
+    || typeof tables !== 'object'
+    || Array.isArray(tables)
+    || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(backupId)
+    || !createdAt
+    || Number.isNaN(Date.parse(createdAt))
+  ) {
+    return null;
+  }
+
+  const allowedTables = new Set<string>(backupTables);
+  if (Object.entries(tables).some(([table, rows]) => !allowedTables.has(table) || !Array.isArray(rows))) {
+    return null;
+  }
+
+  const rowCounts = Object.values(tables).map((rows) => (rows as unknown[]).length);
+  if (
+    rowCounts.some((count) => count > maxRestoreRowsPerTable)
+    || rowCounts.reduce((total, count) => total + count, 0) > maxRestoreRowsTotal
+  ) {
     return null;
   }
 
@@ -489,7 +557,33 @@ serve(async (req) => {
   }
 
   const caller = authResult.caller;
-  const body = await req.json().catch(() => ({})) as Record<string, unknown>;
+  const rateLimit = await consumeRateLimit(
+    adminClient as unknown as RateLimitClient,
+    'backup-restore-data',
+    caller.userId ?? caller.type,
+    6,
+    15 * 60,
+  ).catch(() => null);
+  if (!rateLimit) {
+    return jsonResponse({ ok: false, reason: 'rate_limit_unavailable' }, 503);
+  }
+  if (!rateLimit.allowed) {
+    return jsonResponse(
+      { ok: false, reason: 'rate_limited' },
+      429,
+      rateLimitHeaders(rateLimit),
+    );
+  }
+
+  let body: Record<string, unknown>;
+  try {
+    body = await readJsonObject(req, 25 * 1024 * 1024);
+  } catch (error) {
+    if (error instanceof RequestBodyError) {
+      return jsonResponse({ ok: false, reason: error.reason }, error.status);
+    }
+    throw error;
+  }
   const action = typeof body.action === 'string' ? body.action : '';
 
   try {
@@ -530,7 +624,7 @@ serve(async (req) => {
             apps_script: appsScript,
           });
         } catch (auditError) {
-          auditWarning = auditError instanceof Error ? auditError.message : 'backup_audit_failed';
+          auditWarning = 'backup_audit_failed';
           console.error('backup audit failed after backup creation', { backup_id: backupId, message: auditWarning });
         }
 
@@ -598,14 +692,17 @@ serve(async (req) => {
       await recordBackupAudit(adminClient, caller, 'backup_restored', result.errors.length === 0 ? 'success' : 'fail', {
         backup_id: backup.backup_id,
         restored: result.restored,
-        errors: result.errors,
+        errors: result.errors.map(({ table }) => ({ table, error: 'restore_failed' })),
       });
 
       return jsonResponse({
         ok: result.errors.length === 0,
         backup_id: backup.backup_id,
         restored: result.restored,
-        errors: result.errors,
+        errors: result.errors.map(({ table }) => ({
+          table,
+          error: 'restore_failed',
+        })),
       }, result.errors.length === 0 ? 200 : 207);
     }
 
@@ -638,7 +735,11 @@ serve(async (req) => {
           returned_files: result.returned_files,
           total_bytes: result.total_bytes,
         },
-        errors: result.errors,
+        errors: result.errors.map(({ bucket, path }) => ({
+          bucket,
+          path,
+          error: 'storage_restore_failed',
+        })),
       }, result.errors.length === 0 ? 200 : 207);
     }
 
@@ -647,6 +748,6 @@ serve(async (req) => {
     const message = error instanceof Error ? error.message : 'unknown_error';
     console.error('backup-restore-data failed', { action, message });
     await recordBackupAudit(adminClient, caller, action || 'unknown', 'fail', { error: message });
-    return jsonResponse({ ok: false, reason: message }, 500);
+    return jsonResponse({ ok: false, reason: 'operation_failed' }, 500);
   }
 });

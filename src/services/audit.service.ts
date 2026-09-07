@@ -200,8 +200,8 @@ function getAuditExportErrorMessage(reason?: string | null) {
     return 'สิทธิ์เข้าใช้งานหมดอายุ กรุณาเข้าสู่ระบบใหม่';
   }
 
-  if (reason.startsWith('apps_script_fetch_failed')) {
-    return `ไม่สามารถเชื่อมต่อ Google Apps Script ได้: ${reason.replace('apps_script_fetch_failed:', '').trim()}`;
+  if (reason === 'apps_script_fetch_failed' || reason === 'apps_script_export_failed') {
+    return 'ไม่สามารถเชื่อมต่อหรือส่งข้อมูลไป Google Apps Script ได้';
   }
 
   return reason;

@@ -1,5 +1,6 @@
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.47.10';
+import { consumeRateLimit, rateLimitHeaders, type RateLimitClient } from '../_shared/rate-limit.ts';
 
 const exportedLogRetentionMs = 72 * 60 * 60 * 1000;
 const exportBatchSize = 1000;
@@ -53,10 +54,10 @@ type AppsScriptResult = {
   archive_error?: string;
 };
 
-function jsonResponse(body: Record<string, unknown>, status = 200) {
+function jsonResponse(body: Record<string, unknown>, status = 200, extraHeaders: HeadersInit = {}) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    headers: { ...corsHeaders, 'Content-Type': 'application/json', ...extraHeaders },
   });
 }
 
@@ -165,7 +166,8 @@ async function authorizeExportRequest(req: Request, adminClient: ReturnType<type
     .maybeSingle();
 
   if (profileError) {
-    return { authorized: false, status: 500, reason: profileError.message };
+    console.error('audit export profile lookup failed', profileError);
+    return { authorized: false, status: 500, reason: 'profile_lookup_failed' };
   }
 
   if (profile?.role !== 'super_admin') {
@@ -250,6 +252,24 @@ serve(async (req) => {
   }
 
   const caller = authResult.caller;
+  const rateLimit = await consumeRateLimit(
+    adminClient as unknown as RateLimitClient,
+    'export-audit-logs',
+    caller.userId ?? caller.type,
+    6,
+    15 * 60,
+  ).catch(() => null);
+  if (!rateLimit) {
+    return jsonResponse({ exported: false, reason: 'rate_limit_unavailable' }, 503);
+  }
+  if (!rateLimit.allowed) {
+    return jsonResponse(
+      { exported: false, reason: 'rate_limited' },
+      429,
+      rateLimitHeaders(rateLimit),
+    );
+  }
+
   const batchId = crypto.randomUUID();
   const startedAt = new Date().toISOString();
   const bangkokDate = getBangkokDateKey();
@@ -264,7 +284,8 @@ serve(async (req) => {
     .limit(exportBatchSize);
 
   if (logsError) {
-    return jsonResponse({ exported: false, reason: logsError.message }, 500);
+    console.error('audit export query failed', logsError);
+    return jsonResponse({ exported: false, reason: 'audit_log_query_failed' }, 500);
   }
 
   const pendingLogs = (logs || []) as AuditLogRow[];
@@ -321,7 +342,8 @@ serve(async (req) => {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'unknown_error';
-    return jsonResponse({ exported: false, batch_id: batchId, reason: `apps_script_fetch_failed: ${message}` }, 502);
+    console.error('Audit log Apps Script connection failed', { batchId, message });
+    return jsonResponse({ exported: false, batch_id: batchId, reason: 'apps_script_fetch_failed' }, 502);
   }
 
   const responseText = await appsScriptResponse.text();
@@ -355,7 +377,7 @@ serve(async (req) => {
       await incrementRetryCount(adminClient, ids);
     }
 
-    return jsonResponse({ exported: false, batch_id: batchId, reason: appsScriptError.slice(0, 500) }, 502);
+    return jsonResponse({ exported: false, batch_id: batchId, reason: 'apps_script_export_failed' }, 502);
   }
 
   const ids = pendingLogs.map((log) => log.id);
@@ -394,11 +416,11 @@ serve(async (req) => {
     archive_file_url: appsScriptResult?.archive_file_url || null,
     archive_file_id: appsScriptResult?.archive_file_id || null,
     archive_skipped: appsScriptResult?.archive_skipped || false,
-    archive_error: appsScriptResult?.archive_error || null,
+    archive_error: appsScriptResult?.archive_error ? 'archive_failed' : null,
     archive_download_file_name: appsScriptResult?.archive_file_url ? null : payload.archive.file_name,
     archive_download_content: appsScriptResult?.archive_file_url ? null : archiveContent,
     cleanup_deleted: cleanupDeleted || 0,
-    cleanup_error: cleanupError?.message || null,
-    export_status_update_error: exportStatusUpdateError,
+    cleanup_error: cleanupError ? 'cleanup_failed' : null,
+    export_status_update_error: exportStatusUpdateError ? 'status_update_failed' : null,
   });
 });
