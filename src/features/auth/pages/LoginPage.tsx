@@ -19,7 +19,13 @@ export function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const [showPassword, setShowPassword] = useState(false);
-  const [isPrivacyNoticeOpen, setIsPrivacyNoticeOpen] = useState(true);
+  const [isPrivacyNoticeOpen, setIsPrivacyNoticeOpen] = useState(() => {
+    try {
+      return sessionStorage.getItem('privacy_notice_dismissed') !== 'true';
+    } catch {
+      return true;
+    }
+  });
   const from = (location.state as { from?: Location } | null)?.from?.pathname || '/portal';
   const { signIn, verifyMfa, signOut, mfaPending, loading, error, clearError } = useAuthStore();
   const siteContent = usePublishedSiteContent();
@@ -39,6 +45,7 @@ export function LoginPage() {
         factorId: mfaPending.factorId,
         email: mfaPending.email || '',
       });
+      setIsPrivacyNoticeOpen(false);
     } else {
       setMfaStep(null);
     }
@@ -66,7 +73,14 @@ export function LoginPage() {
     },
   });
 
-  const closePrivacyNotice = () => setIsPrivacyNoticeOpen(false);
+  const closePrivacyNotice = () => {
+    setIsPrivacyNoticeOpen(false);
+    try {
+      sessionStorage.setItem('privacy_notice_dismissed', 'true');
+    } catch {
+      // ignore
+    }
+  };
 
   const handlePostLoginRedirect = () => {
     const profile = useAuthStore.getState().profile;
@@ -296,7 +310,7 @@ export function LoginPage() {
         </section>
       </main>
 
-      {isPrivacyNoticeOpen ? (
+      {isPrivacyNoticeOpen && !mfaStep?.required ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 text-slate-900">
           <div className="absolute inset-0 bg-slate-950/70 backdrop-blur-sm" aria-hidden="true" />
           <section
