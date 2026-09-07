@@ -21,7 +21,7 @@ export function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [isPrivacyNoticeOpen, setIsPrivacyNoticeOpen] = useState(true);
   const from = (location.state as { from?: Location } | null)?.from?.pathname || '/portal';
-  const { signIn, verifyMfa, loading, error, clearError } = useAuthStore();
+  const { signIn, verifyMfa, signOut, mfaPending, loading, error, clearError } = useAuthStore();
   const siteContent = usePublishedSiteContent();
   const [mfaStep, setMfaStep] = useState<{
     required: boolean;
@@ -31,6 +31,18 @@ export function LoginPage() {
   const [totpCode, setTotpCode] = useState('');
   const [totpSubmitting, setTotpSubmitting] = useState(false);
   const [totpError, setTotpError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (mfaPending?.required) {
+      setMfaStep({
+        required: true,
+        factorId: mfaPending.factorId,
+        email: mfaPending.email || '',
+      });
+    } else {
+      setMfaStep(null);
+    }
+  }, [mfaPending]);
 
   const loginSideImage = siteContent.loginPage.status === 'published' ? siteContent.loginPage.sideImageUrl : '';
   const loginSideImageAlt = siteContent.loginPage.sideImageAlt || 'ภาพประกอบหน้าเข้าสู่ระบบ SmartDSP';
@@ -103,11 +115,12 @@ export function LoginPage() {
     }
   };
 
-  const handleBackToPassword = () => {
+  const handleBackToPassword = async () => {
     setMfaStep(null);
     setTotpCode('');
     setTotpError(null);
     clearError();
+    await signOut();
   };
 
   return (

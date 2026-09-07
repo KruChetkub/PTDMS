@@ -7,7 +7,7 @@ import { useAuthStore } from '../../stores/auth.store';
  * pages meant for guests (like Login, Register, etc.)
  */
 export function GuestRoute() {
-  const { initialize, initialized, loading, user, profile } = useAuthStore();
+  const { initialize, initialized, loading, user, profile, mfaPending } = useAuthStore();
 
   useEffect(() => {
     void initialize();
@@ -21,6 +21,11 @@ export function GuestRoute() {
         </div>
       </div>
     );
+  }
+
+  // If MFA is pending verification, do NOT redirect away from Login page
+  if (mfaPending?.required) {
+    return <Outlet />;
   }
 
   if (user && profile) {

@@ -10,6 +10,7 @@ type AuthState = {
   user: User | null;
   profile: Profile | null;
   permissions: string[];
+  mfaPending: { required: boolean; factorId: string; email?: string } | null;
   initialized: boolean;
   loading: boolean;
   error: string | null;
@@ -54,6 +55,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   profile: null,
   permissions: [],
+  mfaPending: null,
   initialized: false,
   loading: false,
   error: null,
@@ -78,11 +80,33 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
       const session = data.session;
       const user = session?.user ?? null;
+
+      if (user) {
+        // Check if MFA (TOTP AAL2) is pending
+        const { data: aalData } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+        if (aalData && aalData.nextLevel === 'aal2' && aalData.currentLevel !== 'aal2') {
+          const { data: factorsData } = await supabase.auth.mfa.listFactors();
+          const verifiedTotp = factorsData?.totp?.find((f) => f.status === 'verified');
+          if (verifiedTotp) {
+            set({
+              session,
+              user,
+              profile: null,
+              permissions: [],
+              mfaPending: { required: true, factorId: verifiedTotp.id, email: user.email },
+              initialized: true,
+              loading: false,
+            });
+            return;
+          }
+        }
+      }
+
       const [profile, permissions] = user
         ? await Promise.all([get().loadProfile(user.id), get().loadPermissions()])
         : [null, []];
 
-      set({ session, user, profile, permissions, initialized: true, loading: false });
+      set({ session, user, profile, permissions, mfaPending: null, initialized: true, loading: false });
 
       authSubscription?.unsubscribe();
       const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
@@ -90,27 +114,59 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         const currentProfile = get().profile;
         const profileStillMatches = Boolean(nextUser && currentProfile?.user_id === nextUser.id);
 
-        set({
-          session: nextSession,
-          user: nextUser,
-          profile: nextUser ? (profileStillMatches ? currentProfile : null) : null,
-          permissions: nextUser && profileStillMatches ? get().permissions : [],
-          initialized: true,
-          loading: nextUser ? !profileStillMatches : false,
-        });
-
-        if (!nextUser || profileStillMatches) {
+        if (!nextUser) {
+          set({
+            session: null,
+            user: null,
+            profile: null,
+            permissions: [],
+            mfaPending: null,
+            initialized: true,
+            loading: false,
+          });
           return;
         }
 
         window.setTimeout(() => {
           void (async () => {
+            // Check if MFA (TOTP AAL2) is pending for nextUser
+            const { data: aalData } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+            if (aalData && aalData.nextLevel === 'aal2' && aalData.currentLevel !== 'aal2') {
+              const { data: factorsData } = await supabase.auth.mfa.listFactors();
+              const verifiedTotp = factorsData?.totp?.find((f) => f.status === 'verified');
+              if (verifiedTotp) {
+                set({
+                  session: nextSession,
+                  user: nextUser,
+                  profile: null,
+                  permissions: [],
+                  mfaPending: { required: true, factorId: verifiedTotp.id, email: nextUser.email },
+                  initialized: true,
+                  loading: false,
+                });
+                return;
+              }
+            }
+
+            if (profileStillMatches) {
+              set({ session: nextSession, user: nextUser, mfaPending: null, initialized: true, loading: false });
+              return;
+            }
+
             const [nextProfile, permissions] = await Promise.all([
               get().loadProfile(nextUser.id),
               get().loadPermissions(),
             ]);
             if (get().user?.id === nextUser.id) {
-              set({ profile: nextProfile, permissions, loading: false });
+              set({
+                session: nextSession,
+                user: nextUser,
+                profile: nextProfile,
+                permissions,
+                mfaPending: null,
+                initialized: true,
+                loading: false,
+              });
             }
           })();
         }, 0);
@@ -187,17 +243,26 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     if (aalData && aalData.nextLevel === 'aal2' && aalData.currentLevel !== 'aal2') {
       const { data: factorsData } = await supabase.auth.mfa.listFactors();
       const verifiedTotp = factorsData?.totp?.find((f) => f.status === 'verified');
-      set({ loading: false });
-      return {
-        requiresMfa: true,
-        factorId: verifiedTotp?.id,
-      };
+      if (verifiedTotp) {
+        set({
+          session: data.session,
+          user: data.user,
+          profile: null,
+          permissions: [],
+          mfaPending: { required: true, factorId: verifiedTotp.id, email: normalizedEmail },
+          loading: false,
+        });
+        return {
+          requiresMfa: true,
+          factorId: verifiedTotp.id,
+        };
+      }
     }
 
     const [profile, permissions] = data.user
       ? await Promise.all([get().loadProfile(data.user.id), get().loadPermissions()])
       : [null, []];
-    set({ session: data.session, user: data.user, profile, permissions, loading: false });
+    set({ session: data.session, user: data.user, profile, permissions, mfaPending: null, loading: false });
 
     void recordLoginAttempt({
       email: normalizedEmail,
@@ -223,7 +288,16 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       ? await Promise.all([get().loadProfile(userData.user.id), get().loadPermissions()])
       : [null, []];
 
-    set({ user: userData.user, profile, permissions, loading: false });
+    set({ user: userData.user, profile, permissions, mfaPending: null, loading: false });
+
+    if (userData.user?.email) {
+      void recordLoginAttempt({
+        email: userData.user.email.toLowerCase(),
+        success: true,
+        accessToken: (await supabase.auth.getSession()).data.session?.access_token ?? null,
+      });
+    }
+
     return data;
   },
 
@@ -293,6 +367,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ profile, loading: false });
   },
 
+
   signOut: async () => {
     set({ loading: true, error: null });
 
@@ -310,10 +385,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       throw error;
     }
 
-    set({ session: null, user: null, profile: null, permissions: [], loading: false });
+    set({ session: null, user: null, profile: null, permissions: [], mfaPending: null, loading: false });
   },
 
   clearError: () => set({ error: null }),
 }));
-
-

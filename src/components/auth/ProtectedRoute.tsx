@@ -13,15 +13,15 @@ type ProtectedRouteProps = {
 
 export function ProtectedRoute({ allowedRoles, allowedPermissions }: ProtectedRouteProps) {
   const location = useLocation();
-  const { initialize, initialized, loading, user, profile, permissions, refreshProfile } = useAuthStore();
-  useAutoLogoutTimer(Boolean(initialized && user && profile?.status === 'active' && !profile.force_password_change));
+  const { initialize, initialized, loading, user, profile, permissions, mfaPending, refreshProfile } = useAuthStore();
+  useAutoLogoutTimer(Boolean(initialized && user && profile?.status === 'active' && !profile.force_password_change && !mfaPending?.required));
 
   useEffect(() => {
     void initialize();
   }, [initialize]);
 
   useEffect(() => {
-    if (!initialized || !user) return undefined;
+    if (!initialized || !user || mfaPending?.required) return undefined;
 
     const refresh = () => {
       void refreshProfile();
@@ -40,7 +40,7 @@ export function ProtectedRoute({ allowedRoles, allowedPermissions }: ProtectedRo
       window.removeEventListener('focus', refresh);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [initialized, location.pathname, refreshProfile, user]);
+  }, [initialized, location.pathname, refreshProfile, user, mfaPending]);
 
   if (!initialized || loading) {
     return (
@@ -52,7 +52,7 @@ export function ProtectedRoute({ allowedRoles, allowedPermissions }: ProtectedRo
     );
   }
 
-  if (!user) {
+  if (!user || mfaPending?.required) {
     return <Navigate to="/login" replace state={{ from: location }} />;
   }
 
