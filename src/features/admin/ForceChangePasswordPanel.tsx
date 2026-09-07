@@ -1,5 +1,17 @@
 import { useEffect, useMemo, useState } from 'react';
-import { KeyRound, Loader2, Search, ShieldAlert, ShieldOff } from 'lucide-react';
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Filter,
+  KeyRound,
+  Loader2,
+  Search,
+  ShieldAlert,
+  ShieldCheck,
+  ShieldOff,
+  UserCheck,
+  Users,
+} from 'lucide-react';
 import { ConfirmModal } from '../../components/ui/ConfirmModal';
 import {
   listForcePasswordChangeUsers,
@@ -7,6 +19,7 @@ import {
   type ForcePasswordChangeUser,
 } from '../../services/forcePasswordChange.service';
 import { useAuthStore } from '../../stores/auth.store';
+import type { UserRole } from '../../types/roles';
 import { roleLabels } from '../../types/roles';
 import { getSafeUserErrorMessage } from '../../utils/errorHandling';
 
@@ -16,6 +29,7 @@ type PendingAction =
   | { type: 'cancel-selected'; userIds: string[] }
   | null;
 
+const TARGET_ROLES: UserRole[] = ['admin', 'executive', 'hr', 'personnel'];
 const usersPerPage = 10;
 
 function formatDateTime(value: string | null) {
@@ -34,6 +48,7 @@ export function ForceChangePasswordPanel() {
   const [users, setUsers] = useState<ForcePasswordChangeUser[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [search, setSearch] = useState('');
+  const [roleFilter, setRoleFilter] = useState<'all' | 'pending' | UserRole>('all');
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -61,15 +76,42 @@ export function ForceChangePasswordPanel() {
     () => users.filter((user) => user.user_id !== currentUserId && user.status === 'active'),
     [currentUserId, users],
   );
+
+  const roleBreakdown = useMemo(() => {
+    return TARGET_ROLES.map((role) => {
+      const roleUsers = manageableUsers.filter((u) => u.role === role);
+      const pendingUsers = roleUsers.filter((u) => u.force_password_change);
+      return {
+        role,
+        label: roleLabels[role] || role,
+        total: roleUsers.length,
+        pendingCount: pendingUsers.length,
+        completedCount: roleUsers.length - pendingUsers.length,
+      };
+    });
+  }, [manageableUsers]);
+
+  const pendingRoles = useMemo(() => {
+    return roleBreakdown.filter((item) => item.pendingCount > 0);
+  }, [roleBreakdown]);
+
   const filteredUsers = useMemo(() => {
+    let result = manageableUsers;
+    if (roleFilter === 'pending') {
+      result = result.filter((u) => u.force_password_change);
+    } else if (roleFilter !== 'all') {
+      result = result.filter((u) => u.role === roleFilter);
+    }
+
     const keyword = search.trim().toLocaleLowerCase('th-TH');
-    if (!keyword) return manageableUsers;
-    return manageableUsers.filter((user) => (
+    if (!keyword) return result;
+    return result.filter((user) => (
       user.full_name.toLocaleLowerCase('th-TH').includes(keyword)
       || (user.email ?? '').toLocaleLowerCase('th-TH').includes(keyword)
       || roleLabels[user.role].toLocaleLowerCase('th-TH').includes(keyword)
     ));
-  }, [manageableUsers, search]);
+  }, [manageableUsers, roleFilter, search]);
+
   const totalPages = Math.max(1, Math.ceil(filteredUsers.length / usersPerPage));
   const currentPage = Math.min(page, totalPages);
   const pageStart = (currentPage - 1) * usersPerPage;
@@ -84,7 +126,7 @@ export function ForceChangePasswordPanel() {
 
   useEffect(() => {
     setPage(1);
-  }, [search]);
+  }, [search, roleFilter]);
 
   useEffect(() => {
     if (page > totalPages) setPage(totalPages);
@@ -146,8 +188,9 @@ export function ForceChangePasswordPanel() {
         };
 
   return (
-    <div className="space-y-4">
-      <section className="rounded-md border border-slate-200 bg-white p-5 shadow-sm">
+    <div className="space-y-5">
+      {/* Header & Main Stats */}
+      <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
             <div className="flex items-center gap-2">
@@ -162,7 +205,7 @@ export function ForceChangePasswordPanel() {
             type="button"
             onClick={() => setPendingAction({ type: 'force-all' })}
             disabled={loading || submitting || manageableUsers.length === 0}
-            className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-md bg-red-600 px-4 text-sm font-semibold text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-lg bg-red-600 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <ShieldAlert className="h-4 w-4" aria-hidden="true" />
             บังคับผู้ใช้ทั้งหมด
@@ -170,56 +213,213 @@ export function ForceChangePasswordPanel() {
         </div>
 
         <div className="mt-5 grid gap-3 sm:grid-cols-3">
-          <div className="border-l-4 border-slate-300 px-4 py-2">
-            <p className="text-xs text-slate-500">บัญชี Active ที่จัดการได้</p>
-            <p className="mt-1 text-xl font-bold text-slate-950">{manageableUsers.length.toLocaleString('th-TH')}</p>
+          <div className="rounded-lg border border-slate-100 bg-slate-50/70 px-4 py-3">
+            <p className="text-xs font-medium text-slate-500">บัญชี Active ที่จัดการได้</p>
+            <p className="mt-1 text-2xl font-bold text-slate-950">{manageableUsers.length.toLocaleString('th-TH')} <span className="text-sm font-normal text-slate-500">ท่าน</span></p>
           </div>
-          <div className="border-l-4 border-amber-400 px-4 py-2">
-            <p className="text-xs text-slate-500">รอเปลี่ยนรหัสผ่าน</p>
-            <p className="mt-1 text-xl font-bold text-amber-700">{forcedCount.toLocaleString('th-TH')}</p>
+          <div className="rounded-lg border border-amber-100 bg-amber-50/60 px-4 py-3">
+            <p className="text-xs font-medium text-amber-700">รอเปลี่ยนรหัสผ่าน</p>
+            <p className="mt-1 text-2xl font-bold text-amber-800">{forcedCount.toLocaleString('th-TH')} <span className="text-sm font-normal text-amber-600">ท่าน</span></p>
           </div>
-          <div className="border-l-4 border-emerald-500 px-4 py-2">
-            <p className="text-xs text-slate-500">ใช้งานได้ตามปกติ</p>
-            <p className="mt-1 text-xl font-bold text-emerald-700">{(manageableUsers.length - forcedCount).toLocaleString('th-TH')}</p>
+          <div className="rounded-lg border border-emerald-100 bg-emerald-50/60 px-4 py-3">
+            <p className="text-xs font-medium text-emerald-700">ใช้งานได้ตามปกติ</p>
+            <p className="mt-1 text-2xl font-bold text-emerald-800">{(manageableUsers.length - forcedCount).toLocaleString('th-TH')} <span className="text-sm font-normal text-emerald-600">ท่าน</span></p>
           </div>
         </div>
       </section>
 
-      <section className="overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm">
-        <div className="flex flex-col gap-3 border-b border-slate-200 p-4 lg:flex-row lg:items-center">
-          <label className="flex min-w-0 flex-1 items-center rounded-md border border-slate-300 bg-white px-3 focus-within:border-brand-500 focus-within:ring-2 focus-within:ring-brand-100">
-            <Search className="h-4 w-4 shrink-0 text-slate-400" aria-hidden="true" />
-            <input
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="ค้นหาชื่อ อีเมล หรือสิทธิ์"
-              className="w-full bg-transparent px-2 py-2 text-sm outline-none"
-            />
-          </label>
-          <button
-            type="button"
-            onClick={() => setPendingAction({
-              type: 'force-selected',
-              userIds: selectedUsers.filter((user) => !user.force_password_change).map((user) => user.user_id),
+      {/* Pending Roles Summary Alert */}
+      <section className="overflow-hidden rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+        {pendingRoles.length > 0 ? (
+          <div className="flex flex-col gap-3 rounded-lg border border-amber-200 bg-gradient-to-r from-amber-50/90 to-orange-50/50 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-3">
+              <div className="rounded-full bg-amber-100 p-2 text-amber-700">
+                <AlertTriangle className="h-5 w-5" aria-hidden="true" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-amber-950">
+                  สิทธิ์ที่ยังมีผู้ใช้ยังไม่ได้เปลี่ยนรหัสผ่าน ({pendingRoles.length} สิทธิ์):
+                </h3>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  {pendingRoles.map((item) => (
+                    <button
+                      key={item.role}
+                      type="button"
+                      onClick={() => setRoleFilter(item.role)}
+                      className="inline-flex items-center gap-1.5 rounded-md border border-amber-300 bg-white px-2.5 py-1 text-xs font-semibold text-amber-900 shadow-sm transition hover:bg-amber-50"
+                    >
+                      <span>{item.label}:</span>
+                      <span className="rounded bg-amber-100 px-1.5 py-0.5 font-bold text-amber-800">
+                        {item.pendingCount.toLocaleString('th-TH')} ท่าน
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setRoleFilter('pending')}
+              className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg border border-amber-300 bg-amber-100/70 px-3 py-1.5 text-xs font-semibold text-amber-900 transition hover:bg-amber-200/80"
+            >
+              <Filter className="h-3.5 w-3.5" />
+              ดูเฉพาะผู้ใช้ที่รอเปลี่ยนรหัส
+            </button>
+          </div>
+        ) : (
+          <div className="flex items-center gap-3 rounded-lg border border-emerald-200 bg-emerald-50/70 p-4">
+            <div className="rounded-full bg-emerald-100 p-2 text-emerald-700">
+              <CheckCircle2 className="h-5 w-5" aria-hidden="true" />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-emerald-950">
+                ผู้ใช้งานทุกสิทธิ์ได้ทำการเปลี่ยนรหัสผ่านเรียบร้อยแล้ว
+              </h3>
+              <p className="text-xs text-emerald-700">
+                ไม่มีผู้ใช้งานในสิทธิ์ Admin, Executive, HR, หรือ Personnel ที่ค้างสถานะรอเปลี่ยนรหัสผ่าน
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Role Breakdown Cards (Admin, Executive, HR, Personnel) */}
+        <div className="mt-4">
+          <div className="mb-2 flex items-center justify-between">
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
+              สถิติจำนวนผู้ใช้และสถานะรหัสผ่านแยกตามสิทธิ์
+            </span>
+          </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {roleBreakdown.map((item) => {
+              const isSelected = roleFilter === item.role;
+              return (
+                <button
+                  key={item.role}
+                  type="button"
+                  onClick={() => setRoleFilter(isSelected ? 'all' : item.role)}
+                  className={`flex flex-col justify-between rounded-xl border p-4 text-left transition ${
+                    isSelected
+                      ? 'border-brand-500 bg-brand-50/30 ring-2 ring-brand-500/20 shadow-sm'
+                      : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/50'
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <p className="text-sm font-bold text-slate-900">{item.label}</p>
+                      <p className="mt-1 text-2xl font-extrabold text-slate-900">
+                        {item.total.toLocaleString('th-TH')}{' '}
+                        <span className="text-xs font-normal text-slate-500">ท่าน</span>
+                      </p>
+                    </div>
+                    <span
+                      className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${
+                        item.pendingCount > 0 ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'
+                      }`}
+                    >
+                      {item.pendingCount > 0 ? <ShieldAlert className="h-4 w-4" /> : <ShieldCheck className="h-4 w-4" />}
+                    </span>
+                  </div>
+
+                  <div className="mt-3 border-t border-slate-100 pt-2.5">
+                    {item.pendingCount > 0 ? (
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="font-semibold text-amber-700">รอเปลี่ยนรหัส:</span>
+                        <span className="rounded bg-amber-100 px-1.5 py-0.5 font-bold text-amber-800">
+                          {item.pendingCount.toLocaleString('th-TH')} ท่าน
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="font-medium text-emerald-700">เปลี่ยนครบแล้ว</span>
+                        <span className="font-semibold text-emerald-800">{item.total}/{item.total} ท่าน</span>
+                      </div>
+                    )}
+                  </div>
+                </button>
+              );
             })}
-            disabled={submitting || selectedUnforcedCount === 0}
-            className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-amber-600 px-4 text-sm font-semibold text-white transition hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <ShieldAlert className="h-4 w-4" aria-hidden="true" />
-            บังคับที่เลือก ({selectedUnforcedCount})
-          </button>
-          <button
-            type="button"
-            onClick={() => setPendingAction({
-              type: 'cancel-selected',
-              userIds: selectedUsers.filter((user) => user.force_password_change).map((user) => user.user_id),
-            })}
-            disabled={submitting || selectedForcedCount === 0}
-            className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <ShieldOff className="h-4 w-4" aria-hidden="true" />
-            ยกเลิกที่เลือก ({selectedForcedCount})
-          </button>
+          </div>
+        </div>
+      </section>
+
+      {/* User Table Section */}
+      <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div className="flex flex-col gap-3 border-b border-slate-200 p-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs font-semibold text-slate-500">ตัวกรองสิทธิ์:</span>
+            <button
+              type="button"
+              onClick={() => setRoleFilter('all')}
+              className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition ${
+                roleFilter === 'all'
+                  ? 'bg-slate-900 text-white shadow-sm'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              ทั้งหมด ({manageableUsers.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setRoleFilter('pending')}
+              className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition ${
+                roleFilter === 'pending'
+                  ? 'bg-amber-600 text-white shadow-sm'
+                  : 'bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-200'
+              }`}
+            >
+              รอเปลี่ยนรหัส ({forcedCount})
+            </button>
+            {roleBreakdown.map((item) => (
+              <button
+                key={item.role}
+                type="button"
+                onClick={() => setRoleFilter(item.role)}
+                className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition ${
+                  roleFilter === item.role
+                    ? 'bg-brand-600 text-white shadow-sm'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                {item.label} ({item.total})
+              </button>
+            ))}
+          </div>
+
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+            <label className="flex min-w-0 flex-1 items-center rounded-lg border border-slate-300 bg-white px-3 focus-within:border-brand-500 focus-within:ring-2 focus-within:ring-brand-100">
+              <Search className="h-4 w-4 shrink-0 text-slate-400" aria-hidden="true" />
+              <input
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="ค้นหาชื่อ อีเมล หรือสิทธิ์"
+                className="w-full bg-transparent px-2 py-2 text-sm outline-none"
+              />
+            </label>
+            <button
+              type="button"
+              onClick={() => setPendingAction({
+                type: 'force-selected',
+                userIds: selectedUsers.filter((user) => !user.force_password_change).map((user) => user.user_id),
+              })}
+              disabled={submitting || selectedUnforcedCount === 0}
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-amber-600 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <ShieldAlert className="h-4 w-4" aria-hidden="true" />
+              บังคับที่เลือก ({selectedUnforcedCount})
+            </button>
+            <button
+              type="button"
+              onClick={() => setPendingAction({
+                type: 'cancel-selected',
+                userIds: selectedUsers.filter((user) => user.force_password_change).map((user) => user.user_id),
+              })}
+              disabled={submitting || selectedForcedCount === 0}
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <ShieldOff className="h-4 w-4" aria-hidden="true" />
+              ยกเลิกที่เลือก ({selectedForcedCount})
+            </button>
+          </div>
         </div>
 
         {message ? <div className="border-b border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{message}</div> : null}
@@ -262,12 +462,20 @@ export function ForceChangePasswordPanel() {
                     <p className="font-semibold text-slate-900">{user.full_name || '-'}</p>
                     <p className="mt-0.5 text-xs text-slate-500">{user.email || '-'}</p>
                   </td>
-                  <td className="px-4 py-3 text-slate-600">{roleLabels[user.role]}</td>
+                  <td className="px-4 py-3 text-slate-600">
+                    <span className="inline-flex rounded bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
+                      {roleLabels[user.role] || user.role}
+                    </span>
+                  </td>
                   <td className="px-4 py-3">
                     {user.force_password_change ? (
-                      <span className="inline-flex rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-800">รอเปลี่ยนรหัสผ่าน</span>
+                      <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-800">
+                        <AlertTriangle className="h-3 w-3" /> รอเปลี่ยนรหัสผ่าน
+                      </span>
                     ) : (
-                      <span className="inline-flex rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-800">ปกติ</span>
+                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-800">
+                        <CheckCircle2 className="h-3 w-3" /> ปกติ
+                      </span>
                     )}
                   </td>
                   <td className="px-4 py-3 text-slate-600">{formatDateTime(user.force_password_change_requested_at)}</td>
