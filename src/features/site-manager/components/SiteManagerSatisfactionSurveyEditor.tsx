@@ -1179,7 +1179,7 @@ export function SiteManagerSatisfactionSurveyEditor({
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={displayedLikertChartData} layout="vertical" margin={{ top: 8, right: 115, left: 0, bottom: 4 }}>
                         <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-                        <XAxis type="number" domain={[0, 100]} tickFormatter={(value) => `${value}%`} fontSize={11} />
+                        <XAxis type="number" domain={[0, 100]} tickFormatter={(value) => `${Math.round(Number(value))}%`} fontSize={11} />
                         <YAxis type="category" dataKey="name" width={430} tick={<LikertAxisTick />} />
                         <Tooltip content={<LikertTooltip />} />
                         <Legend />
