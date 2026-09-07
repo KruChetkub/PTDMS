@@ -1,5 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Eye, EyeOff, FileText, Lock, LogIn, Mail, X } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, Eye, EyeOff, FileText, KeyRound, Lock, LogIn, Mail, ShieldCheck, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
@@ -21,8 +21,17 @@ export function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [isPrivacyNoticeOpen, setIsPrivacyNoticeOpen] = useState(true);
   const from = (location.state as { from?: Location } | null)?.from?.pathname || '/portal';
-  const { signIn, loading, error, clearError } = useAuthStore();
+  const { signIn, verifyMfa, loading, error, clearError } = useAuthStore();
   const siteContent = usePublishedSiteContent();
+  const [mfaStep, setMfaStep] = useState<{
+    required: boolean;
+    factorId: string;
+    email: string;
+  } | null>(null);
+  const [totpCode, setTotpCode] = useState('');
+  const [totpSubmitting, setTotpSubmitting] = useState(false);
+  const [totpError, setTotpError] = useState<string | null>(null);
+
   const loginSideImage = siteContent.loginPage.status === 'published' ? siteContent.loginPage.sideImageUrl : '';
   const loginSideImageAlt = siteContent.loginPage.sideImageAlt || 'ภาพประกอบหน้าเข้าสู่ระบบ SmartDSP';
   const loginBackgroundImage = siteContent.loginPage.backgroundImageUrl || '/SmartDSP.png';
@@ -47,23 +56,58 @@ export function LoginPage() {
 
   const closePrivacyNotice = () => setIsPrivacyNoticeOpen(false);
 
+  const handlePostLoginRedirect = () => {
+    const profile = useAuthStore.getState().profile;
+    if (profile?.status === 'pending') {
+      navigate('/pending-approval', { replace: true });
+    } else if (from === '/' || from === '/login' || from === '/dashboard' || from === '/self-service' || from === '/profile') {
+      navigate('/portal', { replace: true });
+    } else {
+      navigate(from, { replace: true });
+    }
+  };
+
   const onSubmit = async (values: LoginFormValues) => {
     clearError();
+    setTotpError(null);
     try {
-      await signIn(values.email, values.password);
-      const profile = useAuthStore.getState().profile;
-
-      if (profile?.status === 'pending') {
-        navigate('/pending-approval', { replace: true });
-      } else if (from === '/' || from === '/login' || from === '/dashboard' || from === '/self-service' || from === '/profile') {
-        navigate('/portal', { replace: true });
-      } else {
-        navigate(from, { replace: true });
+      const result = await signIn(values.email, values.password);
+      if (result && result.requiresMfa) {
+        setMfaStep({
+          required: true,
+          factorId: result.factorId || '',
+          email: values.email,
+        });
+        return;
       }
+
+      handlePostLoginRedirect();
     } catch (err) {
       // Error is handled by the store and displayed in the UI
       void reportClientError('Login failed:', err);
     }
+  };
+
+  const onVerifyMfa = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!mfaStep?.factorId || !totpCode.trim()) return;
+    setTotpSubmitting(true);
+    setTotpError(null);
+    try {
+      await verifyMfa(mfaStep.factorId, totpCode);
+      handlePostLoginRedirect();
+    } catch (err: any) {
+      setTotpError(err?.message || 'รหัสความปลอดภัย (OTP) ไม่ถูกต้อง กรุณาลองใหม่อีกครั้ง');
+    } finally {
+      setTotpSubmitting(false);
+    }
+  };
+
+  const handleBackToPassword = () => {
+    setMfaStep(null);
+    setTotpCode('');
+    setTotpError(null);
+    clearError();
   };
 
   return (
@@ -112,62 +156,125 @@ export function LoginPage() {
 
             <ConfiguredNotice />
 
-            <form onSubmit={handleSubmit(onSubmit)} className="mt-5 space-y-4 rounded-md border border-white/70 bg-white/90 p-5 text-slate-900 shadow-xl sm:p-6">
-              {error ? <div className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div> : null}
+            {mfaStep?.required ? (
+              /* MFA TOTP Challenge Step */
+              <form onSubmit={onVerifyMfa} className="mt-5 space-y-4 rounded-xl border border-white/70 bg-white/95 p-5 text-slate-900 shadow-xl sm:p-6">
+                <div className="text-center">
+                  <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-cyan-50 text-[#17718C]">
+                    <ShieldCheck className="h-6 w-6" aria-hidden="true" />
+                  </div>
+                  <h3 className="text-lg font-bold text-slate-900">การยืนยันตัวตน 2 ขั้นตอน (2FA)</h3>
+                  <p className="mt-1 text-xs text-slate-500">
+                    กรุณากรอกรหัส 6 หลักจากแอป <strong className="text-slate-700">Google Authenticator</strong> บนมือถือของคุณ
+                  </p>
+                  <p className="mt-0.5 text-xs text-cyan-700 font-medium">({mfaStep.email})</p>
+                </div>
 
-              <label className="block">
-                <span className="text-sm font-medium text-slate-700">Email</span>
-                <div className="mt-1 flex items-center rounded-md border border-slate-300 bg-white px-3 focus-within:border-cyan-600 focus-within:ring-2 focus-within:ring-cyan-100">
-                  <Mail className="h-4 w-4 text-slate-500" aria-hidden="true" />
+                {totpError ? <div className="rounded-md bg-red-50 px-3 py-2 text-center text-sm text-red-700">{totpError}</div> : null}
+
+                <div>
+                  <label htmlFor="totp-code-input" className="block text-center text-xs font-semibold uppercase tracking-wider text-slate-600">
+                    รหัสความปลอดภัย 6 หลัก
+                  </label>
                   <input
-                    type="email"
-                    autoComplete="email"
-                    placeholder="smartdsp@mail.com"
-                    className="w-full bg-transparent px-2 py-2.5 text-sm text-slate-900 outline-none"
-                    {...register('email')}
+                    id="totp-code-input"
+                    type="text"
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    autoFocus
+                    maxLength={6}
+                    value={totpCode}
+                    onChange={(e) => setTotpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    placeholder="000000"
+                    className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-4 py-3 text-center text-2xl font-bold tracking-[0.4em] text-slate-900 outline-none transition focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100"
                   />
                 </div>
-                {errors.email ? <span className="mt-1 block text-xs text-red-600">{errors.email.message}</span> : null}
-              </label>
 
-              <div>
-                <span className="text-sm font-medium text-slate-700">Password</span>
-                <div className="mt-1 flex items-center rounded-md border border-slate-300 bg-white px-3 focus-within:border-cyan-600 focus-within:ring-2 focus-within:ring-cyan-100">
-                  <Lock className="h-4 w-4 text-slate-500" aria-hidden="true" />
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    autoComplete="current-password"
-                    className="w-full bg-transparent px-2 py-2.5 text-sm text-slate-900 outline-none"
-                    {...register('password')}
-                  />
-                  <button
-                    type="button"
-                    className="inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-500 transition hover:bg-slate-100 hover:text-cyan-700 focus:outline-none focus:ring-2 focus:ring-cyan-200"
-                    aria-label={showPassword ? 'ซ่อนรหัสผ่าน' : 'แสดงรหัสผ่าน'}
-                    aria-pressed={showPassword}
-                    onClick={() => setShowPassword((current) => !current)}
-                  >
-                    {showPassword ? <EyeOff className="h-4 w-4" aria-hidden="true" /> : <Eye className="h-4 w-4" aria-hidden="true" />}
-                  </button>
+                <button
+                  type="submit"
+                  disabled={totpSubmitting || totpCode.length < 6}
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-[#17718C] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#0F5D77] disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <LogIn className="h-4 w-4" aria-hidden="true" />
+                  {totpSubmitting ? 'กำลังตรวจสอบรหัส...' : 'ยืนยันและเข้าสู่ระบบ'}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleBackToPassword}
+                  className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-slate-200 py-2 text-xs font-medium text-slate-600 transition hover:bg-slate-50 hover:text-slate-900"
+                >
+                  <ArrowLeft className="h-3.5 w-3.5" />
+                  ย้อนกลับ / ล็อกอินด้วยบัญชีอื่น
+                </button>
+              </form>
+            ) : (
+              /* Standard Password Step */
+              <form onSubmit={handleSubmit(onSubmit)} className="mt-5 space-y-4 rounded-xl border border-white/70 bg-white/95 p-5 text-slate-900 shadow-xl sm:p-6">
+                {error ? <div className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div> : null}
+
+                <label className="block">
+                  <span className="text-sm font-medium text-slate-700">Email</span>
+                  <div className="mt-1 flex items-center rounded-md border border-slate-300 bg-white px-3 focus-within:border-cyan-600 focus-within:ring-2 focus-within:ring-cyan-100">
+                    <Mail className="h-4 w-4 text-slate-500" aria-hidden="true" />
+                    <input
+                      type="email"
+                      autoComplete="email"
+                      placeholder="smartdsp@mail.com"
+                      className="w-full bg-transparent px-2 py-2.5 text-sm text-slate-900 outline-none"
+                      {...register('email')}
+                    />
+                  </div>
+                  {errors.email ? <span className="mt-1 block text-xs text-red-600">{errors.email.message}</span> : null}
+                </label>
+
+                <div>
+                  <span className="text-sm font-medium text-slate-700">Password</span>
+                  <div className="mt-1 flex items-center rounded-md border border-slate-300 bg-white px-3 focus-within:border-cyan-600 focus-within:ring-2 focus-within:ring-cyan-100">
+                    <Lock className="h-4 w-4 text-slate-500" aria-hidden="true" />
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      autoComplete="current-password"
+                      className="w-full bg-transparent px-2 py-2.5 text-sm text-slate-900 outline-none"
+                      {...register('password')}
+                    />
+                    <button
+                      type="button"
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-500 transition hover:bg-slate-100 hover:text-cyan-700 focus:outline-none focus:ring-2 focus:ring-cyan-200"
+                      aria-label={showPassword ? 'ซ่อนรหัสผ่าน' : 'แสดงรหัสผ่าน'}
+                      aria-pressed={showPassword}
+                      onClick={() => setShowPassword((current) => !current)}
+                    >
+                      {showPassword ? <EyeOff className="h-4 w-4" aria-hidden="true" /> : <Eye className="h-4 w-4" aria-hidden="true" />}
+                    </button>
+                  </div>
+                  {errors.password ? <span className="mt-1 block text-xs text-red-600">{errors.password.message}</span> : null}
                 </div>
-                {errors.password ? <span className="mt-1 block text-xs text-red-600">{errors.password.message}</span> : null}
-              </div>
 
-              <button
-                type="submit"
-                disabled={loading}
-                className="inline-flex w-full items-center justify-center gap-2 rounded-md bg-[#17718C] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#0F5D77] disabled:cursor-not-allowed disabled:opacity-70"
-              >
-                <LogIn className="h-4 w-4" aria-hidden="true" />
-                {loading ? 'กำลังเข้าสู่ระบบ...' : 'Login'}
-              </button>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-[#17718C] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#0F5D77] disabled:cursor-not-allowed disabled:opacity-70"
+                >
+                  <LogIn className="h-4 w-4" aria-hidden="true" />
+                  {loading ? 'กำลังเข้าสู่ระบบ...' : 'Login'}
+                </button>
 
-              <div className="flex items-center justify-between text-sm">
-                <Link className="font-medium text-[#17718C] hover:text-[#0F5D77]" to="/forgot-password">
-                  ลืมรหัสผ่าน
-                </Link>
-              </div>
-            </form>
+                <div className="flex items-center justify-between text-sm">
+                  <Link className="font-medium text-[#17718C] hover:text-[#0F5D77]" to="/forgot-password">
+                    ลืมรหัสผ่าน
+                  </Link>
+                </div>
+              </form>
+            )}
+
+            {/* Optional 2FA Information Card */}
+            <div className="mt-3 flex items-start gap-2.5 rounded-lg border border-cyan-400/20 bg-cyan-950/40 p-3 text-left backdrop-blur-sm">
+              <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-cyan-300" />
+              <p className="text-xs leading-5 text-cyan-100/80">
+                ระบบรองรับ <strong className="text-white">Google Authenticator</strong> (2-Step Verification) สามารถเปิดใช้งานได้ในหน้าตั้งค่าบัญชี
+              </p>
+            </div>
 
             <div className="mt-5">
               <LegalFooter variant="dark" />

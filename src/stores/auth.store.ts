@@ -17,7 +17,8 @@ type AuthState = {
   loadProfile: (userId: string) => Promise<Profile | null>;
   loadPermissions: () => Promise<string[]>;
   refreshProfile: () => Promise<Profile | null>;
-  signIn: (email: string, password: string) => Promise<void>;
+  signIn: (email: string, password: string) => Promise<{ requiresMfa?: boolean; factorId?: string } | void>;
+  verifyMfa: (factorId: string, code: string) => Promise<any>;
   signUp: (email: string, password: string, fullName: string) => Promise<void>;
   requestPasswordReset: (email: string) => Promise<void>;
   updatePassword: (password: string) => Promise<void>;
@@ -181,6 +182,18 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       throw error;
     }
 
+    // Check if user has MFA (TOTP) enabled requiring AAL2 verification
+    const { data: aalData } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+    if (aalData && aalData.nextLevel === 'aal2' && aalData.currentLevel !== 'aal2') {
+      const { data: factorsData } = await supabase.auth.mfa.listFactors();
+      const verifiedTotp = factorsData?.totp?.find((f) => f.status === 'verified');
+      set({ loading: false });
+      return {
+        requiresMfa: true,
+        factorId: verifiedTotp?.id,
+      };
+    }
+
     const [profile, permissions] = data.user
       ? await Promise.all([get().loadProfile(data.user.id), get().loadPermissions()])
       : [null, []];
@@ -191,6 +204,27 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       success: true,
       accessToken: data.session?.access_token ?? null,
     });
+  },
+
+  verifyMfa: async (factorId: string, code: string) => {
+    set({ loading: true, error: null });
+    const { data, error } = await supabase.auth.mfa.challengeAndVerify({
+      factorId,
+      code: code.trim(),
+    });
+
+    if (error) {
+      set({ error: 'รหัสความปลอดภัย (OTP) ไม่ถูกต้อง กรุณาลองใหม่อีกครั้ง', loading: false });
+      throw error;
+    }
+
+    const { data: userData } = await supabase.auth.getUser();
+    const [profile, permissions] = userData.user
+      ? await Promise.all([get().loadProfile(userData.user.id), get().loadPermissions()])
+      : [null, []];
+
+    set({ user: userData.user, profile, permissions, loading: false });
+    return data;
   },
 
   signUp: async (email: string, password: string, fullName: string) => {
