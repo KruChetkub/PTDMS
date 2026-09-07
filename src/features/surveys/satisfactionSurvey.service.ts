@@ -326,14 +326,26 @@ export async function loadSurveyDashboard(surveyCode: string = SMARTDSP_SURVEY_C
   const surveyIds = surveys.map((survey) => survey.id);
   if (surveyIds.length === 0) return { surveys, responses: [], answers: [] };
 
-  const { data: responseData, error: responseError } = await supabase
-    .from('smartdsp_survey_responses')
-    .select('*')
-    .in('survey_id', surveyIds)
-    .order('submitted_at', { ascending: true });
+  const [{ data: responseData, error: responseError }, { data: profilesData }] = await Promise.all([
+    supabase
+      .from('smartdsp_survey_responses')
+      .select('*')
+      .in('survey_id', surveyIds)
+      .order('submitted_at', { ascending: true }),
+    supabase.from('profiles').select('user_id, status, role'),
+  ]);
 
   if (responseError) throw new Error(`โหลดข้อมูลแดชบอร์ดไม่สำเร็จ: ${responseError.message}`);
-  const responses = (responseData || []) as SmartDspSurveyResponse[];
+
+  const profiles = (profilesData || []) as Array<{ user_id: string; status?: string | null; role?: string | null }>;
+  const activeUserIds = new Set(
+    profiles
+      .filter((p) => (p.status ? p.status === 'active' : true) && p.role !== 'super_admin')
+      .map((p) => p.user_id),
+  );
+
+  const rawResponses = (responseData || []) as SmartDspSurveyResponse[];
+  const responses = rawResponses.filter((response) => !response.respondent_id || activeUserIds.has(response.respondent_id));
   const responseIds = responses.map((response) => response.id);
   if (responseIds.length === 0) return { surveys, responses, answers: [] };
 

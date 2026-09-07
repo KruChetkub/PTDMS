@@ -301,10 +301,11 @@ export async function getSpdServiceAiChatGptBookings(startDate: string, endDate:
 }
 
 export async function getSpdServiceDashboardData(): Promise<SpdServiceDashboardData> {
-  const [ticketsResult, categoriesResult, surveysResult] = await Promise.all([
+  const [ticketsResult, categoriesResult, surveysResult, profilesResult] = await Promise.all([
     supabase.from('spd_service_tickets').select('*').order('created_at', { ascending: false }),
     supabase.from('spd_service_categories').select('*').eq('is_active', true).order('sort_order', { ascending: true }),
     supabase.from('spd_service_satisfaction_surveys').select('*').order('created_at', { ascending: false }),
+    supabase.from('profiles').select('user_id, status, role'),
   ]);
 
   if (ticketsResult.error) {
@@ -319,24 +320,47 @@ export async function getSpdServiceDashboardData(): Promise<SpdServiceDashboardD
     throw surveysResult.error;
   }
 
+  const profiles = (profilesResult.data || []) as Array<{ user_id: string; status?: string | null; role?: string | null }>;
+  const activeUserIds = new Set(
+    profiles
+      .filter((p) => (p.status ? p.status === 'active' : true) && p.role !== 'super_admin')
+      .map((p) => p.user_id),
+  );
+
+  const rawTickets = ticketsResult.data || [];
+  const rawSurveys = surveysResult.data || [];
+
+  const tickets = rawTickets.filter((ticket) => !ticket.requester_id || activeUserIds.has(ticket.requester_id));
+  const surveys = rawSurveys.filter((survey) => !survey.requester_id || activeUserIds.has(survey.requester_id));
+
   return {
-    tickets: ticketsResult.data || [],
+    tickets,
     categories: categoriesResult.data || [],
-    surveys: surveysResult.data || [],
+    surveys,
   };
 }
 
 export async function getSpdServiceTickets(): Promise<SpdServiceTicket[]> {
-  const { data, error } = await supabase
-    .from('spd_service_tickets')
-    .select('*')
-    .order('created_at', { ascending: false });
+  const [{ data, error }, { data: profilesData }] = await Promise.all([
+    supabase
+      .from('spd_service_tickets')
+      .select('*')
+      .order('created_at', { ascending: false }),
+    supabase.from('profiles').select('user_id, status, role'),
+  ]);
 
   if (error) {
     throw error;
   }
 
-  return data || [];
+  const profiles = (profilesData || []) as Array<{ user_id: string; status?: string | null; role?: string | null }>;
+  const activeUserIds = new Set(
+    profiles
+      .filter((p) => (p.status ? p.status === 'active' : true) && p.role !== 'super_admin')
+      .map((p) => p.user_id),
+  );
+
+  return (data || []).filter((ticket) => !ticket.requester_id || activeUserIds.has(ticket.requester_id));
 }
 
 export async function getMySpdServiceTickets(userId: string): Promise<SpdServiceTicket[]> {

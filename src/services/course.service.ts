@@ -49,7 +49,7 @@ type CourseAggregation = {
 };
 
 export async function listCourseDirectory(): Promise<CourseDirectoryData> {
-  const [categoriesResult, recordsResult] = await Promise.all([
+  const [categoriesResult, recordsResult, profilesResult] = await Promise.all([
     runSupabaseQuery(
       supabase
         .from('course_categories')
@@ -65,10 +65,23 @@ export async function listCourseDirectory(): Promise<CourseDirectoryData> {
         .order('created_at', { ascending: false }),
       'โหลดข้อมูลหลักสูตร',
     ),
+    runSupabaseQuery(
+      supabase
+        .from('profiles')
+        .select('user_id, status, role'),
+      'โหลดสถานะบุคลากร',
+    ),
   ]);
 
   const categories = (categoriesResult.data || []) as CourseCategoryRow[];
-  const records = (recordsResult.data || []) as CourseRecord[];
+  const rawRecords = (recordsResult.data || []) as CourseRecord[];
+  const profiles = (profilesResult.data || []) as Array<{ user_id: string; status?: string | null; role?: string | null }>;
+  const activeUserIds = new Set(
+    profiles
+      .filter((p) => (p.status ? p.status === 'active' : true) && p.role !== 'super_admin')
+      .map((p) => p.user_id),
+  );
+  const records = rawRecords.filter((record) => activeUserIds.has(record.user_id));
 
   const groupedCourses = new Map<string, Map<string, CourseAggregation>>();
   const allCategories = new Map<string, boolean>();
@@ -190,13 +203,18 @@ export async function listCourseAttendees(courseName: string): Promise<CourseDir
       'โหลดรายชื่อผู้เรียน',
     ),
     runSupabaseQuery(
-      supabase.from('profiles').select('user_id, full_name, department, work_group'),
+      supabase.from('profiles').select('user_id, full_name, department, work_group, status, role'),
       'โหลดข้อมูลโปรไฟล์ผู้เรียน',
     ),
   ]);
 
-  const trainingRecords = (records || []) as CourseRecord[];
-  const profileByUser = new Map(((profiles || []) as CourseProfile[]).map((profile) => [profile.user_id, profile]));
+  const rawProfiles = (profiles || []) as Array<CourseProfile & { status?: string | null; role?: string | null }>;
+  const activeProfiles = rawProfiles.filter(
+    (profile) => (profile.status ? profile.status === 'active' : true) && profile.role !== 'super_admin',
+  );
+  const activeUserIds = new Set(activeProfiles.map((profile) => profile.user_id));
+  const trainingRecords = ((records || []) as CourseRecord[]).filter((record) => activeUserIds.has(record.user_id));
+  const profileByUser = new Map(activeProfiles.map((profile) => [profile.user_id, profile]));
   const latestByUser = new Map<string, CourseDirectoryAttendee>();
 
   for (const record of trainingRecords) {

@@ -37,8 +37,12 @@ function toArray<T>(value: T | T[] | null | undefined): T[] {
   return Array.isArray(value) ? value : [value];
 }
 
-export async function listPersonnel(viewerRole?: UserRole): Promise<PersonnelSummary[]> {
+export async function listPersonnel(viewerRole?: UserRole, options?: { includeInactive?: boolean }): Promise<PersonnelSummary[]> {
   let profileQuery = supabase.from('profiles').select('*').order('full_name');
+
+  if (!options?.includeInactive) {
+    profileQuery = profileQuery.eq('status', 'active');
+  }
 
   if (viewerRole === 'admin' || viewerRole === 'hr' || viewerRole === 'executive') {
     profileQuery = profileQuery.neq('role', 'super_admin');

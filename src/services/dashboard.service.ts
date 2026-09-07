@@ -95,7 +95,7 @@ function topCourseByCategory(records: Pick<TrainingRecord, 'course' | 'category'
 export async function getDashboardSummary(): Promise<DashboardSummary> {
   const [trainingResult, profileResult] = await Promise.all([
     supabase.from('training_records').select('user_id, course, category, month, year'),
-    supabase.from('profiles').select('user_id, work_group, gender, education, birth_date, generation, employment_type, role'),
+    supabase.from('profiles').select('user_id, work_group, gender, education, birth_date, generation, employment_type, role, status'),
   ]);
 
   if (trainingResult.error) {
@@ -109,9 +109,9 @@ export async function getDashboardSummary(): Promise<DashboardSummary> {
   const records = (trainingResult.data || []) as Pick<TrainingRecord, 'user_id' | 'course' | 'category' | 'month' | 'year'>[];
   const profiles = (profileResult.data || []) as Pick<
     Profile,
-    'user_id' | 'work_group' | 'gender' | 'education' | 'birth_date' | 'generation' | 'employment_type' | 'role'
+    'user_id' | 'work_group' | 'gender' | 'education' | 'birth_date' | 'generation' | 'employment_type' | 'role' | 'status'
   >[];
-  const includedProfiles = profiles.filter((profile) => profile.role !== 'super_admin');
+  const includedProfiles = profiles.filter((profile) => profile.role !== 'super_admin' && (profile.status ? profile.status === 'active' : true));
   const includedUserIds = new Set(includedProfiles.map((profile) => profile.user_id));
   const includedRecords = records.filter((record) => includedUserIds.has(record.user_id));
   const personnelCount = includedProfiles.length;

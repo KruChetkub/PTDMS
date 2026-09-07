@@ -67,7 +67,7 @@ export async function getAnalyticsData(): Promise<AnalyticsData> {
   const [trainingResult, trainingYearResult, profileResult, analysisResult] = await Promise.all([
     supabase.from('training_records').select('id, user_id, course, category, organizer, date, year'),
     supabase.from('training_records').select('id, year'),
-    supabase.from('profiles').select('user_id, full_name, department, work_group, role'),
+    supabase.from('profiles').select('user_id, full_name, department, work_group, role, status'),
     supabase.from('development_analysis').select('training_id, user_id, development_area, skill_group'),
   ]);
 
@@ -80,7 +80,7 @@ export async function getAnalyticsData(): Promise<AnalyticsData> {
   const trainingYears = trainingYearResult.data || [];
   const allProfiles = profileResult.data || [];
   const allAnalysis = analysisResult.data || [];
-  const profiles = allProfiles.filter((profile) => profile.role !== 'super_admin');
+  const profiles = allProfiles.filter((profile) => profile.role !== 'super_admin' && (profile.status ? profile.status === 'active' : true));
   const includedUserIds = new Set(profiles.map((profile) => profile.user_id));
   const records = allRecords.filter((record) => includedUserIds.has(record.user_id));
   const analysis = allAnalysis.filter((item) => item.user_id && includedUserIds.has(item.user_id));

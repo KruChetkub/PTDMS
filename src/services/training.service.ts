@@ -128,14 +128,17 @@ export async function listTrainingRecords(filters: TrainingRecordFilters = {}): 
   const { data: profilesData } = await runSupabaseQuery(
     supabase
       .from('profiles')
-      .select('user_id, employee_code, full_name, position, department, work_group')
+      .select('user_id, employee_code, full_name, position, department, work_group, status, role')
       .in('user_id', userIds),
     'โหลดข้อมูลบุคลากรของรายการอบรม',
   );
 
-  const profiles = (profilesData || []) as Pick<Profile, 'user_id' | 'employee_code' | 'full_name' | 'position' | 'department' | 'work_group'>[];
-  const profileByUser = new Map(profiles.map((profile) => [profile.user_id, profile]));
-  const recordIds = records.map((record) => record.id);
+  const rawProfiles = (profilesData || []) as (Pick<Profile, 'user_id' | 'employee_code' | 'full_name' | 'position' | 'department' | 'work_group'> & { status?: string | null; role?: string | null })[];
+  const activeProfiles = rawProfiles.filter((p) => (p.status ? p.status === 'active' : true) && p.role !== 'super_admin');
+  const profileByUser = new Map(activeProfiles.map((profile) => [profile.user_id, profile]));
+  const activeUserIds = new Set(activeProfiles.map((profile) => profile.user_id));
+  const activeRecords = records.filter((record) => activeUserIds.has(record.user_id));
+  const recordIds = activeRecords.map((record) => record.id);
   const { data: certificatesData } = await runSupabaseQuery(
     supabase
       .from('certificates')
@@ -154,7 +157,7 @@ export async function listTrainingRecords(filters: TrainingRecordFilters = {}): 
       }
     });
 
-  return records
+  return activeRecords
     .map((record) => {
       const profile = profileByUser.get(record.user_id);
       const certificate = certificateByTrainingId.get(record.id);
@@ -459,8 +462,9 @@ export async function importTrainingRecordsFromRows(rows: TrainingImportInputRow
     runSupabaseQuery(
       supabase
         .from('profiles')
-        .select('user_id, employee_code, full_name')
-        .neq('role', 'super_admin'),
+        .select('user_id, employee_code, full_name, status')
+        .neq('role', 'super_admin')
+        .eq('status', 'active'),
       'โหลดข้อมูลบุคลากรสำหรับนำเข้าอบรม',
     ),
     runSupabaseQuery(
