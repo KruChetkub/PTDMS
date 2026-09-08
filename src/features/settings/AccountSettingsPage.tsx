@@ -99,11 +99,14 @@ export function AccountSettingsPage() {
   useAuditPageAccess({ module: 'settings', action: 'settings_page_access', route: '/settings' });
   const user = useAuthStore((state) => state.user);
   const profile = useAuthStore((state) => state.profile);
+  const assuranceLevel = useAuthStore((state) => state.assuranceLevel);
   const refreshProfile = useAuthStore((state) => state.refreshProfile);
+  const refreshAssuranceLevel = useAuthStore((state) => state.refreshAssuranceLevel);
   const updatePassword = useAuthStore((state) => state.updatePassword);
   const authLoading = useAuthStore((state) => state.loading);
   const authError = useAuthStore((state) => state.error);
   const clearAuthError = useAuthStore((state) => state.clearError);
+  const mfaSetupRequired = profile?.mfa_required === true && assuranceLevel !== 'aal2';
 
   const [activeTab, setActiveTab] = useState<SettingsTab>('profile');
   const [profileForm, setProfileForm] = useState<ProfileFormState>({
@@ -143,10 +146,12 @@ export function AccountSettingsPage() {
   useEffect(() => {
     const tabParam = new URLSearchParams(location.search).get('tab') || location.hash.replace('#', '');
 
-    if (tabParam === 'password' || tabParam === 'profile' || tabParam === 'security') {
+    if (mfaSetupRequired) {
+      setActiveTab('security');
+    } else if (tabParam === 'password' || tabParam === 'profile' || tabParam === 'security') {
       setActiveTab(tabParam as SettingsTab);
     }
-  }, [location.hash, location.search]);
+  }, [location.hash, location.search, mfaSetupRequired]);
 
   useEffect(() => {
     if (!profile) return;
@@ -266,6 +271,7 @@ export function AccountSettingsPage() {
       setEnrollData(null);
       setTotpVerifyCode('');
       await loadMfaStatus();
+      await refreshAssuranceLevel();
     } catch (err) {
       setMfaError(getSafeUserErrorMessage(err, 'รหัสยืนยัน 6 หลักไม่ถูกต้อง หรือหมดอายุ กรุณาลองใหม่อีกครั้ง'));
     } finally {
@@ -276,6 +282,12 @@ export function AccountSettingsPage() {
   const handleConfirmDisableMfa = async () => {
     if (!unenrollTargetId) return;
 
+    if (profile?.mfa_required) {
+      setMfaError('บัญชีนี้ถูกบังคับใช้ MFA จึงไม่สามารถปิดการใช้งานได้');
+      setUnenrollTargetId(null);
+      return;
+    }
+
     setDisablingMfa(true);
     setMfaError(null);
     setMfaMessage(null);
@@ -285,6 +297,7 @@ export function AccountSettingsPage() {
       setMfaMessage('ปิดการใช้งาน 2-Step Verification เรียบร้อยแล้ว');
       setUnenrollTargetId(null);
       await loadMfaStatus();
+      await refreshAssuranceLevel();
     } catch (err) {
       setMfaError(getSafeUserErrorMessage(err, 'ไม่สามารถปิดการใช้งาน 2-Step Verification ได้'));
     } finally {
@@ -321,11 +334,22 @@ export function AccountSettingsPage() {
         description="แก้ไขข้อมูลส่วนบุคคล ตั้งค่ารหัสผ่าน และการยืนยันแบบ 2 ขั้นตอน (Google Authenticator)"
       />
 
+      {mfaSetupRequired ? (
+        <div className="flex items-start gap-3 rounded-xl border border-amber-300 bg-amber-50 p-4 text-amber-950" role="alert">
+          <AlertCircle className="mt-0.5 h-5 w-5 shrink-0" aria-hidden="true" />
+          <div>
+            <p className="font-semibold">ต้องตั้งค่า MFA ก่อนใช้งานระบบต่อ</p>
+            <p className="mt-1 text-sm">สแกน QR Code และยืนยันรหัส 6 หลักจากแอป Authenticator ให้เสร็จสิ้น</p>
+          </div>
+        </div>
+      ) : null}
+
       <div className="rounded-md border border-slate-200 bg-white p-2 shadow-sm">
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
             onClick={() => setActiveTab('profile')}
+            disabled={mfaSetupRequired}
             className={`inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm font-semibold transition ${
               activeTab === 'profile' ? 'bg-brand-50 text-brand-700' : 'text-slate-600 hover:bg-slate-50'
             }`}
@@ -336,6 +360,7 @@ export function AccountSettingsPage() {
           <button
             type="button"
             onClick={() => setActiveTab('password')}
+            disabled={mfaSetupRequired}
             className={`inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm font-semibold transition ${
               activeTab === 'password' ? 'bg-brand-50 text-brand-700' : 'text-slate-600 hover:bg-slate-50'
             }`}
@@ -662,14 +687,16 @@ export function AccountSettingsPage() {
                         </div>
                       </div>
 
-                      <button
+                      {!profile.mfa_required ? <button
                         type="button"
                         onClick={() => setUnenrollTargetId(factor.id)}
                         className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50 transition"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                         ปิดการใช้งาน
-                      </button>
+                      </button> : (
+                        <span className="rounded-lg bg-amber-100 px-3 py-1.5 text-xs font-semibold text-amber-800">บังคับใช้งาน</span>
+                      )}
                     </div>
                   ))}
                 </div>

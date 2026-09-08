@@ -1,5 +1,5 @@
 ﻿import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowRight, BookOpen, BookOpenText, CalendarDays, ChevronDown, ChevronLeft, ChevronRight, ClipboardCheck, Coins, Database, ExternalLink, FileText, GraduationCap, Headphones, KeyRound, LogOut, Megaphone, Monitor, ShieldCheck, Sparkles } from 'lucide-react';
+import { AlertTriangle, ArrowRight, BookOpen, BookOpenText, CalendarDays, ChevronDown, ChevronLeft, ChevronRight, ClipboardCheck, Coins, Database, ExternalLink, FileText, GraduationCap, Headphones, KeyRound, LogOut, Megaphone, Monitor, ShieldCheck, Sparkles } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ConfirmModal } from '../../components/ui/ConfirmModal';
 import { useAuditPageAccess } from '../../hooks/useAuditPageAccess';
@@ -143,7 +143,8 @@ export function PortalPage() {
     config: (typeof SYSTEM_SURVEY_CONFIGS)[number];
     state: NonNullable<Awaited<ReturnType<typeof getPortalSurveyState>>>;
   }>>([]);
-  const { user, profile, signOut } = useAuthStore();
+  const { user, profile, assuranceLevel, signOut } = useAuthStore();
+  const mfaSetupRequired = profile?.mfa_required === true && assuranceLevel !== 'aal2';
   const siteContent = usePublishedSiteContent();
   const portalBackgroundImage = siteContent.portalPage.backgroundImageUrl || '/SmartDSP.png';
   const portalBackgroundImageEnabled = siteContent.portalPage.status === 'published' && siteContent.portalPage.backgroundImageEnabled !== false;
@@ -227,7 +228,10 @@ export function PortalPage() {
       document.removeEventListener('pointerdown', handlePointerDown);
     };
   }, [isUserPanelOpen]);
-  const visibleSystems = [...coreSystems, ...assetSystems, ...serviceSystems, ...externalSystems, ...adminSystems].filter((system) => canAccess(profile?.role, system.roles));
+  const visibleSystems = mfaSetupRequired
+    ? []
+    : [...coreSystems, ...assetSystems, ...serviceSystems, ...externalSystems, ...adminSystems]
+      .filter((system) => canAccess(profile?.role, system.roles));
   const getSystemPath = (system: PortalCard) => {
     if (!system.to) {
       return '/portal';
@@ -370,6 +374,31 @@ export function PortalPage() {
       </header>
 
       <main className="relative z-10 mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+        {mfaSetupRequired ? (
+          <section className="mb-6 rounded-xl border border-amber-300 bg-amber-50 p-5 shadow-sm" role="alert">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-start gap-3">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-700">
+                  <AlertTriangle className="h-5 w-5" aria-hidden="true" />
+                </span>
+                <div>
+                  <h1 className="font-bold text-amber-950">บัญชีนี้ถูกกำหนดให้เปิดใช้งาน MFA</h1>
+                  <p className="mt-1 text-sm leading-6 text-amber-900">
+                    กรุณาลงทะเบียนและยืนยัน Google Authenticator ก่อนเข้าใช้งานระบบอื่น
+                  </p>
+                </div>
+              </div>
+              <Link
+                to="/settings?tab=security&mfa=required"
+                className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg bg-amber-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-amber-800"
+              >
+                <ShieldCheck className="h-4 w-4" aria-hidden="true" />
+                ตั้งค่า MFA ตอนนี้
+              </Link>
+            </div>
+          </section>
+        ) : null}
+
         <section className="relative overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm">
           <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-brand-600 via-emerald-500 to-amber-400" />
           <div className="p-5 sm:p-7 lg:p-8">

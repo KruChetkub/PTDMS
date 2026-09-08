@@ -11,10 +11,12 @@ import {
   Loader2,
   RotateCcw,
   KeyRound,
+  Smartphone,
 } from 'lucide-react';
 import { PageHeader } from '../../components/ui/PageHeader';
 import { BackupRestorePanel } from './BackupRestorePanel';
 import { ForceChangePasswordPanel } from './ForceChangePasswordPanel';
+import { MfaEnforcementPanel } from './MfaEnforcementPanel';
 import {
   exportAuditLogsToGoogleSheet,
   listLoginHistory,
@@ -24,7 +26,7 @@ import {
 import { getSafeUserErrorMessage } from '../../utils/errorHandling';
 
 const loginHistoryPageSize = 10;
-type SecurityTab = 'history' | 'backup' | 'force-password';
+type SecurityTab = 'history' | 'backup' | 'force-password' | 'mfa';
 
 function downloadAuditArchive(fileName: string, content: string) {
   if (typeof window === 'undefined') return;
@@ -112,6 +114,7 @@ export function SecurityPage() {
           { value: 'history', label: 'Security & Login History', icon: LogIn },
           { value: 'backup', label: 'Backup / Restore', icon: RotateCcw },
           { value: 'force-password', label: 'Force Change Password', icon: KeyRound },
+          { value: 'mfa', label: 'MFA Enforcement', icon: Smartphone },
         ].map((tab) => {
           const Icon = tab.icon;
           return (
@@ -325,8 +328,10 @@ export function SecurityPage() {
       </div>
       ) : activeTab === 'backup' ? (
         <BackupRestorePanel />
-      ) : (
+      ) : activeTab === 'force-password' ? (
         <ForceChangePasswordPanel />
+      ) : (
+        <MfaEnforcementPanel />
       )}
     </div>
   );

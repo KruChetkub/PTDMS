@@ -13,7 +13,7 @@ type ProtectedRouteProps = {
 
 export function ProtectedRoute({ allowedRoles, allowedPermissions }: ProtectedRouteProps) {
   const location = useLocation();
-  const { initialize, initialized, loading, user, profile, permissions, mfaPending, refreshProfile } = useAuthStore();
+  const { initialize, initialized, loading, user, profile, permissions, assuranceLevel, mfaPending, refreshProfile } = useAuthStore();
   useAutoLogoutTimer(Boolean(initialized && user && profile?.status === 'active' && !profile.force_password_change && !mfaPending?.required));
 
   useEffect(() => {
@@ -91,6 +91,15 @@ export function ProtectedRoute({ allowedRoles, allowedPermissions }: ProtectedRo
 
   if (profile.force_password_change) {
     return <ForcedPasswordChangeGate />;
+  }
+
+  if (
+    profile.mfa_required
+    && assuranceLevel !== 'aal2'
+    && location.pathname !== '/portal'
+    && location.pathname !== '/settings'
+  ) {
+    return <Navigate to="/portal?mfa=required" replace />;
   }
 
   const roleAllowed = Boolean(allowedRoles?.length && canAccess(profile.role, allowedRoles));

@@ -20,6 +20,9 @@ export type Profile = {
   force_password_change_requested_at: string | null;
   force_password_change_requested_by: string | null;
   password_changed_at: string | null;
+  mfa_required?: boolean;
+  mfa_required_at?: string | null;
+  mfa_required_by?: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -483,8 +486,11 @@ export type Database = {
           avatar_url?: string | null;
           force_password_change?: boolean;
           force_password_change_requested_at?: string | null;
-          force_password_change_requested_by?: string | null;
-          password_changed_at?: string | null;
+           force_password_change_requested_by?: string | null;
+           password_changed_at?: string | null;
+          mfa_required?: boolean;
+          mfa_required_at?: string | null;
+          mfa_required_by?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -1018,6 +1024,24 @@ export type Database = {
     };
     Views: Record<string, never>;
     Functions: {
+      list_mfa_enforcement_users: {
+        Args: Record<string, never>;
+        Returns: Array<{
+          user_id: string;
+          full_name: string;
+          email: string | null;
+          role: UserRole;
+          status: ProfileStatus;
+          mfa_required: boolean;
+          mfa_required_at: string | null;
+          mfa_required_by: string | null;
+          mfa_enabled: boolean;
+        }>;
+      };
+      set_mfa_requirement: {
+        Args: { target_user_ids: string[]; required: boolean };
+        Returns: number;
+      };
       create_training_record_with_details: {
         Args: {
           p_user_id: string;
