@@ -195,6 +195,27 @@ function getDashboardAmountMetrics(amount: BudgetUtilizationAmount) {
   };
 }
 
+function formatThaiDataUpdate(value: string | null | undefined) {
+  if (!value) return 'ยังไม่มีข้อมูลเวลาอัปเดต';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'ยังไม่มีข้อมูลเวลาอัปเดต';
+
+  const dateText = new Intl.DateTimeFormat('th-TH-u-ca-buddhist', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+    timeZone: 'Asia/Bangkok',
+  }).format(date);
+  const timeText = new Intl.DateTimeFormat('th-TH', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+    timeZone: 'Asia/Bangkok',
+  }).format(date);
+
+  return `อัปเดตข้อมูลล่าสุด ${dateText} เวลา ${timeText} น.`;
+}
+
 const hierarchyAmountFields = [
   'planned_budget_amount',
   'allocation_tranche_1_amount',
@@ -978,14 +999,20 @@ export function BudgetUtilizationDashboardPage() {
           title="ติดตามการใช้จ่ายงบประมาณ"
           description="กองยุทธศาสตร์และแผนงาน"
         />
-        <button
-          type="button"
-          onClick={() => void loadData()}
-          className="inline-flex items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-        >
-          <RefreshCw className="h-4 w-4" aria-hidden="true" />
-          โหลดใหม่
-        </button>
+        <div className="flex flex-wrap items-center justify-end gap-3">
+          <p className="rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-600 shadow-sm" aria-live="polite">
+            {formatThaiDataUpdate(summary?.lastFinancialDataUpdate)}
+          </p>
+          <button
+            type="button"
+            onClick={() => void loadData()}
+            disabled={loading}
+            className="inline-flex items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} aria-hidden="true" />
+            โหลดใหม่
+          </button>
+        </div>
       </div>
 
       {error ? (

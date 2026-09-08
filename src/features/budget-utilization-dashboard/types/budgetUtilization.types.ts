@@ -19,6 +19,7 @@ export type BudgetUtilizationReportPeriod = {
   created_by: string | null;
   created_at: string;
   updated_at: string;
+  financial_data_updated_at?: string | null;
 };
 
 export type BudgetUtilizationItem = {
@@ -200,6 +201,7 @@ export type BudgetUtilizationDashboardSummary = {
   projectItems: BudgetUtilizationItemWithAmount[];
   totals: BudgetUtilizationAmount;
   allocationTranches: BudgetUtilizationAllocationTranche[];
+  lastFinancialDataUpdate: string | null;
 };
 
 export type BudgetUtilizationImportPreview = {

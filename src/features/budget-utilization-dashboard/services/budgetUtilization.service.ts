@@ -356,6 +356,7 @@ export async function getBudgetDashboardSummary(reportPeriodId?: string | null):
       projectItems: [],
       totals: normalizeAmount({}),
       allocationTranches: [],
+      lastFinancialDataUpdate: null,
     };
   }
 
@@ -364,6 +365,15 @@ export async function getBudgetDashboardSummary(reportPeriodId?: string | null):
     listBudgetAllocationTranches(reportPeriod.id),
   ]);
   const totalItem = items.find((item) => item.row_type === 'total') ?? null;
+  const lastFinancialDataUpdate = [
+    reportPeriod.financial_data_updated_at,
+    ...items.flatMap((item) => [
+      item.updated_at,
+      item.amount.updated_at,
+      ...(item.allocations ?? []).map((allocation) => allocation.updated_at),
+    ]),
+  ].filter((value): value is string => Boolean(value))
+    .sort((left, right) => Date.parse(right) - Date.parse(left))[0] ?? null;
 
   return {
     reportPeriod,
@@ -373,6 +383,7 @@ export async function getBudgetDashboardSummary(reportPeriodId?: string | null):
     projectItems: items.filter((item: BudgetUtilizationItemWithAmount) => ['major_project', 'sub_project', 'activity'].includes(item.row_type)),
     totals: summarizeBudgetItems(items),
     allocationTranches,
+    lastFinancialDataUpdate,
   };
 }
 
