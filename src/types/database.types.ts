@@ -85,6 +85,54 @@ export type LoginHistory = {
   success: boolean;
 };
 
+export type SecurityAlert = {
+  id: string;
+  alert_type: 'repeated_ip_failures' | 'repeated_account_failures' | 'credential_stuffing' | 'success_after_failures';
+  severity: 'warning' | 'high' | 'critical';
+  status: 'open' | 'acknowledged' | 'resolved';
+  fingerprint: string;
+  title: string;
+  description: string;
+  source_ip: string | null;
+  target_email: string | null;
+  attempt_count: number;
+  window_started_at: string;
+  last_detected_at: string;
+  metadata: Record<string, unknown>;
+  acknowledged_at: string | null;
+  acknowledged_by: string | null;
+  resolved_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type LoginIpBlockSettings = {
+  singleton_id: number;
+  enabled: boolean;
+  attempt_limit: number;
+  window_minutes: number;
+  permanent_block: boolean;
+  auto_unblock_days: number;
+  updated_by: string | null;
+  updated_at: string;
+};
+
+export type LoginIpRule = {
+  id: string;
+  ip_address: string;
+  rule_type: 'allow' | 'block';
+  source: 'automatic' | 'manual';
+  is_active: boolean;
+  reason: string;
+  failed_attempt_count: number;
+  blocked_at: string | null;
+  expires_at: string | null;
+  created_by: string | null;
+  updated_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type AuditLog = {
   id: string;
   actor_id: string | null;
@@ -577,6 +625,66 @@ export type Database = {
           success?: boolean;
         };
         Update: Partial<Omit<LoginHistory, 'id'>>;
+        Relationships: [];
+      };
+      security_alerts: {
+        Row: SecurityAlert;
+        Insert: {
+          id?: string;
+          alert_type: SecurityAlert['alert_type'];
+          severity: SecurityAlert['severity'];
+          status?: SecurityAlert['status'];
+          fingerprint: string;
+          title: string;
+          description: string;
+          source_ip?: string | null;
+          target_email?: string | null;
+          attempt_count?: number;
+          window_started_at: string;
+          last_detected_at: string;
+          metadata?: Record<string, unknown>;
+          acknowledged_at?: string | null;
+          acknowledged_by?: string | null;
+          resolved_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Omit<SecurityAlert, 'id' | 'created_at'>>;
+        Relationships: [];
+      };
+      login_ip_block_settings: {
+        Row: LoginIpBlockSettings;
+        Insert: {
+          singleton_id?: number;
+          enabled?: boolean;
+          attempt_limit?: number;
+          window_minutes?: number;
+          permanent_block?: boolean;
+          auto_unblock_days?: number;
+          updated_by?: string | null;
+          updated_at?: string;
+        };
+        Update: Partial<Omit<LoginIpBlockSettings, 'singleton_id'>>;
+        Relationships: [];
+      };
+      login_ip_rules: {
+        Row: LoginIpRule;
+        Insert: {
+          id?: string;
+          ip_address: string;
+          rule_type: LoginIpRule['rule_type'];
+          source?: LoginIpRule['source'];
+          is_active?: boolean;
+          reason?: string;
+          failed_attempt_count?: number;
+          blocked_at?: string | null;
+          expires_at?: string | null;
+          created_by?: string | null;
+          updated_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Omit<LoginIpRule, 'id' | 'created_at'>>;
         Relationships: [];
       };
       audit_logs: {

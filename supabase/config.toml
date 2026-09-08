@@ -19,3 +19,6 @@ verify_jwt = false
 
 [functions.backup-restore-data]
 verify_jwt = false
+
+[functions.login-gateway]
+verify_jwt = false

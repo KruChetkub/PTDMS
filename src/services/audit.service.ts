@@ -1,5 +1,7 @@
 import { supabase } from '../lib/supabase';
-import type { AuditLog } from '../types/database.types';
+import type { AuditLog, SecurityAlert } from '../types/database.types';
+
+export type { SecurityAlert } from '../types/database.types';
 
 export type LoginHistory = {
   id: string;
@@ -260,4 +262,39 @@ export async function listLoginHistory(limit = 100) {
     ...history,
     user_name: history.profiles?.full_name || 'Unknown',
   })) as LoginHistory[];
+}
+
+export async function listOpenSecurityAlerts(limit = 50) {
+  const { data, error } = await supabase
+    .from('security_alerts')
+    .select('id, alert_type, severity, status, fingerprint, title, description, source_ip, target_email, attempt_count, window_started_at, last_detected_at, metadata, acknowledged_at, acknowledged_by, resolved_at, created_at, updated_at')
+    .eq('status', 'open')
+    .order('last_detected_at', { ascending: false })
+    .limit(limit);
+
+  if (error) throw error;
+  return (data ?? []) as SecurityAlert[];
+}
+
+export async function acknowledgeSecurityAlert(alertId: string) {
+  const { data: userData, error: userError } = await supabase.auth.getUser();
+  const userId = userData.user?.id;
+
+  if (userError || !userId) {
+    throw new Error('ไม่พบผู้ใช้ที่ยืนยันตัวตน');
+  }
+
+  const acknowledgedAt = new Date().toISOString();
+  const { error } = await supabase
+    .from('security_alerts')
+    .update({
+      status: 'acknowledged',
+      acknowledged_at: acknowledgedAt,
+      acknowledged_by: userId,
+      updated_at: acknowledgedAt,
+    })
+    .eq('id', alertId)
+    .eq('status', 'open');
+
+  if (error) throw error;
 }

@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:edge:no-token": "node --env-file=.env supabase/tests/edge_function_no_token_security.mjs",
+    "test:edge:authorization": "node --env-file=.env supabase/tests/edge_function_authorization_security.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",

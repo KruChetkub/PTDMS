@@ -12,21 +12,46 @@ import {
   RotateCcw,
   KeyRound,
   Smartphone,
+  ShieldAlert,
+  Ban,
 } from 'lucide-react';
 import { PageHeader } from '../../components/ui/PageHeader';
 import { BackupRestorePanel } from './BackupRestorePanel';
 import { ForceChangePasswordPanel } from './ForceChangePasswordPanel';
 import { MfaEnforcementPanel } from './MfaEnforcementPanel';
+import { LoginIpBlockPanel } from './LoginIpBlockPanel';
 import {
+  acknowledgeSecurityAlert,
   exportAuditLogsToGoogleSheet,
   listLoginHistory,
+  listOpenSecurityAlerts,
   type AuditLogGoogleSheetExportResult,
   type LoginHistory,
+  type SecurityAlert,
 } from '../../services/audit.service';
 import { getSafeUserErrorMessage } from '../../utils/errorHandling';
 
 const loginHistoryPageSize = 10;
-type SecurityTab = 'history' | 'backup' | 'force-password' | 'mfa';
+type SecurityTab = 'history' | 'ip-blocks' | 'backup' | 'force-password' | 'mfa';
+
+const securityAlertLabels: Record<SecurityAlert['alert_type'], { title: string; description: string }> = {
+  repeated_ip_failures: {
+    title: 'พบการล็อกอินล้มเหลวซ้ำจาก IP เดียว',
+    description: 'มีการลองเข้าสู่ระบบล้มเหลวอย่างน้อย 5 ครั้งจาก IP เดียวภายใน 10 นาที',
+  },
+  repeated_account_failures: {
+    title: 'พบบัญชีถูกลองรหัสผ่านซ้ำ',
+    description: 'มีการลองเข้าสู่บัญชีเดียวกันล้มเหลวอย่างน้อย 5 ครั้งภายใน 10 นาที',
+  },
+  credential_stuffing: {
+    title: 'พบการลองเข้าสู่หลายบัญชีจาก IP เดียว',
+    description: 'IP เดียวพยายามเข้าสู่บัญชีอย่างน้อย 3 บัญชีภายใน 10 นาที',
+  },
+  success_after_failures: {
+    title: 'เข้าสู่ระบบสำเร็จหลังล้มเหลวหลายครั้ง',
+    description: 'บัญชีเข้าสู่ระบบสำเร็จหลังมีความพยายามล้มเหลวอย่างน้อย 5 ครั้งภายใน 30 นาที',
+  },
+};
 
 function downloadAuditArchive(fileName: string, content: string) {
   if (typeof window === 'undefined') return;
@@ -48,6 +73,10 @@ export function SecurityPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [historyPage, setHistoryPage] = useState(1);
+  const [securityAlerts, setSecurityAlerts] = useState<SecurityAlert[]>([]);
+  const [alertsLoading, setAlertsLoading] = useState(true);
+  const [alertsError, setAlertsError] = useState<string | null>(null);
+  const [acknowledgingAlertId, setAcknowledgingAlertId] = useState<string | null>(null);
   const [exportingLogs, setExportingLogs] = useState(false);
   const [exportResult, setExportResult] = useState<AuditLogGoogleSheetExportResult | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
@@ -65,6 +94,33 @@ export function SecurityPage() {
       }
     };
     void loadHistory();
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+
+    const loadAlerts = async (showLoading = false) => {
+      if (showLoading) setAlertsLoading(true);
+      try {
+        const data = await listOpenSecurityAlerts(50);
+        if (!active) return;
+        setSecurityAlerts(Array.isArray(data) ? data : []);
+        setAlertsError(null);
+      } catch (err) {
+        if (!active) return;
+        setAlertsError(getSafeUserErrorMessage(err, 'ไม่สามารถโหลดการแจ้งเตือนความปลอดภัยได้'));
+      } finally {
+        if (active && showLoading) setAlertsLoading(false);
+      }
+    };
+
+    void loadAlerts(true);
+    const refreshTimer = window.setInterval(() => void loadAlerts(), 60_000);
+
+    return () => {
+      active = false;
+      window.clearInterval(refreshTimer);
+    };
   }, []);
 
   const safeHistory = Array.isArray(history) ? history : [];
@@ -102,6 +158,19 @@ export function SecurityPage() {
     }
   };
 
+  const handleAcknowledgeAlert = async (alertId: string) => {
+    setAcknowledgingAlertId(alertId);
+    setAlertsError(null);
+    try {
+      await acknowledgeSecurityAlert(alertId);
+      setSecurityAlerts((current) => current.filter((alert) => alert.id !== alertId));
+    } catch (err) {
+      setAlertsError(getSafeUserErrorMessage(err, 'ไม่สามารถรับทราบการแจ้งเตือนได้'));
+    } finally {
+      setAcknowledgingAlertId(null);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -112,6 +181,7 @@ export function SecurityPage() {
       <div className="flex flex-wrap gap-2 rounded-xl border border-slate-200 bg-white p-2 shadow-sm">
         {[
           { value: 'history', label: 'Security & Login History', icon: LogIn },
+          { value: 'ip-blocks', label: 'รายการ IP ที่บล็อก', icon: Ban },
           { value: 'backup', label: 'Backup / Restore', icon: RotateCcw },
           { value: 'force-password', label: 'Force Change Password', icon: KeyRound },
           { value: 'mfa', label: 'MFA Enforcement', icon: Smartphone },
@@ -135,6 +205,78 @@ export function SecurityPage() {
 
       {activeTab === 'history' ? (
       <div className="grid gap-6 lg:grid-cols-3">
+        <div className={`rounded-xl border p-5 shadow-sm lg:col-span-3 ${
+          securityAlerts.length > 0
+            ? 'border-red-200 bg-red-50'
+            : 'border-emerald-200 bg-emerald-50'
+        }`}>
+          <div className="flex flex-wrap items-center gap-3">
+            <div className={`rounded-lg p-2 ${securityAlerts.length > 0 ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'}`}>
+              <ShieldAlert className="h-5 w-5" />
+            </div>
+            <div>
+              <h3 className={`font-bold ${securityAlerts.length > 0 ? 'text-red-900' : 'text-emerald-900'}`}>
+                การแจ้งเตือนพฤติกรรมการล็อกอินผิดปกติ
+              </h3>
+              <p className={`text-xs ${securityAlerts.length > 0 ? 'text-red-700' : 'text-emerald-700'}`}>
+                ตรวจซ้ำอัตโนมัติทุก 60 วินาที · พบ {securityAlerts.length.toLocaleString('th-TH')} รายการที่ยังไม่รับทราบ
+              </p>
+            </div>
+          </div>
+
+          {alertsError ? (
+            <div className="mt-4 rounded-md border border-red-200 bg-white px-3 py-2 text-sm text-red-700">{alertsError}</div>
+          ) : alertsLoading ? (
+            <div className="mt-4 flex items-center gap-2 text-sm text-slate-600">
+              <Loader2 className="h-4 w-4 animate-spin" /> กำลังตรวจสอบเหตุการณ์ล่าสุด
+            </div>
+          ) : securityAlerts.length === 0 ? (
+            <p className="mt-4 text-sm font-medium text-emerald-800">ไม่พบพฤติกรรมการล็อกอินที่เข้าเกณฑ์แจ้งเตือน</p>
+          ) : (
+            <div className="mt-4 grid gap-3 xl:grid-cols-2">
+              {securityAlerts.slice(0, 6).map((alert) => {
+                const label = securityAlertLabels[alert.alert_type];
+                return (
+                  <div key={alert.id} className="rounded-lg border border-red-200 bg-white p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h4 className="font-semibold text-slate-900">{label.title}</h4>
+                          <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold uppercase ${
+                            alert.severity === 'critical'
+                              ? 'bg-red-100 text-red-800'
+                              : 'bg-amber-100 text-amber-800'
+                          }`}>
+                            {alert.severity}
+                          </span>
+                        </div>
+                        <p className="mt-1 text-xs text-slate-600">{label.description}</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => void handleAcknowledgeAlert(alert.id)}
+                        disabled={acknowledgingAlertId === alert.id}
+                        className="shrink-0 rounded-md border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                      >
+                        {acknowledgingAlertId === alert.id ? 'กำลังบันทึก' : 'รับทราบ'}
+                      </button>
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
+                      <span>จำนวน {alert.attempt_count.toLocaleString('th-TH')} ครั้ง</span>
+                      {alert.target_email ? <span>บัญชี {alert.target_email}</span> : null}
+                      {alert.source_ip ? <span>IP {alert.source_ip}</span> : null}
+                      <span>
+                        ล่าสุด {new Date(alert.last_detected_at).toLocaleString('th-TH', {
+                          year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
+                        })}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
         <div className="space-y-6 lg:col-span-1">
           <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-6 shadow-sm">
             <div className="mb-4 flex items-center gap-3">
@@ -326,6 +468,8 @@ export function SecurityPage() {
           </div>
         </div>
       </div>
+      ) : activeTab === 'ip-blocks' ? (
+        <LoginIpBlockPanel />
       ) : activeTab === 'backup' ? (
         <BackupRestorePanel />
       ) : activeTab === 'force-password' ? (

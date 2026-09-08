@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { Session, User } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
+import { env } from '../lib/env';
 import { recordAuditLog, recordLoginAttempt } from '../services/audit.service';
 import type { Profile } from '../types/database.types';
 import { isPasswordPolicySatisfied } from '../features/auth/passwordPolicy';
@@ -50,6 +51,50 @@ function getSignInErrorMessage(message: string) {
   }
 
   return message;
+}
+
+type LoginGatewayResponse = {
+  access_token?: string;
+  refresh_token?: string;
+  reason?: string;
+  message?: string;
+};
+
+async function signInThroughGateway(email: string, password: string) {
+  const response = await fetch(`${env.supabaseUrl}/functions/v1/login-gateway`, {
+    method: 'POST',
+    headers: {
+      apikey: env.supabaseAnonKey,
+      Authorization: `Bearer ${env.supabaseAnonKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ email, password }),
+  });
+
+  const result = await response.json().catch(() => ({})) as LoginGatewayResponse;
+  if (!response.ok) {
+    const message = result.reason === 'ip_blocked'
+      ? (result.message || 'IP ของคุณถูกบล็อก กรุณาติดต่อเจ้าหน้าที่ผู้รับผิดชอบระบบเพื่อขอปลดบล็อก')
+      : result.reason === 'rate_limited'
+        ? 'มีการเข้าสู่ระบบถี่เกินไป กรุณารอสักครู่แล้วลองใหม่'
+        : result.reason === 'invalid_credentials'
+          ? 'อีเมลหรือรหัสผ่านไม่ถูกต้อง'
+          : result.reason === 'invalid_payload'
+            ? 'ข้อมูลเข้าสู่ระบบไม่ถูกต้อง'
+            : 'ไม่สามารถตรวจสอบความปลอดภัยในการเข้าสู่ระบบได้ กรุณาลองใหม่ภายหลัง';
+    throw new Error(message);
+  }
+
+  if (!result.access_token || !result.refresh_token) {
+    throw new Error('ไม่ได้รับข้อมูลยืนยันตัวตนจากระบบ');
+  }
+
+  const { data, error } = await supabase.auth.setSession({
+    access_token: result.access_token,
+    refresh_token: result.refresh_token,
+  });
+  if (error) throw error;
+  return data;
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
@@ -253,14 +298,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ loading: true, error: null });
 
     const normalizedEmail = email.trim().toLowerCase();
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) {
-      void recordLoginAttempt({
-        email: normalizedEmail,
-        success: false,
-        errorMessage: error.message,
-      });
-      set({ error: getSignInErrorMessage(error.message), loading: false });
+    let data;
+    try {
+      data = await signInThroughGateway(normalizedEmail, password);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'ไม่สามารถเข้าสู่ระบบได้';
+      set({ error: getSignInErrorMessage(message), loading: false });
       throw error;
     }
 
