@@ -406,6 +406,19 @@ export async function createBudgetReportPeriod(input: BudgetUtilizationReportPer
   const { data: userData, error: userError } = await supabase.auth.getUser();
   if (userError) throw new Error(userError.message);
 
+  const existingResult = await runSupabaseQuery<any>(
+    budgetClient
+      .from('budget_utilization_report_periods')
+      .select('id')
+      .eq('fiscal_year', input.fiscalYear)
+      .limit(1)
+      .maybeSingle(),
+    'ตรวจสอบปีงบประมาณที่มีอยู่',
+  );
+  if (existingResult.data) {
+    throw new Error(`มีชุดข้อมูลปีงบประมาณ ${input.fiscalYear} อยู่แล้ว`);
+  }
+
   const result = await runSupabaseQuery<any>(
     budgetClient
       .from('budget_utilization_report_periods')
@@ -418,7 +431,7 @@ export async function createBudgetReportPeriod(input: BudgetUtilizationReportPer
           maxLength: 300,
           allowNewlines: false,
         }),
-        is_active: input.isActive ?? true,
+        is_active: false,
         created_by: userData.user?.id ?? null,
       })
       .select('*')
@@ -428,7 +441,9 @@ export async function createBudgetReportPeriod(input: BudgetUtilizationReportPer
 
   const reportPeriod = result.data as BudgetUtilizationReportPeriod;
   await createDefaultBudgetAllocationTranches(reportPeriod.id);
-  return reportPeriod;
+  return input.isActive === false
+    ? reportPeriod
+    : setActiveBudgetReportPeriod(reportPeriod.id);
 }
 
 export async function saveBudgetAllocationTrancheDefinitions(

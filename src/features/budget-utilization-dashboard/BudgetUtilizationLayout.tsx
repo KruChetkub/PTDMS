@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ArrowLeft, BarChart3, Coins, DatabaseZap, FileSpreadsheet, ListTree, LockKeyhole, LogOut, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
+import { ArrowLeft, BarChart3, Coins, DatabaseZap, ListTree, LockKeyhole, LogOut, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { ConfirmModal } from '../../components/ui/ConfirmModal';
 import { useAuthStore } from '../../stores/auth.store';
@@ -26,8 +26,7 @@ const budgetItemsNavItem: BudgetNavItem = {
 };
 
 const adminNavItems: BudgetNavItem[] = [
-  { to: '/budget-utilization/import', label: 'นำเข้าข้อมูล', icon: FileSpreadsheet },
-  { to: '/budget-utilization/manage', label: 'จัดการรอบรายงาน', icon: DatabaseZap },
+  { to: '/budget-utilization/manage', label: 'จัดการปีงบประมาณ', icon: DatabaseZap },
 ];
 
 export function BudgetUtilizationLayout() {

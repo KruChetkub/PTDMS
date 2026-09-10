@@ -1,4 +1,4 @@
-import { createBrowserRouter } from 'react-router-dom';
+import { createBrowserRouter, Navigate } from 'react-router-dom';
 import { ProtectedRoute } from '../components/auth/ProtectedRoute';
 import { AppLayout } from '../components/layout/AppLayout';
 import { CalendarLayout } from '../components/layout/CalendarLayout';
@@ -33,8 +33,6 @@ import { StrategyCalendarPage } from '../features/strategy-calendar/StrategyCale
 import { MeetingRoomBookingPage } from '../features/strategy-calendar/MeetingRoomBookingPage';
 import { BudgetUtilizationDashboardPage } from '../features/budget-utilization-dashboard/pages/BudgetUtilizationDashboardPage';
 import { BudgetUtilizationItemsPage } from '../features/budget-utilization-dashboard/pages/BudgetUtilizationItemsPage';
-import { BudgetUtilizationImportPage } from '../features/budget-utilization-dashboard/pages/BudgetUtilizationImportPage';
-import { BudgetUtilizationImportDetailPage } from '../features/budget-utilization-dashboard/pages/BudgetUtilizationImportDetailPage';
 import { BudgetUtilizationManagePage } from '../features/budget-utilization-dashboard/pages/BudgetUtilizationManagePage';
 import { ItAssetsPage } from '../features/it-assets/ItAssetsPage';
 import { ItAssetsManagePage } from '../features/it-assets/ItAssetsManagePage';
@@ -275,11 +273,11 @@ export const router = createBrowserRouter([
         children: [
           {
             path: '/budget-utilization/import',
-            element: <BudgetUtilizationImportPage />,
+            element: <Navigate to="/budget-utilization/manage" replace />,
           },
           {
             path: '/budget-utilization/import/:batchId',
-            element: <BudgetUtilizationImportDetailPage />,
+            element: <Navigate to="/budget-utilization/manage" replace />,
           },
           {
             path: '/budget-utilization/manage',

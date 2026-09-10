@@ -3,10 +3,11 @@ import { AlertCircle, BarChart3, ChevronDown, ChevronRight, Coins, DatabaseZap, 
 import { Bar, BarChart, CartesianGrid, Cell, LabelList, Legend, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { PageHeader } from '../../../components/ui/PageHeader';
 import { useAuditPageAccess } from '../../../hooks/useAuditPageAccess';
-import { getBudgetDashboardSummary } from '../services/budgetUtilization.service';
+import { getBudgetDashboardSummary, listBudgetReportPeriods } from '../services/budgetUtilization.service';
 import { buildHierarchyRollupMap, formatBudgetAmount, getNetAllocationTotal, normalizeAmount, percent, sumBudgetAmounts, summarizeBudgetItems, toNumber } from '../utils/budgetUtilizationCalculations';
-import type { BudgetUtilizationAmount, BudgetUtilizationDashboardSummary, BudgetUtilizationItemWithAmount, BudgetUtilizationRawWorkbook } from '../types/budgetUtilization.types';
+import type { BudgetUtilizationAmount, BudgetUtilizationDashboardSummary, BudgetUtilizationItemWithAmount, BudgetUtilizationRawWorkbook, BudgetUtilizationReportPeriod } from '../types/budgetUtilization.types';
 import { getSafeUserErrorMessage } from '../../../utils/errorHandling';
+import { BudgetYearComparisonSection } from '../components/BudgetYearComparisonSection';
 
 const chartColors = ['#2563eb', '#8b5cf6', '#f59e0b', '#0f766e', '#e11d48'];
 
@@ -664,6 +665,11 @@ function buildDatabaseWorkbook(summary: BudgetUtilizationDashboardSummary | null
 export function BudgetUtilizationDashboardPage() {
   useAuditPageAccess({ module: 'budget_utilization', action: 'budget_dashboard_access', route: '/budget-utilization' });
   const [summary, setSummary] = useState<BudgetUtilizationDashboardSummary | null>(null);
+  const [reportPeriods, setReportPeriods] = useState<BudgetUtilizationReportPeriod[]>([]);
+  const [selectedReportPeriodId, setSelectedReportPeriodId] = useState('');
+  const [comparisonSummary, setComparisonSummary] = useState<BudgetUtilizationDashboardSummary | null>(null);
+  const [selectedComparisonReportPeriodId, setSelectedComparisonReportPeriodId] = useState('');
+  const [comparisonLoading, setComparisonLoading] = useState(false);
   const [selectedQuarter, setSelectedQuarter] = useState<QuarterKey>('q4');
   const [selectedRawPlanCategoryKey, setSelectedRawPlanCategoryKey] = useState('personnel');
   const [showProjectBar, setShowProjectBar] = useState<boolean>(false);
@@ -673,7 +679,7 @@ export function BudgetUtilizationDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const loadData = async () => {
+  const loadData = async (reportPeriodId?: string | null) => {
     try {
       setLoading(true);
       setError(null);
@@ -682,8 +688,9 @@ export function BudgetUtilizationDashboardPage() {
       setExpandedProjectIds([]);
       setHasPlanBarClicked(false);
       setSelectedRawPlanCategoryKey('personnel');
-      const dashboardSummary = await getBudgetDashboardSummary(null);
+      const dashboardSummary = await getBudgetDashboardSummary(reportPeriodId || null);
       setSummary(dashboardSummary);
+      setSelectedReportPeriodId(dashboardSummary.reportPeriod?.id ?? '');
     } catch (loadError) {
       setError(getSafeUserErrorMessage(loadError, 'ไม่สามารถโหลด Dashboard งบประมาณได้'));
     } finally {
@@ -692,10 +699,42 @@ export function BudgetUtilizationDashboardPage() {
   };
 
   useEffect(() => {
-    void loadData();
+    void Promise.all([
+      listBudgetReportPeriods().then(setReportPeriods),
+      loadData(null),
+    ]);
   }, []);
 
+  const selectPrimaryReportPeriod = (reportPeriodId: string) => {
+    if (reportPeriodId === selectedComparisonReportPeriodId) {
+      setSelectedComparisonReportPeriodId('');
+      setComparisonSummary(null);
+    }
+    void loadData(reportPeriodId);
+  };
+
+  const selectComparisonReportPeriod = async (reportPeriodId: string) => {
+    setSelectedComparisonReportPeriodId(reportPeriodId);
+    if (!reportPeriodId) {
+      setComparisonSummary(null);
+      return;
+    }
+
+    try {
+      setComparisonLoading(true);
+      setError(null);
+      setComparisonSummary(await getBudgetDashboardSummary(reportPeriodId));
+    } catch (loadError) {
+      setError(getSafeUserErrorMessage(loadError, 'ไม่สามารถโหลดข้อมูลปีงบประมาณที่ต้องการเปรียบเทียบได้'));
+    } finally {
+      setComparisonLoading(false);
+    }
+  };
+
   const totals = summary?.totals ?? null;
+  const selectableReportPeriods = useMemo(() => reportPeriods.filter((period, index, periods) => (
+    periods.findIndex((candidate) => candidate.fiscal_year === period.fiscal_year) === index
+  )), [reportPeriods]);
   const databaseWorkbook = useMemo(() => buildDatabaseWorkbook(summary), [summary]);
   const rawWorkbook = databaseWorkbook;
   const rawDashboard = useMemo(() => getRawDashboardRows(rawWorkbook), [rawWorkbook]);
@@ -997,15 +1036,34 @@ export function BudgetUtilizationDashboardPage() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <PageHeader
           title="ติดตามการใช้จ่ายงบประมาณ"
-          description="กองยุทธศาสตร์และแผนงาน"
+          description={summary?.reportPeriod
+            ? `${summary.reportPeriod.department_name} · ปีงบประมาณ ${summary.reportPeriod.fiscal_year}`
+            : 'กองยุทธศาสตร์และแผนงาน'}
         />
         <div className="flex flex-wrap items-center justify-end gap-3">
+          <label className="block">
+            <span className="sr-only">เลือกปีงบประมาณ</span>
+            <select
+              value={selectedReportPeriodId}
+              onChange={(event) => selectPrimaryReportPeriod(event.target.value)}
+              disabled={loading || selectableReportPeriods.length === 0}
+              className="h-10 min-w-52 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 shadow-sm outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100 disabled:opacity-60"
+              aria-label="เลือกปีงบประมาณสำหรับ Dashboard"
+            >
+              {selectableReportPeriods.length === 0 ? <option value="">ยังไม่มีปีงบประมาณ</option> : null}
+              {selectableReportPeriods.map((period) => (
+                <option key={period.id} value={period.id}>
+                  ปีงบประมาณ {period.fiscal_year}{period.is_active ? ' (ใช้งานอยู่)' : ''}
+                </option>
+              ))}
+            </select>
+          </label>
           <p className="rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-600 shadow-sm" aria-live="polite">
             {formatThaiDataUpdate(summary?.lastFinancialDataUpdate)}
           </p>
           <button
             type="button"
-            onClick={() => void loadData()}
+            onClick={() => void loadData(selectedReportPeriodId)}
             disabled={loading}
             className="inline-flex items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
           >
@@ -1026,7 +1084,7 @@ export function BudgetUtilizationDashboardPage() {
         <div className="rounded-md border border-dashed border-slate-300 bg-white p-8 text-center shadow-sm">
           <DatabaseZap className="mx-auto h-10 w-10 text-slate-400" aria-hidden="true" />
           <h2 className="mt-3 text-lg font-semibold text-slate-950">ยังไม่มีข้อมูล Dashboard</h2>
-          <p className="mt-2 text-sm text-slate-600">ให้ผู้ดูแลระบบนำเข้าข้อมูลจาก template ก่อน Dashboard จะแสดงผล</p>
+          <p className="mt-2 text-sm text-slate-600">ให้ผู้ดูแลระบบสร้างปีงบประมาณและกรอกรายการงบประมาณก่อน Dashboard จะแสดงผล</p>
         </div>
       ) : null}
 
@@ -1641,6 +1699,17 @@ export function BudgetUtilizationDashboardPage() {
             </div>
           </section>
         </div>
+      ) : null}
+
+      {summary?.reportPeriod && selectableReportPeriods.length > 1 ? (
+        <BudgetYearComparisonSection
+          primary={summary}
+          comparison={comparisonSummary}
+          reportPeriods={selectableReportPeriods}
+          selectedComparisonReportPeriodId={selectedComparisonReportPeriodId}
+          loading={comparisonLoading}
+          onSelectComparison={(reportPeriodId) => void selectComparisonReportPeriod(reportPeriodId)}
+        />
       ) : null}
     </div>
   );

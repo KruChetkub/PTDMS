@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState, type MouseEvent } from 'react';
 import { AlertCircle, Calculator, CheckCircle2, Edit3, Plus, RefreshCw, Save, Search, Settings2, Table2, Trash2, WalletCards, X } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
 import { PageHeader } from '../../../components/ui/PageHeader';
 import { ConfirmModal } from '../../../components/ui/ConfirmModal';
 import { useAuditPageAccess } from '../../../hooks/useAuditPageAccess';
 import { useAuthStore } from '../../../stores/auth.store';
-import { canManageBudgetItems, createBudgetItem, createBudgetReportPeriod, deleteBudgetItem, getBudgetDashboardSummary, saveBudgetAllocationTrancheDefinitions, saveBudgetItemAllocation, updateBudgetItem, updateBudgetItemAmounts, updateBudgetItemDetails } from '../services/budgetUtilization.service';
+import { canManageBudgetItems, createBudgetItem, deleteBudgetItem, getBudgetDashboardSummary, listBudgetReportPeriods, saveBudgetAllocationTrancheDefinitions, saveBudgetItemAllocation, updateBudgetItem, updateBudgetItemAmounts, updateBudgetItemDetails } from '../services/budgetUtilization.service';
 import { buildHierarchyRollupMap, formatBudgetAmount, getNetAllocationTotal, normalizeAmount, percent, summarizeBudgetItems, toNumber } from '../utils/budgetUtilizationCalculations';
-import type { BudgetUtilizationDashboardSummary, BudgetUtilizationItemInput, BudgetUtilizationItemWithAmount, BudgetUtilizationRowType, BudgetUtilizationTransactionType } from '../types/budgetUtilization.types';
+import type { BudgetUtilizationDashboardSummary, BudgetUtilizationItemInput, BudgetUtilizationItemWithAmount, BudgetUtilizationReportPeriod, BudgetUtilizationRowType, BudgetUtilizationTransactionType } from '../types/budgetUtilization.types';
 import { getSafeUserErrorMessage } from '../../../utils/errorHandling';
 
 type ItemForm = {
@@ -482,16 +483,14 @@ function toItemPayload(reportPeriodId: string, form: ItemForm, parentId: string 
   };
 }
 
-function getCurrentThaiFiscalYear() {
-  return new Date().getFullYear() + 543;
-}
-
 export function BudgetUtilizationItemsPage() {
   useAuditPageAccess({ module: 'budget_utilization', action: 'budget_items_access', route: '/budget-utilization/items' });
+  const [searchParams, setSearchParams] = useSearchParams();
   const role = useAuthStore((state) => state.profile?.role);
   const permissions = useAuthStore((state) => state.permissions);
   const canManage = canManageBudgetItems(role, permissions);
   const [reportPeriodId, setReportPeriodId] = useState('');
+  const [reportPeriods, setReportPeriods] = useState<BudgetUtilizationReportPeriod[]>([]);
   const [summary, setSummary] = useState<BudgetUtilizationDashboardSummary | null>(null);
   const [keyword, setKeyword] = useState('');
   const [activeTab, setActiveTab] = useState<ItemsPageTab>('transactions');
@@ -558,26 +557,38 @@ export function BudgetUtilizationItemsPage() {
   };
 
   useEffect(() => {
-    void loadData('');
+    const initialReportPeriodId = searchParams.get('period') ?? '';
+    void Promise.all([
+      listBudgetReportPeriods().then(setReportPeriods),
+      loadData(initialReportPeriodId),
+    ]);
   }, []);
 
   const ensureReportPeriodId = async () => {
     if (reportPeriodId) return reportPeriodId;
+    throw new Error('กรุณาสร้างและเลือกปีงบประมาณก่อนกรอกข้อมูล');
+  };
 
-    const createdPeriod = await createBudgetReportPeriod({
-      fiscalYear: getCurrentThaiFiscalYear(),
-      reportAsOf: new Date().toISOString(),
-      title: 'ชุดข้อมูลงบประมาณปัจจุบัน',
-      departmentName: 'กองยุทธศาสตร์และแผนงาน',
-      isActive: true,
-    });
-
-    setReportPeriodId(createdPeriod.id);
-    return createdPeriod.id;
+  const selectReportPeriod = (nextReportPeriodId: string) => {
+    setSearchParams({ period: nextReportPeriodId }, { replace: true });
+    setSelectedCategoryId('');
+    setSelectedMajorProjectId('');
+    setSelectedSubActivityId('');
+    setMainForm(emptyMainForm);
+    setMajorProjectForm(emptyMajorProjectForm);
+    setSubActivityForm(emptySubActivityForm);
+    setChildForm(emptyChildForm);
+    setEditModalItem(null);
+    setCellEdit(null);
+    void loadData(nextReportPeriodId);
   };
 
   const allBudgetItems = useMemo(() => summary?.items ?? [], [summary]);
-  const displayFiscalYear = summary?.reportPeriod?.fiscal_year ?? getCurrentThaiFiscalYear();
+  const displayFiscalYear = summary?.reportPeriod?.fiscal_year ?? '-';
+  const selectableReportPeriods = useMemo(() => reportPeriods.filter((period, index, periods) => (
+    period.id === reportPeriodId
+    || periods.findIndex((candidate) => candidate.fiscal_year === period.fiscal_year) === index
+  )), [reportPeriodId, reportPeriods]);
 
   const hierarchyItems = useMemo(() => {
     const compareItems = (a: BudgetUtilizationItemWithAmount, b: BudgetUtilizationItemWithAmount) => {
@@ -1800,15 +1811,33 @@ export function BudgetUtilizationItemsPage() {
   return (
     <div>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <PageHeader title="รายการงบประมาณ" />
-        <button
-          type="button"
-          onClick={() => void loadData(reportPeriodId)}
-          className="inline-flex items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-        >
-          <RefreshCw className="h-4 w-4" aria-hidden="true" />
-          โหลดใหม่
-        </button>
+        <PageHeader title="รายการงบประมาณ" description={summary?.reportPeriod ? `กำลังกรอกข้อมูลปีงบประมาณ ${summary.reportPeriod.fiscal_year}` : 'กรุณาเลือกปีงบประมาณ'} />
+        <div className="flex flex-wrap items-end gap-2">
+          <label className="block">
+            <span className="text-xs font-semibold text-slate-600">ปีงบประมาณที่ต้องการกรอก</span>
+            <select
+              value={reportPeriodId}
+              onChange={(event) => selectReportPeriod(event.target.value)}
+              disabled={loading || selectableReportPeriods.length === 0}
+              className="mt-1 h-10 min-w-56 rounded-md border border-slate-300 bg-white px-3 text-sm font-medium text-slate-900 shadow-sm outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100 disabled:opacity-60"
+            >
+              {selectableReportPeriods.length === 0 ? <option value="">ยังไม่มีปีงบประมาณ</option> : null}
+              {selectableReportPeriods.map((period) => (
+                <option key={period.id} value={period.id}>
+                  ปีงบประมาณ {period.fiscal_year}{period.is_active ? ' (ใช้งานอยู่)' : ''}{reportPeriods.filter((candidate) => candidate.fiscal_year === period.fiscal_year).length > 1 ? ` — ${period.title}` : ''}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            type="button"
+            onClick={() => void loadData(reportPeriodId)}
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+          >
+            <RefreshCw className="h-4 w-4" aria-hidden="true" />
+            โหลดใหม่
+          </button>
+        </div>
       </div>
 
       {error ? (

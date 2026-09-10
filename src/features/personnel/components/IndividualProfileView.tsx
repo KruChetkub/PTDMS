@@ -2,7 +2,7 @@
 import { Calendar, BookOpen, Award, BarChart3, Clock, ExternalLink, Lightbulb, ChevronLeft, ChevronRight } from 'lucide-react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  Cell, Pie, PieChart,
+  Cell, Pie, PieChart, PolarAngleAxis, PolarGrid, PolarRadiusAxis, Radar, RadarChart,
 } from 'recharts';
 import { useNavigate } from 'react-router-dom';
 import { PageHeader } from '../../../components/ui/PageHeader';
@@ -32,6 +32,13 @@ type IndividualProfileViewProps = {
 
 const trainingPageSize = 5;
 const trainingTypeColors = ['#2563eb', '#059669', '#d97706', '#e11d48', '#7c3aed'];
+const trainingTypeShortLabels: Record<(typeof trainingTypeOptions)[number], string> = {
+  'หลักสูตรพื้นฐานสำหรับบุคลากร': 'พื้นฐานบุคลากร',
+  'หลักสูตรด้านภาวะผู้นำ กรมควบคุมโรค': 'ภาวะผู้นำ',
+  'หลักสูตรด้านนโยบายและยุทธศาสตร์': 'นโยบาย/ยุทธศาสตร์',
+  'หลักสูตรด้านดิจิทัล': 'ดิจิทัล',
+  'หลักสูตรตามสมรรถนะที่เหมาะสมสำหรับการปฏิบัติงาน (อื่นๆ)': 'สมรรถนะ/อื่น ๆ',
+};
 
 function getExportDatePart() {
   return new Date().toISOString().slice(0, 10);
@@ -233,11 +240,17 @@ export function IndividualProfileView({ userId, isMyProfile }: IndividualProfile
 
     return {
       category,
+      shortCategory: trainingTypeShortLabels[category],
       count,
       color: trainingTypeColors[index],
     };
   });
   const populatedTrainingTypes = trainingTypeData.filter((item) => item.count > 0);
+  const strongestTrainingCount = Math.max(...trainingTypeData.map((item) => item.count), 0);
+  const strongestTrainingTypes = strongestTrainingCount > 0
+    ? trainingTypeData.filter((item) => item.count === strongestTrainingCount)
+    : [];
+  const radarMaxCount = Math.max(strongestTrainingCount, 1);
   const exportTrainingRecords = records;
   const hasTrainingFilters = Boolean(selectedTrainingType || selectedTrainingYear);
 
@@ -359,22 +372,74 @@ export function IndividualProfileView({ userId, isMyProfile }: IndividualProfile
             <p className="text-sm font-medium text-brand-600">{roleLabels[profile.role]}</p>
           </div>
 
-          <div className="mt-8 space-y-4 border-t border-slate-100 pt-6">
-            <div className="flex flex-col gap-1">
-              <span className="text-sm text-slate-500">ตำแหน่ง</span>
-              <div className="font-semibold text-slate-900">{profile.position || '-'}</div>
+          <div className="mt-8 grid grid-cols-2 gap-4 border-t border-slate-100 pt-4" aria-label="ข้อมูลตำแหน่งและกลุ่มงาน">
+            <div className="min-w-0">
+              <span className="block text-[10px] font-medium text-slate-500">ตำแหน่ง</span>
+              <div className="mt-1 break-words text-xs font-semibold leading-5 text-slate-900" title={profile.position || '-'}>{profile.position || '-'}</div>
             </div>
 
-            <div className="flex flex-col gap-1">
-              <span className="text-sm text-slate-500">หน่วยงาน</span>
-              <div className="font-semibold text-slate-900">{profile.department || '-'}</div>
-            </div>
-
-            <div className="flex flex-col gap-1">
-              <span className="text-sm text-slate-500">กลุ่มงาน</span>
-              <div className="font-semibold text-slate-900">{profile.work_group || '-'}</div>
+            <div className="min-w-0">
+              <span className="block text-[10px] font-medium text-slate-500">กลุ่มงาน</span>
+              <div className="mt-1 break-words text-xs font-semibold leading-5 text-slate-900" title={profile.work_group || '-'}>{profile.work_group || '-'}</div>
             </div>
           </div>
+
+          <section className="mt-8 border-t border-slate-100 pt-6" aria-labelledby="personal-development-radar-title">
+            <div className="text-center">
+              <h3 id="personal-development-radar-title" className="flex items-center justify-center gap-2 font-bold text-slate-900">
+                <Award className="h-4 w-4 text-brand-600" aria-hidden="true" />
+                สถานะการพัฒนาของฉัน
+              </h3>
+              <p className="mt-1 text-xs text-slate-500">จำนวนหลักสูตรที่อบรมแล้ว แยกตามประเภทหลักสูตร</p>
+            </div>
+
+            <div className="mt-3 h-[290px] w-full" role="img" aria-label="กราฟใยแมงมุมแสดงจำนวนหลักสูตรที่อบรมแล้วในห้าด้าน">
+              <ResponsiveContainer width="100%" height="100%">
+                <RadarChart data={trainingTypeData} outerRadius="68%" margin={{ top: 20, right: 30, bottom: 20, left: 30 }}>
+                  <PolarGrid stroke="#cbd5e1" />
+                  <PolarAngleAxis
+                    dataKey="shortCategory"
+                    tick={{ fill: '#475569', fontSize: 10, fontWeight: 600 }}
+                  />
+                  <PolarRadiusAxis
+                    angle={90}
+                    domain={[0, radarMaxCount]}
+                    allowDecimals={false}
+                    tick={{ fill: '#94a3b8', fontSize: 9 }}
+                    axisLine={false}
+                  />
+                  <Radar
+                    name="หลักสูตรที่อบรมแล้ว"
+                    dataKey="count"
+                    stroke="#0f766e"
+                    fill="#14b8a6"
+                    fillOpacity={0.4}
+                    strokeWidth={2}
+                    dot={{ r: 3, fill: '#0f766e', strokeWidth: 0 }}
+                  />
+                  <Tooltip
+                    formatter={(value) => [`${Number(value).toLocaleString('th-TH')} หลักสูตร`, 'อบรมแล้ว']}
+                    labelFormatter={(_, payload) => payload?.[0]?.payload?.category ?? ''}
+                    contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0', boxShadow: '0 4px 12px rgb(15 23 42 / 0.08)' }}
+                  />
+                </RadarChart>
+              </ResponsiveContainer>
+            </div>
+
+            <div className="rounded-lg border border-teal-100 bg-teal-50 px-3 py-3 text-center">
+              {strongestTrainingTypes.length > 0 ? (
+                <>
+                  <p className="text-xs font-semibold text-teal-800">ด้านที่โดดเด่นจากประวัติการอบรม</p>
+                  <p className="mt-1 text-sm font-bold text-teal-950">
+                    {strongestTrainingTypes.map((item) => item.shortCategory).join(', ')}
+                  </p>
+                  <p className="mt-1 text-xs text-teal-700">{strongestTrainingCount.toLocaleString('th-TH')} หลักสูตร</p>
+                </>
+              ) : (
+                <p className="text-xs text-slate-600">ยังไม่มีประวัติการอบรมสำหรับแสดงสถานะการพัฒนา</p>
+              )}
+            </div>
+          </section>
         </div>
 
         <div className="space-y-6 lg:col-span-2">
