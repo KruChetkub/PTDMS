@@ -94,6 +94,7 @@ export type SatisfactionSurveyAdminBundle = SatisfactionSurveyBundle & {
   responses: SmartDspSurveyResponse[];
   answers: SmartDspSurveyAnswer[];
   respondents: Profile[];
+  eligibleRespondents: Profile[];
   respondentContexts: SmartDspSurveyRespondentContext[];
 };
 
@@ -284,9 +285,7 @@ export async function loadSurveyForAdmin(surveyId?: string, surveyCode: string =
     responseIds.length > 0
       ? supabase.from('smartdsp_survey_answers').select('*').in('response_id', responseIds).order('question_position', { ascending: true })
       : Promise.resolve({ data: [], error: null }),
-    respondentIds.length > 0
-      ? supabase.from('profiles').select('*').in('user_id', respondentIds)
-      : Promise.resolve({ data: [], error: null }),
+    supabase.from('profiles').select('*').order('full_name', { ascending: true }),
     responseIds.length > 0
       ? supabase.from('smartdsp_survey_respondent_contexts').select('*').in('response_id', responseIds)
       : Promise.resolve({ data: [], error: null }),
@@ -295,6 +294,9 @@ export async function loadSurveyForAdmin(surveyId?: string, surveyCode: string =
   if (answersResult.error) throw new Error(`โหลดรายละเอียดคำตอบไม่สำเร็จ: ${answersResult.error.message}`);
   if (profilesResult.error) throw new Error(`โหลดข้อมูลผู้ตอบไม่สำเร็จ: ${profilesResult.error.message}`);
   if (contextsResult.error) throw new Error(`โหลดข้อมูลพื้นฐานผู้ตอบไม่สำเร็จ: ${contextsResult.error.message}`);
+
+  const allProfiles = (profilesResult.data || []) as Profile[];
+  const respondentIdSet = new Set(respondentIds);
 
   return {
     survey,
@@ -306,7 +308,8 @@ export async function loadSurveyForAdmin(surveyId?: string, surveyCode: string =
     contextSettings: (contextSettingsResult.data || createDefaultSurveyContextSettings(survey.id)) as SmartDspSurveyContextSettings,
     responses,
     answers: (answersResult.data || []) as SmartDspSurveyAnswer[],
-    respondents: (profilesResult.data || []) as Profile[],
+    respondents: allProfiles.filter((profile) => respondentIdSet.has(profile.user_id)),
+    eligibleRespondents: allProfiles.filter((profile) => profile.status === 'active' && profile.role !== 'super_admin'),
     respondentContexts: (contextsResult.data || []) as SmartDspSurveyRespondentContext[],
   };
 }

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { BarChart3, ChevronLeft, ChevronRight, ClipboardCheck, CopyPlus, Download, Gauge, Plus, Save, Settings2, Trash2, X } from 'lucide-react';
+import { BarChart3, ChevronLeft, ChevronRight, ClipboardCheck, CopyPlus, Download, Gauge, Plus, Save, Settings2, Trash2, UsersRound, X } from 'lucide-react';
 import { Bar, BarChart, CartesianGrid, Cell, LabelList, Legend, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { ConfirmModal } from '../../../components/ui/ConfirmModal';
 import { useAuthStore } from '../../../stores/auth.store';
@@ -23,7 +23,8 @@ import {
 } from '../../surveys/satisfactionSurvey.service';
 import { getSurveyOptionLabel, normalizeSurveyAnalysisDimension, SURVEY_ANALYSIS_DIMENSIONS, SURVEY_RESPONDENT_ROLE_OPTIONS, SURVEY_SERVICE_OPTIONS, SURVEY_USAGE_FREQUENCY_OPTIONS } from '../../surveys/satisfactionSurvey.constants';
 
-type View = 'settings' | 'questions' | 'results' | 'dashboard';
+type View = 'settings' | 'questions' | 'results' | 'dashboard' | 'respondents';
+type RespondentStatusFilter = 'all' | 'answered' | 'pending';
 type LikertView = 'question_order' | 'improvement_priority' | 'strength';
 
 const RESPONSES_PER_PAGE = 10;
@@ -220,6 +221,8 @@ export function SiteManagerSatisfactionSurveyEditor({
   const [dashboardEndDate, setDashboardEndDate] = useState('');
   const [comparisonSurveyIds, setComparisonSurveyIds] = useState<string[]>([]);
   const [likertView, setLikertView] = useState<LikertView>('question_order');
+  const [respondentWorkGroup, setRespondentWorkGroup] = useState('all');
+  const [respondentStatus, setRespondentStatus] = useState<RespondentStatusFilter>('all');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -261,6 +264,8 @@ export function SiteManagerSatisfactionSurveyEditor({
       })));
       setOptions(nextBundle?.ratingOptions || []);
       setResponsePage(0);
+      setRespondentWorkGroup('all');
+      setRespondentStatus('all');
     } catch (error) {
       void reportClientError('Failed to load survey management', error);
       setMessage(getSafeUserErrorMessage(error, 'ไม่สามารถโหลดข้อมูลแบบสำรวจได้'));
@@ -310,6 +315,38 @@ export function SiteManagerSatisfactionSurveyEditor({
   const filteredResponseIds = new Set(filteredDashboardResponses.map((response) => response.id));
   const filteredContexts = (bundle?.respondentContexts || []).filter((context) => filteredResponseIds.has(context.response_id));
   const filteredRatingAnswers = dashboardData.answers.filter((answer) => filteredResponseIds.has(answer.response_id) && answer.rating_value !== null);
+  const responseByRespondentId = useMemo(
+    () => new Map((bundle?.responses || []).map((response) => [response.respondent_id, response])),
+    [bundle?.responses],
+  );
+  const respondentTrackingRows = useMemo(() => (bundle?.eligibleRespondents || []).map((respondent) => {
+    const response = responseByRespondentId.get(respondent.user_id);
+    return {
+      respondent,
+      response,
+      workGroup: respondent.work_group?.trim() || 'ไม่ระบุกลุ่มงาน',
+      answered: Boolean(response),
+    };
+  }), [bundle?.eligibleRespondents, responseByRespondentId]);
+  const respondentWorkGroups = useMemo(
+    () => [...new Set(respondentTrackingRows.map((row) => row.workGroup))].sort((left, right) => left.localeCompare(right, 'th')),
+    [respondentTrackingRows],
+  );
+  const filteredRespondentTrackingRows = respondentTrackingRows.filter((row) => (
+    (respondentWorkGroup === 'all' || row.workGroup === respondentWorkGroup)
+    && (respondentStatus === 'all' || (respondentStatus === 'answered' ? row.answered : !row.answered))
+  ));
+  const respondentTrackingGroups = respondentWorkGroups
+    .filter((workGroup) => respondentWorkGroup === 'all' || workGroup === respondentWorkGroup)
+    .map((workGroup) => ({
+      workGroup,
+      rows: filteredRespondentTrackingRows.filter((row) => row.workGroup === workGroup),
+      total: respondentTrackingRows.filter((row) => row.workGroup === workGroup).length,
+      answered: respondentTrackingRows.filter((row) => row.workGroup === workGroup && row.answered).length,
+    }))
+    .filter((group) => group.rows.length > 0);
+  const answeredRespondentCount = respondentTrackingRows.filter((row) => row.answered).length;
+  const pendingRespondentCount = respondentTrackingRows.length - answeredRespondentCount;
   const dashboardAverage = filteredRatingAnswers.length
     ? filteredRatingAnswers.reduce((sum, answer) => sum + (answer.rating_value || 0), 0) / filteredRatingAnswers.length
     : 0;
@@ -815,6 +852,7 @@ export function SiteManagerSatisfactionSurveyEditor({
           ['questions', 'คำถามและคะแนน', ClipboardCheck],
           ['results', 'ผลการประเมิน', BarChart3],
           ['dashboard', 'แดชบอร์ด', Gauge],
+          ['respondents', 'สถานะผู้ตอบ', UsersRound],
         ] as const).map(([id, label, Icon]) => (
           <button key={id} type="button" onClick={() => setView(id)} className={`inline-flex items-center gap-2 border-b-2 px-3 py-2 text-sm font-semibold ${view === id ? 'border-brand-600 text-brand-700' : 'border-transparent text-slate-500 hover:text-slate-800'}`}>
             <Icon className="h-4 w-4" aria-hidden="true" /> {label}
@@ -1223,6 +1261,75 @@ export function SiteManagerSatisfactionSurveyEditor({
               </section>
             </>
           )}
+        </div>
+      ) : null}
+
+      {view === 'respondents' ? (
+        <div className="space-y-5">
+          <section className="rounded-md border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <h3 className="font-semibold text-slate-900">ติดตามสถานะผู้ตอบแบบสำรวจ</h3>
+                <p className="mt-1 text-xs leading-5 text-slate-500">แสดงสถานะของผู้ใช้งานที่ยังใช้งานอยู่สำหรับรอบที่ {bundle.survey.version} แยกตามกลุ่มงาน</p>
+              </div>
+              <div className="flex flex-wrap gap-3">
+                <label className="text-xs font-medium text-slate-600">
+                  กลุ่มงาน
+                  <select value={respondentWorkGroup} onChange={(event) => setRespondentWorkGroup(event.target.value)} className="mt-1 block min-w-52 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700">
+                    <option value="all">ทุกกลุ่มงาน</option>
+                    {respondentWorkGroups.map((workGroup) => <option key={workGroup} value={workGroup}>{workGroup}</option>)}
+                  </select>
+                </label>
+                <label className="text-xs font-medium text-slate-600">
+                  สถานะ
+                  <select value={respondentStatus} onChange={(event) => setRespondentStatus(event.target.value as RespondentStatusFilter)} className="mt-1 block min-w-40 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700">
+                    <option value="all">ทั้งหมด</option>
+                    <option value="answered">ตอบแล้ว</option>
+                    <option value="pending">ยังไม่ได้ตอบ</option>
+                  </select>
+                </label>
+              </div>
+            </div>
+
+            <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <div className="rounded-md border border-slate-200 bg-slate-50 p-4"><p className="text-xs text-slate-500">ผู้ใช้งานทั้งหมด</p><p className="mt-1 text-2xl font-bold text-slate-900">{respondentTrackingRows.length.toLocaleString('th-TH')}</p></div>
+              <div className="rounded-md border border-emerald-200 bg-emerald-50 p-4"><p className="text-xs text-emerald-700">ตอบแล้ว</p><p className="mt-1 text-2xl font-bold text-emerald-800">{answeredRespondentCount.toLocaleString('th-TH')}</p></div>
+              <div className="rounded-md border border-amber-200 bg-amber-50 p-4"><p className="text-xs text-amber-700">ยังไม่ได้ตอบ</p><p className="mt-1 text-2xl font-bold text-amber-800">{pendingRespondentCount.toLocaleString('th-TH')}</p></div>
+              <div className="rounded-md border border-blue-200 bg-blue-50 p-4"><p className="text-xs text-blue-700">อัตราการตอบ</p><p className="mt-1 text-2xl font-bold text-blue-800">{respondentTrackingRows.length > 0 ? (answeredRespondentCount / respondentTrackingRows.length * 100).toFixed(1) : '0.0'}%</p></div>
+            </div>
+          </section>
+
+          {respondentTrackingRows.length === 0 ? (
+            <div className="rounded-md border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">ไม่พบผู้ใช้งานที่อยู่ในกลุ่มเป้าหมาย</div>
+          ) : respondentTrackingGroups.length === 0 ? (
+            <div className="rounded-md border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">ไม่พบรายชื่อตามตัวกรองที่เลือก</div>
+          ) : respondentTrackingGroups.map((group) => (
+            <section key={group.workGroup} className="overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3">
+                <h4 className="font-semibold text-slate-900">{group.workGroup}</h4>
+                <div className="flex gap-2 text-xs font-semibold">
+                  <span className="rounded-md bg-emerald-100 px-2.5 py-1 text-emerald-800">ตอบแล้ว {group.answered}/{group.total}</span>
+                  <span className="rounded-md bg-amber-100 px-2.5 py-1 text-amber-800">คงเหลือ {group.total - group.answered}</span>
+                </div>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-slate-200 text-sm">
+                  <thead className="bg-white text-left text-xs font-semibold text-slate-500"><tr><th className="px-4 py-3">ชื่อผู้ใช้งาน</th><th className="px-4 py-3">ตำแหน่ง</th><th className="px-4 py-3">หน่วยงาน</th><th className="px-4 py-3">สถานะ</th><th className="px-4 py-3">วันที่ตอบ</th></tr></thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {group.rows.map(({ respondent, response, answered }) => (
+                      <tr key={respondent.user_id} className="text-slate-700">
+                        <td className="px-4 py-3 font-medium text-slate-900">{respondent.full_name || 'ไม่ระบุชื่อ'}{respondent.employee_code ? <span className="ml-2 text-xs font-normal text-slate-400">{respondent.employee_code}</span> : null}</td>
+                        <td className="px-4 py-3">{respondent.position || '-'}</td>
+                        <td className="px-4 py-3">{respondent.department || '-'}</td>
+                        <td className="px-4 py-3"><span className={cn('inline-flex rounded-md px-2.5 py-1 text-xs font-semibold', answered ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800')}>{answered ? 'ตอบแล้ว' : 'ยังไม่ได้ตอบ'}</span></td>
+                        <td className="whitespace-nowrap px-4 py-3">{response ? new Intl.DateTimeFormat('th-TH', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(response.submitted_at)) : '-'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          ))}
         </div>
       ) : null}
 
